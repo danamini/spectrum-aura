@@ -94,6 +94,8 @@ export class Scene {
   private terrainHistory?: Float32Array;
   private terrainRows = 96;
   private terrainCols = 128;
+  private readonly terrainWidth = 18;
+  private readonly terrainDepth = 26;
 
   postFxBoost = { bloom: 1, glitch: 0 };
 
@@ -903,7 +905,7 @@ export class Scene {
     const rows = this.terrainRows;
     const cols = this.terrainCols;
     this.terrainHistory = new Float32Array(rows * cols);
-    const geo = new THREE.PlaneGeometry(18, 26, cols - 1, rows - 1);
+    const geo = new THREE.PlaneGeometry(this.terrainWidth, this.terrainDepth, cols - 1, rows - 1);
     geo.rotateX(-Math.PI / 2.25);
     const mat = new THREE.MeshBasicMaterial({
       color: 0x55d8ff,

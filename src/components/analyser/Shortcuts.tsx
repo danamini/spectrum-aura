@@ -48,27 +48,6 @@ export function Shortcuts() {
       "terrain",
       "terrain2d",
     ] as const;
-    const fullKey: Record<
-      typeof order[number],
-      "comboFullscreen" | "classicFullscreen" | "rippleFullscreen" | "datastreamFullscreen" | "nebulaFullscreen" | "monolithFullscreen" | "mandalaFullscreen" | "terrainFullscreen"
-    > = {
-      combo: "comboFullscreen",
-      combo2d: "comboFullscreen",
-      classic: "classicFullscreen",
-      classic2d: "classicFullscreen",
-      ripple: "rippleFullscreen",
-      ripple2d: "rippleFullscreen",
-      datastream: "datastreamFullscreen",
-      datastream2d: "datastreamFullscreen",
-      nebula: "nebulaFullscreen",
-      nebula2d: "nebulaFullscreen",
-      monolith: "monolithFullscreen",
-      monolith2d: "monolithFullscreen",
-      mandala: "mandalaFullscreen",
-      mandala2d: "mandalaFullscreen",
-      terrain: "terrainFullscreen",
-      terrain2d: "terrainFullscreen",
-    };
     const labelByView: Record<"combo" | "classic" | "ripple" | "datastream" | "nebula" | "monolith" | "mandala" | "terrain", string> = {
       combo: "Combo",
       classic: "Classic",
@@ -96,8 +75,14 @@ export function Shortcuts() {
     const next = order[(order.indexOf(cur) + 1) % order.length] ?? "combo";
     const is2d = next.endsWith("2d");
     const view = (is2d ? next.slice(0, -2) : next) as keyof typeof labelByView;
-    const key = fullKey[next];
-    settingsStore.set({ view, [key]: is2d } as Parameters<typeof settingsStore.set>[0]);
+    if (view === "combo") settingsStore.set({ view, comboFullscreen: is2d });
+    else if (view === "classic") settingsStore.set({ view, classicFullscreen: is2d });
+    else if (view === "ripple") settingsStore.set({ view, rippleFullscreen: is2d });
+    else if (view === "datastream") settingsStore.set({ view, datastreamFullscreen: is2d });
+    else if (view === "nebula") settingsStore.set({ view, nebulaFullscreen: is2d });
+    else if (view === "monolith") settingsStore.set({ view, monolithFullscreen: is2d });
+    else if (view === "mandala") settingsStore.set({ view, mandalaFullscreen: is2d });
+    else if (view === "terrain") settingsStore.set({ view, terrainFullscreen: is2d });
     showFlash(`${labelByView[view]} ${is2d ? "2D" : "3D"}`);
   };
   const doFullscreen = () => { toggleFullscreen(); };

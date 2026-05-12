@@ -189,6 +189,16 @@ export function ControlPanel() {
   };
   const fullscreenKey = fullscreenByView[s.view];
   const is2d = Boolean(s[fullscreenKey]);
+  const setCurrentViewFullscreen = (value: boolean) => {
+    if (s.view === "combo") set({ comboFullscreen: value });
+    else if (s.view === "classic") set({ classicFullscreen: value });
+    else if (s.view === "ripple") set({ rippleFullscreen: value });
+    else if (s.view === "datastream") set({ datastreamFullscreen: value });
+    else if (s.view === "nebula") set({ nebulaFullscreen: value });
+    else if (s.view === "monolith") set({ monolithFullscreen: value });
+    else if (s.view === "mandala") set({ mandalaFullscreen: value });
+    else if (s.view === "terrain") set({ terrainFullscreen: value });
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
@@ -221,8 +231,8 @@ export function ControlPanel() {
               ))}
             </div>
             <div className="grid grid-cols-2 gap-2 mt-2">
-              <Bn active={!is2d} onClick={() => set({ [fullscreenKey]: false } as Partial<Settings>)}>3D</Bn>
-              <Bn active={is2d} onClick={() => set({ [fullscreenKey]: true } as Partial<Settings>)}>2D</Bn>
+              <Bn active={!is2d} onClick={() => setCurrentViewFullscreen(false)}>3D</Bn>
+              <Bn active={is2d} onClick={() => setCurrentViewFullscreen(true)}>2D</Bn>
             </div>
           </Row>
 
