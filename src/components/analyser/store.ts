@@ -1,6 +1,14 @@
 import { useSyncExternalStore } from "react";
 
-export type ViewMode = "combo" | "classic" | "ripple";
+export type ViewMode =
+  | "combo"
+  | "classic"
+  | "ripple"
+  | "datastream"
+  | "nebula"
+  | "monolith"
+  | "mandala"
+  | "terrain";
 
 export type Settings = {
   // view
@@ -40,6 +48,11 @@ export type Settings = {
   classicPeakStyle: "bar" | "thin" | "glow" | "none";
   classicFullscreen: boolean;
   rippleFullscreen: boolean;
+  datastreamFullscreen: boolean;
+  nebulaFullscreen: boolean;
+  monolithFullscreen: boolean;
+  mandalaFullscreen: boolean;
+  terrainFullscreen: boolean;
 
   // ripple view
   rippleRingCount: number;       // number of rings
@@ -120,6 +133,11 @@ export const DEFAULT_SETTINGS: Settings = {
   classicPeakStyle: "bar",
   classicFullscreen: false,
   rippleFullscreen: false,
+  datastreamFullscreen: false,
+  nebulaFullscreen: false,
+  monolithFullscreen: false,
+  mandalaFullscreen: false,
+  terrainFullscreen: false,
   rippleRingCount: 40,
   rippleColumns: 5,
   rippleMaxRadius: 6,

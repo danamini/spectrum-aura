@@ -156,7 +156,39 @@ export function ControlPanel() {
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
 
   const hasViewSettings = true;
-  const viewLabel = s.view === "classic" ? "Classic view settings" : s.view === "ripple" ? "Ripple view settings" : "3D Combo view settings";
+  const viewLabels: Record<Settings["view"], string> = {
+    combo: "3D Combo view settings",
+    classic: "Classic view settings",
+    ripple: "Ripple view settings",
+    datastream: "Cyberpunk Data-Stream settings",
+    nebula: "Ethereal Nebula settings",
+    monolith: "Brutalist Monolith settings",
+    mandala: "Symmetric Mandala settings",
+    terrain: "Audio-Reactive Terrain settings",
+  };
+  const viewLabel = viewLabels[s.view];
+  const viewOptions = [
+    { id: "combo", label: "Combo" },
+    { id: "classic", label: "Classic" },
+    { id: "ripple", label: "Ripple" },
+    { id: "datastream", label: "Data-Stream" },
+    { id: "nebula", label: "Nebula" },
+    { id: "monolith", label: "Monolith" },
+    { id: "mandala", label: "Mandala" },
+    { id: "terrain", label: "Terrain" },
+  ] as const;
+  const fullscreenByView: Record<Settings["view"], keyof Settings> = {
+    combo: "comboFullscreen",
+    classic: "classicFullscreen",
+    ripple: "rippleFullscreen",
+    datastream: "datastreamFullscreen",
+    nebula: "nebulaFullscreen",
+    monolith: "monolithFullscreen",
+    mandala: "mandalaFullscreen",
+    terrain: "terrainFullscreen",
+  };
+  const fullscreenKey = fullscreenByView[s.view];
+  const is2d = Boolean(s[fullscreenKey]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
@@ -181,35 +213,17 @@ export function ControlPanel() {
 
         <div className="mt-4 space-y-4 pb-10">
           <Row label="View">
-            <div className="grid grid-cols-3 gap-2">
-              {([
-                { id: "combo", label: "Combo" },
-                { id: "classic", label: "Classic" },
-                { id: "ripple", label: "Ripple" },
-              ] as const).map((v) => (
+            <div className="grid grid-cols-2 gap-2">
+              {viewOptions.map((v) => (
                 <Bn key={v.id} active={s.view === v.id} onClick={() => set({ view: v.id })}>
                   {v.label}
                 </Bn>
               ))}
             </div>
-            {s.view === "combo" && (
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <Bn active={!s.comboFullscreen} onClick={() => set({ comboFullscreen: false })}>3D</Bn>
-                <Bn active={s.comboFullscreen} onClick={() => set({ comboFullscreen: true })}>2D</Bn>
-              </div>
-            )}
-            {s.view === "classic" && (
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <Bn active={!s.classicFullscreen} onClick={() => set({ classicFullscreen: false })}>3D</Bn>
-                <Bn active={s.classicFullscreen} onClick={() => set({ classicFullscreen: true })}>2D</Bn>
-              </div>
-            )}
-            {s.view === "ripple" && (
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <Bn active={!s.rippleFullscreen} onClick={() => set({ rippleFullscreen: false })}>3D</Bn>
-                <Bn active={s.rippleFullscreen} onClick={() => set({ rippleFullscreen: true })}>2D</Bn>
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <Bn active={!is2d} onClick={() => set({ [fullscreenKey]: false } as Partial<Settings>)}>3D</Bn>
+              <Bn active={is2d} onClick={() => set({ [fullscreenKey]: true } as Partial<Settings>)}>2D</Bn>
+            </div>
           </Row>
 
           {hasViewSettings && (
@@ -345,6 +359,11 @@ export function ControlPanel() {
                         <Sw checked={s.rippleWireframe} onCheckedChange={(v) => set({ rippleWireframe: v })} />
                       </div>
                     </>
+                  )}
+                  {s.view !== "combo" && s.view !== "classic" && s.view !== "ripple" && (
+                    <p className="font-mono text-[10px] leading-relaxed text-white/45">
+                      This view uses built-in defaults. Use Scene/Post FX controls for extra shaping.
+                    </p>
                   )}
                 </div>
               )}

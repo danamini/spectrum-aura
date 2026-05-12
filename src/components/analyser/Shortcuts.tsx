@@ -30,25 +30,75 @@ export function Shortcuts() {
 
   const doRandomize = () => { settingsStore.randomize(); showFlash("Randomized"); };
   const doToggleView = () => {
-    const order = ["combo", "combo2d", "classic", "classic2d", "ripple", "ripple2d"] as const;
+    const order = [
+      "combo",
+      "combo2d",
+      "classic",
+      "classic2d",
+      "ripple",
+      "ripple2d",
+      "datastream",
+      "datastream2d",
+      "nebula",
+      "nebula2d",
+      "monolith",
+      "monolith2d",
+      "mandala",
+      "mandala2d",
+      "terrain",
+      "terrain2d",
+    ] as const;
+    const fullKey: Record<
+      typeof order[number],
+      "comboFullscreen" | "classicFullscreen" | "rippleFullscreen" | "datastreamFullscreen" | "nebulaFullscreen" | "monolithFullscreen" | "mandalaFullscreen" | "terrainFullscreen"
+    > = {
+      combo: "comboFullscreen",
+      combo2d: "comboFullscreen",
+      classic: "classicFullscreen",
+      classic2d: "classicFullscreen",
+      ripple: "rippleFullscreen",
+      ripple2d: "rippleFullscreen",
+      datastream: "datastreamFullscreen",
+      datastream2d: "datastreamFullscreen",
+      nebula: "nebulaFullscreen",
+      nebula2d: "nebulaFullscreen",
+      monolith: "monolithFullscreen",
+      monolith2d: "monolithFullscreen",
+      mandala: "mandalaFullscreen",
+      mandala2d: "mandalaFullscreen",
+      terrain: "terrainFullscreen",
+      terrain2d: "terrainFullscreen",
+    };
+    const labelByView: Record<"combo" | "classic" | "ripple" | "datastream" | "nebula" | "monolith" | "mandala" | "terrain", string> = {
+      combo: "Combo",
+      classic: "Classic",
+      ripple: "Ripple",
+      datastream: "Data-Stream",
+      nebula: "Nebula",
+      monolith: "Monolith",
+      mandala: "Mandala",
+      terrain: "Terrain",
+    };
     const current = settingsStore.get();
-    let cur: typeof order[number];
-    if (current.view === "classic") {
-      cur = current.classicFullscreen ? "classic2d" : "classic";
-    } else if (current.view === "combo") {
-      cur = current.comboFullscreen ? "combo2d" : "combo";
-    } else if (current.view === "ripple") {
-      cur = current.rippleFullscreen ? "ripple2d" : "ripple";
-    } else {
-      cur = "combo";
-    }
+    const fullKeyByView = {
+      combo: "comboFullscreen",
+      classic: "classicFullscreen",
+      ripple: "rippleFullscreen",
+      datastream: "datastreamFullscreen",
+      nebula: "nebulaFullscreen",
+      monolith: "monolithFullscreen",
+      mandala: "mandalaFullscreen",
+      terrain: "terrainFullscreen",
+    } as const;
+    const cur = current[fullKeyByView[current.view]]
+      ? (`${current.view}2d` as typeof order[number])
+      : (current.view as typeof order[number]);
     const next = order[(order.indexOf(cur) + 1) % order.length] ?? "combo";
-    if (next === "combo")    { settingsStore.set({ view: "combo",    comboFullscreen: false });  showFlash("Combo 3D"); return; }
-    if (next === "combo2d")  { settingsStore.set({ view: "combo",    comboFullscreen: true });   showFlash("Combo 2D"); return; }
-    if (next === "classic")  { settingsStore.set({ view: "classic",  classicFullscreen: false }); showFlash("Classic 3D"); return; }
-    if (next === "classic2d"){ settingsStore.set({ view: "classic",  classicFullscreen: true });  showFlash("Classic 2D"); return; }
-    if (next === "ripple")   { settingsStore.set({ view: "ripple",   rippleFullscreen: false }); showFlash("Ripple 3D"); return; }
-    if (next === "ripple2d") { settingsStore.set({ view: "ripple",   rippleFullscreen: true });  showFlash("Ripple 2D"); return; }
+    const is2d = next.endsWith("2d");
+    const view = (is2d ? next.slice(0, -2) : next) as keyof typeof labelByView;
+    const key = fullKey[next];
+    settingsStore.set({ view, [key]: is2d } as Parameters<typeof settingsStore.set>[0]);
+    showFlash(`${labelByView[view]} ${is2d ? "2D" : "3D"}`);
   };
   const doFullscreen = () => { toggleFullscreen(); };
   const doToggleSlotCycle = () => {

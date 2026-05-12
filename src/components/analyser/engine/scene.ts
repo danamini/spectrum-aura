@@ -4,13 +4,26 @@ import type { AudioBands } from "./audio";
 
 export type Palette = [string, string, string];
 
-export type ViewMode = "combo" | "classic" | "ripple";
+export type ViewMode =
+  | "combo"
+  | "classic"
+  | "ripple"
+  | "datastream"
+  | "nebula"
+  | "monolith"
+  | "mandala"
+  | "terrain";
 
 export class Scene {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
   group = new THREE.Group();          // combo group
   classicGroup = new THREE.Group();   // classic group
+  dataStreamGroup = new THREE.Group();
+  nebulaGroup = new THREE.Group();
+  monolithGroup = new THREE.Group();
+  mandalaGroup = new THREE.Group();
+  terrainGroup = new THREE.Group();
 
   bars!: THREE.InstancedMesh;
   private barCount = 0;
@@ -47,6 +60,43 @@ export class Scene {
   private rippleCount = 40;
   private rippleCols = 1;
 
+  // data-stream view
+  dataStreamPoints?: THREE.Points;
+  dataStreamMat?: THREE.ShaderMaterial;
+  private dataStreamPositions?: Float32Array;
+  private dataStreamBasePos?: Float32Array;
+  private dataStreamCount = 10000;
+
+  // nebula view
+  nebula?: THREE.Mesh;
+  nebulaMat?: THREE.ShaderMaterial;
+
+  // monolith view
+  monolith?: THREE.InstancedMesh;
+  monolithSpot?: THREE.SpotLight;
+  private monolithHeights = new Float32Array(0);
+  private monolithGrid = 32;
+  private monolithCount = 0;
+  private monolithGravity = 7;
+
+  // mandala view
+  private mandalaRibbons: Array<{
+    line: THREE.Line;
+    points: THREE.Vector3[];
+    curve: THREE.CatmullRomCurve3;
+    positions: Float32Array;
+  }> = [];
+  private mandalaRibbonCount = 12;
+
+  // terrain view
+  terrain?: THREE.Mesh;
+  private terrainGeo?: THREE.PlaneGeometry;
+  private terrainHistory?: Float32Array;
+  private terrainRows = 96;
+  private terrainCols = 128;
+
+  postFxBoost = { bloom: 1, glitch: 0 };
+
   view: ViewMode = "combo";
 
   private palette: Palette = ["#ff2d95", "#7a5cff", "#00e5ff"];
@@ -67,8 +117,18 @@ export class Scene {
     this.scene.add(this.group);
     this.scene.add(this.classicGroup);
     this.scene.add(this.rippleGroup);
+    this.scene.add(this.dataStreamGroup);
+    this.scene.add(this.nebulaGroup);
+    this.scene.add(this.monolithGroup);
+    this.scene.add(this.mandalaGroup);
+    this.scene.add(this.terrainGroup);
     this.classicGroup.visible = false;
     this.rippleGroup.visible = false;
+    this.dataStreamGroup.visible = false;
+    this.nebulaGroup.visible = false;
+    this.monolithGroup.visible = false;
+    this.mandalaGroup.visible = false;
+    this.terrainGroup.visible = false;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.25);
     const dir = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -87,6 +147,11 @@ export class Scene {
     this.buildClassic(64);
     this.buildClassicGrid();
     this.buildRipple();
+    this.buildDataStream(10000);
+    this.buildNebula();
+    this.buildMonolith();
+    this.buildMandala();
+    this.buildTerrain();
   }
 
   classicGrid?: THREE.LineSegments;
@@ -133,6 +198,11 @@ export class Scene {
     this.group.visible = view === "combo";
     this.classicGroup.visible = view === "classic";
     this.rippleGroup.visible = view === "ripple";
+    this.dataStreamGroup.visible = view === "datastream";
+    this.nebulaGroup.visible = view === "nebula";
+    this.monolithGroup.visible = view === "monolith";
+    this.mandalaGroup.visible = view === "mandala";
+    this.terrainGroup.visible = view === "terrain";
   }
 
   setPalette(p: Palette) {
@@ -521,6 +591,357 @@ export class Scene {
     return b.clone().lerp(c, (t - 0.5) * 2);
   }
 
+  buildDataStream(count: number) {
+    if (this.dataStreamPoints) {
+      this.dataStreamGroup.remove(this.dataStreamPoints);
+      this.dataStreamPoints.geometry.dispose();
+      this.dataStreamMat?.dispose();
+    }
+    this.dataStreamCount = count;
+    const positions = new Float32Array(count * 3);
+    const base = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 9;
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = 0;
+      positions[i * 3 + 2] = z;
+      base[i * 3] = x;
+      base[i * 3 + 1] = 0;
+      base[i * 3 + 2] = z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uSize: { value: 4 },
+        uDpr: { value: Math.min(window.devicePixelRatio || 1, 2) },
+        uLowColor: { value: new THREE.Color("#00cfff") },
+        uHighColor: { value: new THREE.Color("#ff2d95") },
+      },
+      vertexShader: /* glsl */ `
+        uniform float uSize;
+        uniform float uDpr;
+        varying float vHeight;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vHeight = clamp((position.y + 5.0) / 10.0, 0.0, 1.0);
+          gl_PointSize = max(1.0, uSize * uDpr * (1.0 / max(1.0, -mv.z * 0.12)));
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uLowColor;
+        uniform vec3 uHighColor;
+        varying float vHeight;
+        void main() {
+          vec2 uv = gl_PointCoord - 0.5;
+          float mask = smoothstep(0.5, 0.05, length(uv));
+          vec3 col = mix(uLowColor, uHighColor, vHeight);
+          gl_FragColor = vec4(col, mask);
+        }
+      `,
+    });
+    this.dataStreamPositions = positions;
+    this.dataStreamBasePos = base;
+    this.dataStreamMat = mat;
+    this.dataStreamPoints = new THREE.Points(geo, mat);
+    this.dataStreamGroup.add(this.dataStreamPoints);
+  }
+
+  private updateDataStream(time: number, audio: AudioBands) {
+    if (!this.dataStreamPoints || !this.dataStreamPositions || !this.dataStreamBasePos || !this.dataStreamMat) return;
+    const bins = audio.bins;
+    const arr = this.dataStreamPositions;
+    const base = this.dataStreamBasePos;
+    const n = this.dataStreamCount;
+    const bass = Math.max(0, Math.min(1, audio.bass));
+    const high = Math.max(0, Math.min(1, audio.high));
+    const size = 2.4 + bass * 12;
+    this.dataStreamMat.uniforms.uSize.value = size;
+    for (let i = 0; i < n; i++) {
+      const idx = Math.floor((i / n) * bins.length);
+      const v = bins[idx] ? bins[idx]! / 255 : 0;
+      const shimmer = Math.sin(time * 3.2 + i * 0.013) * 0.25;
+      arr[i * 3] = base[i * 3] + Math.sin(time * 0.8 + i * 0.021) * 0.06 * high;
+      arr[i * 3 + 1] = (v * 3.8 + shimmer) * (0.35 + high * 1.4);
+      arr[i * 3 + 2] = base[i * 3 + 2] + (v - 0.5) * 1.4 * high;
+    }
+    (this.dataStreamPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  buildNebula() {
+    if (this.nebula) {
+      this.nebulaGroup.remove(this.nebula);
+      this.nebula.geometry.dispose();
+      this.nebulaMat?.dispose();
+    }
+    const geo = new THREE.SphereGeometry(2.2, 144, 144);
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uTime: { value: 0 },
+        uAvgFrequency: { value: 0 },
+      },
+      vertexShader: /* glsl */ `
+        uniform float uTime;
+        uniform float uAvgFrequency;
+        varying vec3 vNormalW;
+        varying vec3 vWorldPos;
+        float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7))) * 43758.5453123); }
+        float noise(vec3 p){
+          vec3 i = floor(p);
+          vec3 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+            mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y),
+            f.z
+          );
+        }
+        void main() {
+          float speed = 0.35 + uAvgFrequency * 1.2;
+          float intensity = 0.25 + uAvgFrequency * 1.8;
+          float n = noise(normal * 2.8 + uTime * speed);
+          vec3 displaced = position + normal * (n - 0.5) * intensity;
+          vec4 world = modelMatrix * vec4(displaced, 1.0);
+          vWorldPos = world.xyz;
+          vNormalW = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        uniform float uAvgFrequency;
+        varying vec3 vNormalW;
+        varying vec3 vWorldPos;
+        void main() {
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+          float fresnel = pow(1.0 - max(dot(normalize(vNormalW), viewDir), 0.0), 2.4);
+          float pulse = 0.5 + 0.5 * sin(uTime * (0.8 + uAvgFrequency * 2.0) + vWorldPos.y * 0.7);
+          vec3 inner = mix(vec3(1.0, 0.52, 0.12), vec3(1.0, 0.16, 0.5), pulse);
+          vec3 aura = mix(vec3(0.2, 0.35, 1.0), vec3(0.9, 0.2, 1.0), fresnel);
+          vec3 col = inner * (0.45 + uAvgFrequency * 0.9) + aura * fresnel * 1.6;
+          float alpha = min(1.0, 0.45 + fresnel * 0.75);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
+    });
+    this.nebulaMat = mat;
+    this.nebula = new THREE.Mesh(geo, mat);
+    this.nebulaGroup.add(this.nebula);
+  }
+
+  private updateNebula(dt: number, time: number, audio: AudioBands) {
+    if (!this.nebula || !this.nebulaMat) return;
+    const avgFrequency = (audio.bass + audio.mid + audio.high) / 3;
+    this.nebula.rotation.y += dt * (0.08 + avgFrequency * 0.4);
+    this.nebula.rotation.x += dt * 0.04;
+    this.nebulaMat.uniforms.uTime.value = time;
+    this.nebulaMat.uniforms.uAvgFrequency.value = avgFrequency;
+  }
+
+  buildMonolith() {
+    if (this.monolith) {
+      this.monolithGroup.remove(this.monolith);
+      this.monolith.geometry.dispose();
+      (this.monolith.material as THREE.Material).dispose();
+    }
+    if (this.monolithSpot) this.monolithGroup.remove(this.monolithSpot);
+    const size = this.monolithGrid;
+    const count = size * size;
+    this.monolithCount = count;
+    this.monolithHeights = new Float32Array(count);
+    const geo = new THREE.BoxGeometry(0.8, 1, 0.8);
+    geo.translate(0, 0.5, 0);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x9ac2ff,
+      emissive: 0x2c69ff,
+      emissiveIntensity: 0.18,
+      metalness: 0.45,
+      roughness: 0.4,
+    });
+    const mesh = new THREE.InstancedMesh(geo, mat, count);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.monolith = mesh;
+    this.monolithGroup.add(mesh);
+    this.monolithSpot = new THREE.SpotLight(0xff8dff, 2.8, 50, Math.PI / 7, 0.35, 1.2);
+    this.monolithSpot.position.set(0, 15, 0);
+    this.monolithSpot.target.position.set(0, 0, 0);
+    this.monolithGroup.add(this.monolithSpot, this.monolithSpot.target);
+  }
+
+  private updateMonolith(dt: number, audio: AudioBands) {
+    if (!this.monolith || !this.monolithSpot) return;
+    const size = this.monolithGrid;
+    const bins = audio.bins;
+    const spacing = 1;
+    let highest = -1;
+    let highestI = 0;
+    for (let z = 0; z < size; z++) {
+      for (let x = 0; x < size; x++) {
+        const i = z * size + x;
+        const bin = bins[Math.floor((i / this.monolithCount) * bins.length)] ?? 0;
+        const target = 0.2 + Math.pow(bin / 255, 1.5) * 15;
+        const current = this.monolithHeights[i] ?? 0;
+        const next = target > current ? target : Math.max(0.2, current - this.monolithGravity * dt);
+        this.monolithHeights[i] = next;
+        if (next > highest) {
+          highest = next;
+          highestI = i;
+        }
+        this.dummy.position.set(
+          (x - (size - 1) / 2) * spacing,
+          0,
+          (z - (size - 1) / 2) * spacing,
+        );
+        this.dummy.scale.set(1, next, 1);
+        this.dummy.rotation.set(0, 0, 0);
+        this.dummy.updateMatrix();
+        this.monolith.setMatrixAt(i, this.dummy.matrix);
+      }
+    }
+    this.monolith.instanceMatrix.needsUpdate = true;
+    const peakX = highestI % size;
+    const peakZ = Math.floor(highestI / size);
+    const tx = (peakX - (size - 1) / 2) * spacing;
+    const tz = (peakZ - (size - 1) / 2) * spacing;
+    this.monolithSpot.position.x += (tx - this.monolithSpot.position.x) * Math.min(1, dt * 4);
+    this.monolithSpot.position.z += (tz - this.monolithSpot.position.z) * Math.min(1, dt * 4);
+    this.monolithSpot.target.position.x += (tx - this.monolithSpot.target.position.x) * Math.min(1, dt * 5);
+    this.monolithSpot.target.position.z += (tz - this.monolithSpot.target.position.z) * Math.min(1, dt * 5);
+  }
+
+  buildMandala() {
+    for (const r of this.mandalaRibbons) {
+      this.mandalaGroup.remove(r.line);
+      r.line.geometry.dispose();
+      (r.line.material as THREE.Material).dispose();
+    }
+    this.mandalaRibbons = [];
+    const ribbonCount = this.mandalaRibbonCount;
+    const pointsPerRibbon = 20;
+    const samplePoints = 160;
+    for (let i = 0; i < ribbonCount; i++) {
+      const angle = (i / ribbonCount) * Math.PI * 2;
+      const points: THREE.Vector3[] = [];
+      for (let p = 0; p < pointsPerRibbon; p++) {
+        const t = pointsPerRibbon <= 1 ? 0 : p / (pointsPerRibbon - 1);
+        const r = 1.4 + t * 5;
+        points.push(new THREE.Vector3(Math.cos(angle) * r, (t - 0.5) * 1.2, Math.sin(angle) * r));
+      }
+      const curve = new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.35);
+      const sampled = curve.getPoints(samplePoints - 1);
+      const positions = new Float32Array(samplePoints * 3);
+      for (let s = 0; s < samplePoints; s++) {
+        const pt = sampled[s]!;
+        positions[s * 3] = pt.x;
+        positions[s * 3 + 1] = pt.y;
+        positions[s * 3 + 2] = pt.z;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: this.colorAt(i / ribbonCount),
+        transparent: true,
+        opacity: 0.9,
+      });
+      const line = new THREE.Line(geo, mat);
+      this.mandalaGroup.add(line);
+      this.mandalaRibbons.push({ line, points, curve, positions });
+    }
+  }
+
+  private updateMandala(dt: number, time: number, audio: AudioBands) {
+    const bins = audio.bins;
+    const R = this.mandalaRibbons.length;
+    if (!R || bins.length === 0) return;
+    this.mandalaGroup.rotation.y += dt * (0.15 + audio.mid * 0.7);
+    for (let i = 0; i < R; i++) {
+      const r = this.mandalaRibbons[i]!;
+      const P = r.points.length;
+      for (let p = 0; p < P; p++) {
+        const binStart = Math.floor(((i * P + p) / (R * P)) * bins.length);
+        const v = bins[binStart] ? bins[binStart]! / 255 : 0;
+        const t = P <= 1 ? 0 : p / (P - 1);
+        const radius = 1.3 + t * 5.3 + v * 1.8;
+        const angle = (i / R) * Math.PI * 2 + Math.sin(time * 0.7 + p * 0.3) * 0.08;
+        r.points[p]!.set(
+          Math.cos(angle) * radius,
+          (t - 0.5) * 1.5 + (v - 0.5) * 1.4,
+          Math.sin(angle) * radius,
+        );
+      }
+      const sampled = r.curve.getPoints((r.positions.length / 3) - 1);
+      for (let s = 0; s < sampled.length; s++) {
+        const pt = sampled[s]!;
+        r.positions[s * 3] = pt.x;
+        r.positions[s * 3 + 1] = pt.y;
+        r.positions[s * 3 + 2] = pt.z;
+      }
+      (r.line.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      const mat = r.line.material as THREE.LineBasicMaterial;
+      mat.opacity = 0.55 + audio.mid * 0.55;
+    }
+    const midSpike = Math.max(0, (audio.mid - 0.55) / 0.45);
+    this.postFxBoost.bloom = 1 + midSpike * 1.8;
+    this.postFxBoost.glitch = midSpike;
+  }
+
+  buildTerrain() {
+    if (this.terrain && this.terrainGeo) {
+      this.terrainGroup.remove(this.terrain);
+      this.terrainGeo.dispose();
+      (this.terrain.material as THREE.Material).dispose();
+    }
+    const rows = this.terrainRows;
+    const cols = this.terrainCols;
+    this.terrainHistory = new Float32Array(rows * cols);
+    const geo = new THREE.PlaneGeometry(18, 26, cols - 1, rows - 1);
+    geo.rotateX(-Math.PI / 2.25);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x55d8ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9,
+    });
+    this.terrainGeo = geo;
+    this.terrain = new THREE.Mesh(geo, mat);
+    this.terrain.position.set(0, -2, 4);
+    this.terrainGroup.add(this.terrain);
+  }
+
+  private updateTerrain(audio: AudioBands) {
+    if (!this.terrainGeo || !this.terrainHistory || !this.terrain) return;
+    const rows = this.terrainRows;
+    const cols = this.terrainCols;
+    const bins = audio.bins;
+    for (let r = rows - 1; r > 0; r--) {
+      this.terrainHistory.copyWithin(r * cols, (r - 1) * cols, r * cols);
+    }
+    for (let c = 0; c < cols; c++) {
+      const idx = Math.floor((c / cols) * bins.length);
+      const v = bins[idx] ? bins[idx]! / 255 : 0;
+      this.terrainHistory[c] = Math.pow(v, 1.25) * 3.6;
+    }
+    const pos = this.terrainGeo.attributes.position as THREE.BufferAttribute;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        pos.setY(i, this.terrainHistory[i]!);
+      }
+    }
+    pos.needsUpdate = true;
+    this.terrainGeo.computeVertexNormals();
+    this.terrain.position.z = 4 + Math.sin(performance.now() * 0.00035) * 0.15;
+  }
+
   update(dt: number, time: number, audio: AudioBands, opts: {
     sphereDisp: number;
     orbitSpeed: number;
@@ -560,6 +981,11 @@ export class Scene {
     comboLevelMeter: boolean;
     comboFullscreen: boolean;
     rippleFullscreen: boolean;
+    datastreamFullscreen: boolean;
+    nebulaFullscreen: boolean;
+    monolithFullscreen: boolean;
+    mandalaFullscreen: boolean;
+    terrainFullscreen: boolean;
     bgColor: string;
     view: ViewMode;
   }) {
@@ -720,7 +1146,153 @@ export class Scene {
       return;
     }
 
+    if (opts.view === "datastream") {
+      this.postFxBoost.bloom = 1;
+      this.postFxBoost.glitch = 0;
+      this.updateDataStream(time, audio);
+      if (opts.datastreamFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (16 - this.camera.position.y) * follow;
+        this.camera.position.z += (0.01 - this.camera.position.z) * follow;
+        this.camera.fov += (46 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.75;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          2.2 + Math.sin(this.mousePitch) * r * 0.55,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.8 + 0.08);
+        const rad = 12;
+        this.camera.position.set(Math.sin(this.orbitAngle) * rad, 4.5, Math.cos(this.orbitAngle) * rad);
+      }
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+    if (opts.view === "nebula") {
+      this.postFxBoost.bloom = 1;
+      this.postFxBoost.glitch = 0;
+      this.updateNebula(dt, time, audio);
+      if (opts.nebulaFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (0 - this.camera.position.y) * follow;
+        this.camera.position.z += (10 - this.camera.position.z) * follow;
+        this.camera.fov += (44 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.72;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          Math.sin(this.mousePitch) * r * 0.42,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.7 + 0.05);
+        this.camera.position.set(Math.sin(this.orbitAngle) * 8.5, Math.sin(time * 0.4) * 0.7, Math.cos(this.orbitAngle) * 8.5);
+      }
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+    if (opts.view === "monolith") {
+      this.postFxBoost.bloom = 1;
+      this.postFxBoost.glitch = 0;
+      this.updateMonolith(dt, audio);
+      if (opts.monolithFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (36 - this.camera.position.y) * follow;
+        this.camera.position.z += (0.01 - this.camera.position.z) * follow;
+        this.camera.fov += (52 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 1.15;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          6 + Math.sin(this.mousePitch) * r * 0.5,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.5 + 0.045);
+        this.camera.position.set(Math.sin(this.orbitAngle) * 24, 12, Math.cos(this.orbitAngle) * 24);
+      }
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+    if (opts.view === "mandala") {
+      this.updateMandala(dt, time, audio);
+      if (opts.mandalaFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (0 - this.camera.position.y) * follow;
+        this.camera.position.z += (13 - this.camera.position.z) * follow;
+        this.camera.fov += (48 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.86;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          Math.sin(this.mousePitch) * r * 0.5,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.85 + 0.12);
+        this.camera.position.set(Math.sin(this.orbitAngle) * 10.5, Math.sin(time * 0.5) * 1.2, Math.cos(this.orbitAngle) * 10.5);
+      }
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+    if (opts.view === "terrain") {
+      this.postFxBoost.bloom = 1;
+      this.postFxBoost.glitch = 0;
+      this.updateTerrain(audio);
+      if (opts.terrainFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (18 - this.camera.position.y) * follow;
+        this.camera.position.z += (10 - this.camera.position.z) * follow;
+        this.camera.fov += (42 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, -1.5, 7);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.95;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          7 + Math.sin(this.mousePitch) * r * 0.4,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.45 + 0.02);
+        this.camera.position.set(Math.sin(this.orbitAngle) * 15, 7, Math.cos(this.orbitAngle) * 15);
+      }
+      this.camera.lookAt(0, -1.5, 7);
+      return;
+    }
+
     // bpmPhase already computed above — reused here for visual syncing
+    this.postFxBoost.bloom = 1;
+    this.postFxBoost.glitch = 0;
 
     // bars
     if (this.comboUniforms) this.comboUniforms.uBands.value = opts.comboLevelMeter ? 1 : 0;
@@ -1042,5 +1614,24 @@ export class Scene {
       for (const m of col.mats) m.dispose();
     }
     this.rippleColumnData = [];
+    if (this.dataStreamPoints) {
+      this.dataStreamPoints.geometry.dispose();
+      this.dataStreamMat?.dispose();
+    }
+    if (this.nebula) {
+      this.nebula.geometry.dispose();
+      this.nebulaMat?.dispose();
+    }
+    if (this.monolith) {
+      this.monolith.geometry.dispose();
+      (this.monolith.material as THREE.Material).dispose();
+    }
+    for (const ribbon of this.mandalaRibbons) {
+      ribbon.line.geometry.dispose();
+      (ribbon.line.material as THREE.Material).dispose();
+    }
+    this.mandalaRibbons = [];
+    if (this.terrainGeo) this.terrainGeo.dispose();
+    if (this.terrain) (this.terrain.material as THREE.Material).dispose();
   }
 }

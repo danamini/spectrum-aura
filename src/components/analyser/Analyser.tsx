@@ -428,6 +428,11 @@ export function Analyser() {
         rippleOpacity: s.rippleOpacity,
         rippleWireframe: s.rippleWireframe,
         rippleFullscreen: s.rippleFullscreen,
+        datastreamFullscreen: s.datastreamFullscreen,
+        nebulaFullscreen: s.nebulaFullscreen,
+        monolithFullscreen: s.monolithFullscreen,
+        mandalaFullscreen: s.mandalaFullscreen,
+        terrainFullscreen: s.terrainFullscreen,
         comboSphereSize: s.comboSphereSize,
         comboSphereSpinSpeed: s.comboSphereSpinSpeed,
         comboSphereBassPunch: s.comboSphereBassPunch,
@@ -439,7 +444,16 @@ export function Analyser() {
         bgColor: s.bgColor,
       });
 
-      composer.apply(s);
+      const postFxSettings =
+        displayedView === "mandala"
+          ? {
+              ...s,
+              bloomStrength: Math.min(3, s.bloomStrength * scene.postFxBoost.bloom),
+              glitch: s.glitch || scene.postFxBoost.glitch > 0.45,
+              glitchWild: s.glitchWild || scene.postFxBoost.glitch > 0.75,
+            }
+          : s;
+      composer.apply(postFxSettings);
       renderer.info.reset();
       composer.render(dt);
 

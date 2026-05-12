@@ -18,7 +18,7 @@ Depending on your hardware you may need to tune performance via the options in s
 
 - Browser-native real-time rendering with animated 3D scenes and post-processing.
 - Designed for live sessions: quick mode switching, keyboard-first controls, and preset slots.
-- Multiple visual personalities in one app: Combo, Classic, and Ripple.
+- Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, and Audio-Reactive Terrain.
 - Beat-aware motion and camera behavior that reacts to energy, not just raw levels.
 - Works with microphone input or shared tab/system audio.
 
@@ -52,6 +52,11 @@ For shared tab/system audio in Chrome:
 - Combo: radial bars, reactive sphere, particles, BPM-driven energy.
 - Classic: horizontal LED/bar analyzer with peak hold behavior.
 - Ripple: ring-wave field with configurable band columns.
+- Data-Stream: neon point-cloud terrain reacting to bass/high bins.
+- Nebula: pulsing volumetric shader sphere with fresnel aura.
+- Monolith: 32x32 instanced cube grid with peak-following spotlight.
+- Mandala: 12 audio-reactive radial ribbons with bloom/glitch surges.
+- Terrain: wireframe waterfall displacement grid over spectrum history.
 
 ### Live controls
 
