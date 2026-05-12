@@ -110,6 +110,8 @@ Important for system/tab audio:
 
 This app builds as a static site, so you can deploy the `dist/` output to any static host.
 
+It is configured for GitHub Pages at `https://danamini.github.io/spectrum-aura/`.
+
 Typical flow:
 
 ```bash

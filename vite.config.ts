@@ -3,7 +3,8 @@ import react from "@vitejs/plugin-react";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vite";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/spectrum-aura/" : "/",
   plugins: [tailwindcss(), tsConfigPaths({ projects: ["./tsconfig.json"] }), react()],
   resolve: {
     alias: {
@@ -20,4 +21,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
