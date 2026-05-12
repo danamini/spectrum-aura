@@ -1,127 +1,146 @@
 # Spectrum Aura
 
-Spectrum Aura is a real-time audio visualizer built with React, Three.js, and Vite.
+Spectrum Aura is a dynamic, real-time visual analyser that turns live sound into motion, light, depth, and rhythm directly in your browser.
 
-It turns live audio into animated 3D scenes with post-processing effects, palette systems, beat-reactive camera behavior, and a rolling preset workflow for live sessions.
+No installs for viewers. No backend. No upload flow. Open the page, feed it audio, and the scene responds instantly.
 
-## Why It Feels Different
+## Live Demo
 
-- Three visual engines in one app: Combo, Classic, and Ripple.
-- Live mic or system/tab audio capture.
-- BPM-aware motion in the Combo scene.
-- Fast shader/post-FX iteration from a local control panel.
-- Keyboard-first live control with load/save preset slots.
+- GitHub Pages: [https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)
 
-## Stack
+## What Makes It Fun To Use
+
+- Browser-native real-time rendering with animated 3D scenes and post-processing.
+- Designed for live sessions: quick mode switching, keyboard-first controls, and preset slots.
+- Multiple visual personalities in one app: Combo, Classic, and Ripple.
+- Beat-aware motion and camera behavior that reacts to energy, not just raw levels.
+- Works with microphone input or shared tab/system audio.
+
+## Screenshots
+
+<table>
+	<tr>
+		<td><img src="docs/screenshots/spectrum-aura-hero.png" alt="Spectrum Aura landing and input picker" width="100%" /></td>
+		<td><img src="docs/screenshots/spectrum-aura-stats-fullpage.png" alt="Spectrum Aura full-page nerd stats overlay" width="100%" /></td>
+	</tr>
+	<tr>
+		<td><img src="docs/screenshots/spectrum-aura-classic.png" alt="Spectrum Aura classic view" width="100%" /></td>
+		<td><img src="docs/screenshots/spectrum-auro-ripples.png" alt="Spectrum Aura ripple view" width="100%" /></td>
+	</tr>
+</table>
+
+## Experience Highlights
+
+### Input modes
+
+- Use microphone for ambient or live room capture.
+- Use tab/system audio for direct playback-reactive visuals.
+
+For shared tab/system audio in Chrome:
+
+- Select a browser tab when prompted.
+- Enable **Share tab audio**.
+
+### Visual engines
+
+- Combo: radial bars, reactive sphere, particles, BPM-driven energy.
+- Classic: horizontal LED/bar analyzer with peak hold behavior.
+- Ripple: ring-wave field with configurable band columns.
+
+### Live controls
+
+- `R` randomize look
+- `V` toggle visual mode
+- `C` toggle preset cycling
+- `F` toggle fullscreen
+- `G` show/hide hint bar
+- `1-5` load preset slot
+- `Shift + 1-5` save slot
+- `N` toggle stats panel
+- `Shift + N` fullscreen stats panel
+
+### Tunable signal + render pipeline
+
+- FFT size, smoothing, gain, beat sensitivity
+- Camera drift and beat response controls
+- Post FX controls: bloom, chroma, grain, vignette, DOF, glitch, god rays, grading
+
+## Presets
+
+- Built-in presets for fast scene changes.
+- First-time users are seeded with five curated starter slots by default.
+- Five user slots saved in local storage.
+- Slot cycle mode for automated live rotation.
+
+## Tech Stack (Lower-Level Details)
 
 - React 19 + TypeScript
-- Three.js renderer and custom shader materials
+- Three.js + custom shader materials
 - Vite 7
-- Static SPA output, no backend required
+- Static SPA output (no backend services)
 
-## Quick Start
+## Local Development
 
 ### Prerequisites
 
 - Node.js 20+
 - npm 10+
-- A modern Chromium browser for system/tab audio sharing
 
-### Install and run
+### Install + run
 
 ```bash
 npm install
 npm run dev
 ```
 
-Dev server runs on a single browser page at:
+Default local URL:
 
 - http://localhost:6789
 
-## Build and Preview
+### Build + preview
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## Lint and Format
+### Lint + format
 
 ```bash
 npm run lint
 npm run format
 ```
 
-## Audio Input Modes
+### Tests
 
-Inside the app, use the floating controls to start one of these input modes:
+```bash
+npm run test
+npm run test:run
+```
 
-- Mic input: accesses your microphone.
-- System/tab audio: uses screen-share audio capture.
+### Pre-commit quality check
 
-Important for system/tab audio:
-
-- In Chrome, choose a browser tab and enable Share tab audio.
-- If no audio track is shared, the app will show an explicit error.
-
-## Live Controls
-
-### Keyboard shortcuts
-
-- R: randomize current look
-- V: cycle visual mode
-- C: toggle preset slot cycle mode
-- F: toggle fullscreen
-- G: show/hide shortcut hint bar
-- 1-5: load slot
-- Shift + 1-5: save slot
-- N: toggle nerd stats panel
-- Shift + N: fullscreen nerd stats panel
-
-### Visual modes
-
-- Combo: radial bars + reactive sphere + particles with BPM-synced motion.
-- Classic: horizontal LED/bar style analyzer with peak hold and optional full-frame fit.
-- Ripple: ring wave field with configurable band columns.
-
-### Core tuning controls
-
-- FFT size
-- Smoothing
-- Gain
-- Beat sensitivity
-- Camera drift/beat response
-- Bloom, chroma, grain, vignette, DOF, glitch, god rays, grading, and more
-
-## Presets and Slots
-
-- Built-in presets are available from the control panel.
-- Five user slots persist in local storage.
-- Slot cycle mode rotates through occupied slots with configurable dwell time.
+```bash
+npm run check
+```
 
 ## Project Layout
 
-- src/App.tsx: single-page app shell
-- src/main.tsx: browser entry point
-- src/components/analyser: UI and interaction layer
-- src/components/analyser/engine: audio analysis, scene update logic, shaders, post-FX
+- `src/App.tsx`: single-page shell
+- `src/main.tsx`: browser entry point
+- `src/components/analyser`: UI and interaction layer
+- `src/components/analyser/engine`: audio analysis, scene logic, shaders, post FX
 
-## Deploy Notes
+## Deploy
 
-This app builds as a static site, so you can deploy the `dist/` output to any static host.
-
-It is configured for GitHub Pages at `https://danamini.github.io/spectrum-aura/`.
-
-Typical flow:
+Build static assets and publish `dist/` to any static host.
 
 ```bash
 npm run build
 ```
 
-Then publish the generated `dist/` directory with your static hosting provider.
-
 ## Signal Processing Deep Dive
 
-For a detailed walkthrough of FFT usage, bass energy extraction, peak detection, and BPM estimation, see:
+Detailed notes on FFT, bass energy extraction, beat detection, and BPM estimation:
 
-- docs/fft-and-beat-detection.md
+- [FFT and beat detection doc](docs/fft-and-beat-detection.md)

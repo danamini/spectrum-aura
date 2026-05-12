@@ -241,8 +241,191 @@ export const SLOT_COUNT = 5;
 
 export type SavedSlot = { name: string; settings: Settings } | null;
 
+type SlotSeed = {
+  name: string;
+  settings: Partial<Settings> & { rippleWaveLayers?: number };
+} | null;
+
+const DEPLOYMENT_DEFAULT_SLOTS: SlotSeed[] = [
+  {
+    name: "Slot 1",
+    settings: {
+      view: "ripple",
+      classicFullscreen: true,
+      rippleRingCount: 18,
+      rippleColumns: 19,
+      rippleMaxRadius: 10.9,
+      rippleAmplitude: 0.5,
+      rippleWaveCycles: 0.4,
+      rippleThickness: 0.45,
+      rippleRotationSpeed: 0,
+      rippleOpacity: 0.1,
+      rippleWireframe: true,
+      tiltShift: true,
+      performance: true,
+    },
+  },
+  {
+    name: "Slot 2",
+    settings: {
+      view: "classic",
+      classicFullscreen: true,
+      rippleRingCount: 18,
+      rippleMaxRadius: 10.9,
+      rippleAmplitude: 0.3,
+      rippleWaveCycles: 0.4,
+      rippleThickness: 0.45,
+      rippleRotationSpeed: 0,
+      rippleOpacity: 0.1,
+      rippleWireframe: true,
+      barCount: 120,
+      paletteIndex: 2,
+      sphereDisplacement: 1.2744294219011156,
+      orbitSpeed: 0.5573645825854491,
+      bloomExtreme: true,
+      bloomStrength: 0.5,
+      bloomRadius: 0.9697065790898396,
+      bloomThreshold: 0.19,
+      chromaAmount: 0.003996850796579389,
+      grain: false,
+      grainAmount: 0.12811724566537983,
+      vignetteAmount: 0.7248832432138457,
+      dofFocus: 12.397176777164006,
+      dofAperture: 0.0002518988447226525,
+      dofMaxBlur: 0.01424164122486095,
+      glitchWild: true,
+      godRaysAmount: 1.3,
+      pixelSize: 9,
+      tiltShift: false,
+      tiltAmount: 0.8617719704980613,
+      exposure: 1.285841041709212,
+      contrast: 1.2255858399724102,
+      saturation: 1.5652705936717801,
+      hue: 0.13065812648413633,
+    },
+  },
+  {
+    name: "Slot 3",
+    settings: {
+      view: "ripple",
+      classicFullscreen: true,
+      rippleRingCount: 18,
+      rippleColumns: 19,
+      rippleMaxRadius: 10.9,
+      rippleAmplitude: 1.1,
+      rippleWaveCycles: 0.4,
+      rippleThickness: 0.45,
+      rippleRotationSpeed: 0,
+      rippleOpacity: 0.1,
+      rippleWireframe: true,
+      barCount: 176,
+      paletteIndex: 1,
+      sphereDisplacement: 0.9964686047889756,
+      orbitSpeed: 0.5192011977059071,
+      bloomStrength: 0.13380514738467772,
+      bloomRadius: 0.9762047393307862,
+      bloomThreshold: 0.14096558408629517,
+      chromaAmount: 0.0049566853877237495,
+      grainAmount: 0.17724662207639846,
+      vignetteAmount: 0.9003858888952909,
+      dofFocus: 5.5938667825855095,
+      dofAperture: 0.00020470383882703326,
+      dofMaxBlur: 0.0031123565488038168,
+      godRaysAmount: 0.34338425796555355,
+      pixelSize: 8,
+      tiltShift: false,
+      tiltAmount: 2.051080060880908,
+      exposure: 0.8311168887919074,
+      contrast: 1.3319314014816008,
+      saturation: 1.5782626270030198,
+      hue: -0.06331707440542603,
+      performance: true,
+      bgColor: "#0c242d",
+    },
+  },
+  {
+    name: "Slot 4",
+    settings: {
+      view: "combo",
+      classicFullscreen: true,
+      rippleRingCount: 18,
+      rippleMaxRadius: 10.9,
+      rippleAmplitude: 0.5,
+      rippleWaveCycles: 0.4,
+      rippleThickness: 0.45,
+      rippleRotationSpeed: 0,
+      rippleOpacity: 0.1,
+      rippleWireframe: true,
+      tiltShift: true,
+      performance: true,
+    },
+  },
+  {
+    name: "Slot 5",
+    settings: {
+      view: "ripple",
+      classicPeakStyle: "glow",
+      classicPeakColor: "#7a5cff",
+      classicGridOpacity: 0.5,
+      classicFullscreen: true,
+      rippleRingCount: 8,
+      rippleColumns: 32,
+      rippleMaxRadius: 3.9,
+      rippleSpeed: 0.45,
+      rippleAmplitude: 3,
+      rippleWaveCycles: 0.4,
+      rippleThickness: 1.9,
+      rippleRotationSpeed: 0,
+      rippleOpacity: 0.1,
+      rippleWireframe: false,
+      barCount: 160,
+      paletteIndex: 3,
+      sphereDisplacement: 0.10585084796487848,
+      orbitSpeed: 0.031352524286730056,
+      cameraBeatAmount: 0.6,
+      bloomStrength: 0.04,
+      bloomRadius: 0.9,
+      bloomThreshold: 0.34,
+      chromaAmount: 0.0115,
+      grain: false,
+      grainAmount: 0.4625278602751279,
+      vignetteAmount: 1.125254940394683,
+      dof: true,
+      dofFocus: 12.567088561257398,
+      dofAperture: 0.0002023636285833952,
+      dofMaxBlur: 0.007621570850062608,
+      godRaysAmount: 1.7,
+      pixelSize: 10,
+      tiltShift: true,
+      tiltAmount: 1.4014349718473225,
+      grading: false,
+      exposure: 1.1962672195889943,
+      contrast: 0.9851820698988876,
+      saturation: 1.5343027456694487,
+      hue: 0.03577837548688448,
+      bgColor: "#23292a",
+    },
+  },
+];
+
+function normalizeSlot(seed: SlotSeed): SavedSlot {
+  if (!seed) return null;
+  const raw = seed.settings ?? {};
+  const merged = { ...DEFAULT_SETTINGS, ...raw } as Settings;
+  if (raw.rippleWaveLayers != null && raw.rippleColumns === undefined) {
+    merged.rippleColumns = Math.max(1, Math.min(50, Math.round(raw.rippleWaveLayers)));
+  }
+  return {
+    name: seed.name,
+    settings: normalizeBloomForExtreme(merged),
+  };
+}
+
 let state: Settings = { ...DEFAULT_SETTINGS };
-let slots: SavedSlot[] = Array.from({ length: SLOT_COUNT }, () => null);
+let slots: SavedSlot[] = Array.from(
+  { length: SLOT_COUNT },
+  (_, i) => normalizeSlot(DEPLOYMENT_DEFAULT_SLOTS[i] ?? null),
+);
 /** Shallow copy so `useSyncExternalStore` sees a new snapshot when slots change (in-place `slots[]` edits keep the same array ref). */
 let slotsSnapshot: SavedSlot[] = [];
 function refreshSlotsSnapshot() {
@@ -255,9 +438,11 @@ if (typeof window !== "undefined") {
   try {
     const raw = localStorage.getItem(SLOTS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw) as SlotSeed[];
       if (Array.isArray(parsed)) {
-        for (let i = 0; i < SLOT_COUNT; i++) slots[i] = parsed[i] ?? null;
+        for (let i = 0; i < SLOT_COUNT; i++) {
+          slots[i] = normalizeSlot(parsed[i] ?? null);
+        }
       }
     }
   } catch {}
