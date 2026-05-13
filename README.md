@@ -106,7 +106,9 @@ npm run dev
 
 Default local URL:
 
-- http://localhost:6789
+- http://localhost:5173
+
+The dev server supports hot module reloading for rapid iteration.
 
 ### Build + preview
 
@@ -115,36 +117,31 @@ npm run build
 npm run preview
 ```
 
-### Lint + format
+### Quality checks
 
 ```bash
-npm run lint
-npm run format
+npm run lint        # ESLint validation
+npm run format      # Prettier formatting
+npm run test --run  # Vitest (single run)
+npm run test        # Vitest (watch mode)
+npm run check       # All checks (lint + format + test + build)
 ```
 
-### Tests
+### Project Layout
 
-```bash
-npm run test
-npm run test:run
-```
-
-### Pre-commit quality check
-
-```bash
-npm run check
-```
-
-## Project Layout
-
-- `src/App.tsx`: single-page shell
-- `src/main.tsx`: browser entry point
-- `src/components/analyser`: UI and interaction layer
-- `src/components/analyser/engine`: audio analysis, scene logic, shaders, post FX
+- `src/App.tsx`: Single-page shell
+- `src/main.tsx`: Browser entry point
+- `src/components/analyser/`: UI and interaction layer
+  - `store.ts`: Settings state management
+  - `Analyser.tsx`: Canvas orchestration
+  - `ControlPanel.tsx`: Settings UI
+  - `engine/`: Audio analysis, 3D scene, post-processing
+- `docs/`: Technical documentation
+- `DEVELOPMENT.md`: Architecture and contribution guide
 
 ## Deploy
 
-Build static assets and publish `dist/` to any static host.
+Build static assets and publish `dist/` to any static host:
 
 ```bash
 npm run build

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { settingsStore, useSlots } from "./store";
+import { settingsStore, useSettings, useSlots, type Settings } from "./store";
 
 async function toggleFullscreen() {
   try {
@@ -12,9 +12,22 @@ async function toggleFullscreen() {
 
 export function Shortcuts() {
   const slots = useSlots();
+  const settings = useSettings();
   const [visible, setVisible] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
+
+  const fullscreenByView: Record<Settings["view"], keyof Settings> = {
+    combo: "comboFullscreen",
+    classic: "classicFullscreen",
+    ripple: "rippleFullscreen",
+    datastream: "datastreamFullscreen",
+    nebula: "nebulaFullscreen",
+    monolith: "monolithFullscreen",
+    mandala: "mandalaFullscreen",
+    terrain: "terrainFullscreen",
+  };
+  const is3DMode = !Boolean(settings[fullscreenByView[settings.view]]);
 
   const showFlash = (msg: string) => {
     setFlash(msg);
@@ -167,7 +180,7 @@ export function Shortcuts() {
 
   void slots;
 
-  type Hint = { key: string; label: string; onClick: (ev: MouseEvent<HTMLButtonElement>) => void; title?: string };
+  type Hint = { key: string; label?: string; onClick: (ev: MouseEvent<HTMLButtonElement>) => void; title?: string };
   const hints: Hint[] = [
     { key: "R", label: "Randomize", onClick: () => { doRandomize(); } },
     { key: "V", label: "Toggle view", onClick: () => { doToggleView(); } },
@@ -177,7 +190,7 @@ export function Shortcuts() {
   ];
   const slotHints: Hint[] = [1, 2, 3, 4, 5].map((n) => ({
     key: String(n),
-    label: slots[n - 1]?.name ?? "empty",
+    label: "",
     onClick: (ev: MouseEvent<HTMLButtonElement>) => {
       if (ev.shiftKey) doSaveSlot(n - 1);
       else doSlot(n - 1);
@@ -195,7 +208,7 @@ export function Shortcuts() {
       <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/70 group-hover:border-white/40">
         {h.key}
       </kbd>
-      <span>{h.label}</span>
+      {h.label ? <span>{h.label}</span> : null}
     </button>
   );
 
@@ -208,11 +221,19 @@ export function Shortcuts() {
       )}
       {visible ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-3 z-[100] flex justify-center">
-          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-white/5 bg-black/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70 hover:opacity-100 transition-opacity">
+          <div className="flex flex-col items-center gap-1">
+            {is3DMode && (
+              <div className="rounded-full border border-white/5 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70">
+                3D: drag mouse to move camera
+              </div>
+            )}
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-white/5 bg-black/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70 hover:opacity-100 transition-opacity">
             {hints.map((h) => <Btn key={h.key} h={h} />)}
             <span className="mx-1 h-3 w-px bg-white/10" />
+            <span className="ml-1 text-white/25 normal-case tracking-normal">Slot</span>
             {slotHints.map((h) => <Btn key={h.key} h={h} />)}
             <span className="ml-1 text-white/25 normal-case tracking-normal">⇧+1–5 save</span>
+            </div>
           </div>
         </div>
       ) : (

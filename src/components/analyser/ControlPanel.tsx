@@ -205,7 +205,7 @@ export function ControlPanel() {
       <SheetTrigger asChild>
         <Button
           size="icon"
-          className="fixed right-4 top-4 z-20 bg-black/50 backdrop-blur border border-white/10 hover:bg-black/70 opacity-20 hover:opacity-100 transition-opacity duration-300"
+          className="fixed bottom-3 right-3 z-[101] bg-black/50 backdrop-blur border border-white/10 hover:bg-black/70 opacity-20 hover:opacity-100 transition-opacity duration-300"
         >
           <SettingsIcon className="h-4 w-4" />
         </Button>
@@ -359,7 +359,7 @@ export function ControlPanel() {
                       />
                       <S label="Max radius" value={s.rippleMaxRadius} min={2} max={14} step={0.1} onChange={(v) => set({ rippleMaxRadius: v })} />
                       <S label="Wave speed" value={s.rippleSpeed} min={0} max={4} step={0.05} onChange={(v) => set({ rippleSpeed: v })} />
-                      <S label="Amplitude" value={s.rippleAmplitude} min={0} max={3} step={0.05} onChange={(v) => set({ rippleAmplitude: v })} />
+                      <S label="Amplitude" value={s.rippleAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ rippleAmplitude: v })} />
                       <S label="Wave cycles" value={s.rippleWaveCycles} min={0.2} max={6} step={0.1} onChange={(v) => set({ rippleWaveCycles: v })} />
                       <S label="Ring thickness" value={s.rippleThickness} min={0.2} max={3} step={0.05} onChange={(v) => set({ rippleThickness: v })} />
                       <S label="Rotation speed" value={s.rippleRotationSpeed} min={-1} max={1} step={0.02} onChange={(v) => set({ rippleRotationSpeed: v })} />
@@ -370,10 +370,56 @@ export function ControlPanel() {
                       </div>
                     </>
                   )}
-                  {s.view !== "combo" && s.view !== "classic" && s.view !== "ripple" && (
-                    <p className="font-mono text-[10px] leading-relaxed text-white/45">
-                      This view uses built-in defaults. Use Scene/Post FX controls for extra shaping.
-                    </p>
+                  {s.view === "datastream" && (
+                    <>
+                      <S label="Amplitude" value={s.datastreamAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ datastreamAmplitude: v })} />
+                      <S label="Particle count" value={s.datastreamItemCount} min={500} max={30000} step={500} onChange={(v) => set({ datastreamItemCount: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.datastreamUsePalette} onCheckedChange={(v) => set({ datastreamUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "nebula" && (
+                    <>
+                      <S label="Amplitude" value={s.nebulaAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ nebulaAmplitude: v })} />
+                      <S label="Detail" value={s.nebulaDetail} min={24} max={220} step={4} onChange={(v) => set({ nebulaDetail: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.nebulaUsePalette} onCheckedChange={(v) => set({ nebulaUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "monolith" && (
+                    <>
+                      <S label="Amplitude" value={s.monolithAmplitude} min={0.5} max={1.5} step={0.05} onChange={(v) => set({ monolithAmplitude: v })} />
+                      <S label="Grid size (NxN squares)" value={s.monolithGridSize} min={2} max={40} step={1} onChange={(v) => set({ monolithGridSize: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.monolithUsePalette} onCheckedChange={(v) => set({ monolithUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "mandala" && (
+                    <>
+                      <S label="Amplitude" value={s.mandalaAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ mandalaAmplitude: v })} />
+                      <S label="Line count" value={s.mandalaLineCount} min={2} max={48} step={1} onChange={(v) => set({ mandalaLineCount: Math.round(v) })} />
+                      <S label="Line width" value={s.mandalaLineWidth} min={1} max={8} step={0.5} onChange={(v) => set({ mandalaLineWidth: v })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.mandalaUsePalette} onCheckedChange={(v) => set({ mandalaUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "terrain" && (
+                    <>
+                      <S label="Amplitude" value={s.terrainAmplitude} min={0.5} max={4} step={0.05} onChange={(v) => set({ terrainAmplitude: v })} />
+                      <S label="Columns" value={s.terrainColumns} min={16} max={256} step={8} onChange={(v) => set({ terrainColumns: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.terrainUsePalette} onCheckedChange={(v) => set({ terrainUsePalette: v })} />
+                      </div>
+                    </>
                   )}
                 </div>
               )}
@@ -662,7 +708,7 @@ export function ControlPanel() {
                     <S label="Amount" value={s.grainAmount} min={0} max={1} step={0.05} onChange={(v) => set({ grainAmount: v })} />
                   </ToggleRow>
                   <ToggleRow label="Vignette" enabled={s.vignette} onToggle={(v) => set({ vignette: v })}>
-                    <S label="Amount" value={s.vignetteAmount} min={0.5} max={2} step={0.05} onChange={(v) => set({ vignetteAmount: v })} />
+                    <S label="Amount" value={s.vignetteAmount} min={0.5} max={1.25} step={0.05} onChange={(v) => set({ vignetteAmount: v })} />
                   </ToggleRow>
                   <ToggleRow label="Depth of field" enabled={s.dof} onToggle={(v) => set({ dof: v })}>
                     <S label="Focus" value={s.dofFocus} min={1} max={20} step={0.1} onChange={(v) => set({ dofFocus: v })} />

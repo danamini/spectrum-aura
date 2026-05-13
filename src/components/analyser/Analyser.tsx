@@ -253,7 +253,6 @@ export function Analyser() {
       history.push(value);
       if (history.length > max) history.shift();
     };
-    let lastPaletteIndex = -1;
     let lastBgColor = "";
     let lastOpacity = "";
     let lastStatsCommitAt = 0;
@@ -392,10 +391,7 @@ export function Analyser() {
           bpmConfidence: bands.bpmConfidence,
         });
       }
-      if (s.paletteIndex !== lastPaletteIndex) {
-        scene.setPalette(PALETTES[s.paletteIndex]?.colors ?? PALETTES[0].colors);
-        lastPaletteIndex = s.paletteIndex;
-      }
+      scene.setPalette(PALETTES[s.paletteIndex]?.colors ?? PALETTES[0].colors);
       scene.update(dt, t, bands, {
         view: displayedView,
         sphereDisp: s.sphereDisplacement,
@@ -427,6 +423,22 @@ export function Analyser() {
         rippleRotationSpeed: s.rippleRotationSpeed,
         rippleOpacity: s.rippleOpacity,
         rippleWireframe: s.rippleWireframe,
+        datastreamUsePalette: s.datastreamUsePalette,
+        datastreamAmplitude: s.datastreamAmplitude,
+        datastreamItemCount: s.datastreamItemCount,
+        nebulaUsePalette: s.nebulaUsePalette,
+        nebulaAmplitude: s.nebulaAmplitude,
+        nebulaDetail: s.nebulaDetail,
+        monolithUsePalette: s.monolithUsePalette,
+        monolithAmplitude: s.monolithAmplitude,
+        monolithGridSize: s.monolithGridSize,
+        mandalaUsePalette: s.mandalaUsePalette,
+        mandalaAmplitude: s.mandalaAmplitude,
+        mandalaLineCount: s.mandalaLineCount,
+        mandalaLineWidth: s.mandalaLineWidth,
+        terrainUsePalette: s.terrainUsePalette,
+        terrainAmplitude: s.terrainAmplitude,
+        terrainColumns: s.terrainColumns,
         rippleFullscreen: s.rippleFullscreen,
         datastreamFullscreen: s.datastreamFullscreen,
         nebulaFullscreen: s.nebulaFullscreen,
@@ -646,7 +658,7 @@ export function Analyser() {
       )}
 
       {audioStatus === "running" && liveTempo.bpm > 0 && liveTempo.bpmConfidence > 0.4 && (settings.showBPM ?? true) && (
-        <div className="absolute bottom-6 left-6 z-10 pointer-events-none">
+        <div className="absolute bottom-3 left-3 z-10 pointer-events-none">
           <div className="text-center">
             <div className="font-mono text-xs uppercase tracking-widest text-white/40 mb-1 flex items-center justify-center gap-2">
               BPM
@@ -666,7 +678,7 @@ export function Analyser() {
         </div>
       )}
 
-      <div className="absolute right-16 top-4 z-20 flex items-center gap-2 pointer-events-auto">
+      <div className="fixed bottom-3 right-14 z-[101] flex items-center gap-2 pointer-events-auto">
         {audioStatus === "running" && (
           <button
             onClick={handleStop}
