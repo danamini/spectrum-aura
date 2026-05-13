@@ -85,6 +85,8 @@ const EMPTY_STATS: NerdStats = {
   bpmConfidence: 0,
 };
 
+const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
+
 export function Analyser() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<AudioEngine | null>(null);
@@ -152,6 +154,14 @@ export function Analyser() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const onToggleStatsPanel = () => {
+      toggleStatsPanel();
+    };
+    window.addEventListener(TOGGLE_STATS_PANEL_EVENT, onToggleStatsPanel);
+    return () => window.removeEventListener(TOGGLE_STATS_PANEL_EVENT, onToggleStatsPanel);
   }, []);
 
   // engine refs

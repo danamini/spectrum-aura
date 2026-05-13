@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { settingsStore, useSettings, useSlots, type Settings } from "./store";
 
+const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
+
 async function toggleFullscreen() {
   try {
     if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -111,6 +113,10 @@ export function Shortcuts() {
     settingsStore.set({ slotCycleMode: on });
     showFlash(on ? "Preset cycle ON" : "Preset cycle OFF");
   };
+  const doToggleStats = () => {
+    window.dispatchEvent(new Event(TOGGLE_STATS_PANEL_EVENT));
+    showFlash("Stats for nerds");
+  };
   const doToggleHints = () => setVisible((v) => !v);
   const doSlot = (i: number) => {
     const slot = settingsStore.getSlots()[i];
@@ -186,6 +192,7 @@ export function Shortcuts() {
     { key: "V", label: "Toggle view", onClick: () => { doToggleView(); } },
     { key: "C", label: "Cycle presets", onClick: () => { doToggleSlotCycle(); } },
     { key: "F", label: "Fullscreen", onClick: () => { doFullscreen(); } },
+    { key: "N", label: "Stats for nerds", onClick: () => { doToggleStats(); } },
     { key: "G", label: "Hide hints", onClick: () => { doToggleHints(); } },
   ];
   const slotHints: Hint[] = [1, 2, 3, 4, 5].map((n) => ({
