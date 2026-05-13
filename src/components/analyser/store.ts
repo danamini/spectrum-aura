@@ -8,7 +8,11 @@ export type ViewMode =
   | "nebula"
   | "monolith"
   | "mandala"
-  | "terrain";
+  | "terrain"
+  | "obsidian"
+  | "torus"
+  | "soundwall"
+  | "geometrynebula";
 
 export type Settings = {
   // view
@@ -97,6 +101,32 @@ export type Settings = {
   terrainAmplitude: number;
   terrainColumns: number;
   terrainWireframe: boolean;
+
+  // obsidian shard view
+  obsidianFullscreen: boolean;
+  obsidianUsePalette: boolean;
+  obsidianAmplitude: number;
+  obsidianShardDetail: number; // icosahedron detail level (0–3)
+
+  // torus particle accelerator view
+  torusFullscreen: boolean;
+  torusUsePalette: boolean;
+  torusAmplitude: number;
+  torusParticleCount: number;
+  torusSpeed: number; // base orbit speed multiplier
+
+  // brutalist sound-wall view
+  soundwallFullscreen: boolean;
+  soundwallUsePalette: boolean;
+  soundwallAmplitude: number;
+  soundwallColumns: number; // pillars per side
+  soundwallRows: number;    // history depth
+
+  // floating geometry nebula view
+  geometrynebulaFullscreen: boolean;
+  geometrynebulaUsePalette: boolean;
+  geometrynebulaAmplitude: number;
+  geometrynebulaCount: number;
 
   // 3D combo view
   comboSphereSize: number;       // base sphere scale (1 = default)
@@ -207,6 +237,24 @@ export const DEFAULT_SETTINGS: Settings = {
   terrainAmplitude: 1,
   terrainColumns: 128,
   terrainWireframe: true,
+  obsidianFullscreen: false,
+  obsidianUsePalette: true,
+  obsidianAmplitude: 1,
+  obsidianShardDetail: 1,
+  torusFullscreen: false,
+  torusUsePalette: true,
+  torusAmplitude: 1,
+  torusParticleCount: 5000,
+  torusSpeed: 1,
+  soundwallFullscreen: false,
+  soundwallUsePalette: true,
+  soundwallAmplitude: 1,
+  soundwallColumns: 20,
+  soundwallRows: 12,
+  geometrynebulaFullscreen: false,
+  geometrynebulaUsePalette: true,
+  geometrynebulaAmplitude: 1,
+  geometrynebulaCount: 60,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,

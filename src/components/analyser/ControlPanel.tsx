@@ -174,6 +174,10 @@ export function ControlPanel() {
     monolith: "Brutalist Monolith settings",
     mandala: "Symmetric Mandala settings",
     terrain: "Audio-Reactive Terrain settings",
+    obsidian: "Obsidian Shard settings",
+    torus: "Hyper-Torus Accelerator settings",
+    soundwall: "Brutalist Sound-Wall settings",
+    geometrynebula: "Floating Geometry Nebula settings",
   };
   const viewLabel = viewLabels[s.view];
   const viewOptions = [
@@ -185,6 +189,10 @@ export function ControlPanel() {
     { id: "monolith", label: "Monolith" },
     { id: "mandala", label: "Mandala" },
     { id: "terrain", label: "Terrain" },
+    { id: "obsidian", label: "Obsidian" },
+    { id: "torus", label: "Torus" },
+    { id: "soundwall", label: "Sound-Wall" },
+    { id: "geometrynebula", label: "Geo Nebula" },
   ] as const;
   const fullscreenByView: Record<Settings["view"], keyof Settings> = {
     combo: "comboFullscreen",
@@ -195,6 +203,10 @@ export function ControlPanel() {
     monolith: "monolithFullscreen",
     mandala: "mandalaFullscreen",
     terrain: "terrainFullscreen",
+    obsidian: "obsidianFullscreen",
+    torus: "torusFullscreen",
+    soundwall: "soundwallFullscreen",
+    geometrynebula: "geometrynebulaFullscreen",
   };
   const fullscreenKey = fullscreenByView[s.view];
   const is2d = Boolean(s[fullscreenKey]);
@@ -222,6 +234,10 @@ export function ControlPanel() {
     else if (s.view === "monolith") set({ monolithFullscreen: value });
     else if (s.view === "mandala") set({ mandalaFullscreen: value });
     else if (s.view === "terrain") set({ terrainFullscreen: value });
+    else if (s.view === "obsidian") set({ obsidianFullscreen: value });
+    else if (s.view === "torus") set({ torusFullscreen: value });
+    else if (s.view === "soundwall") set({ soundwallFullscreen: value });
+    else if (s.view === "geometrynebula") set({ geometrynebulaFullscreen: value });
   };
 
   return (
@@ -478,6 +494,56 @@ export function ControlPanel() {
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px]">Wireframe</Label>
                         <Sw checked={s.terrainWireframe} onCheckedChange={(v) => set({ terrainWireframe: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "obsidian" && (
+                    <>
+                      <S label="Amplitude" value={s.obsidianAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ obsidianAmplitude: v })} />
+                      <Row label="Shard detail">
+                        <div className="flex gap-1.5">
+                          {([0, 1, 2, 3] as const).map((d) => (
+                            <Bn key={d} active={s.obsidianShardDetail === d} className="flex-1" onClick={() => set({ obsidianShardDetail: d })}>
+                              {d === 0 ? "Low" : d === 1 ? "Med" : d === 2 ? "High" : "Ultra"}
+                            </Bn>
+                          ))}
+                        </div>
+                      </Row>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.obsidianUsePalette} onCheckedChange={(v) => set({ obsidianUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "torus" && (
+                    <>
+                      <S label="Amplitude" value={s.torusAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ torusAmplitude: v })} />
+                      <S label="Orbit speed" value={s.torusSpeed} min={0.1} max={4} step={0.1} onChange={(v) => set({ torusSpeed: v })} />
+                      <S label="Particle count" value={s.torusParticleCount} min={200} max={20000} step={200} onChange={(v) => set({ torusParticleCount: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.torusUsePalette} onCheckedChange={(v) => set({ torusUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "soundwall" && (
+                    <>
+                      <S label="Amplitude" value={s.soundwallAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ soundwallAmplitude: v })} />
+                      <S label="Columns per side" value={s.soundwallColumns} min={4} max={40} step={1} onChange={(v) => set({ soundwallColumns: Math.round(v) })} />
+                      <S label="History rows (depth)" value={s.soundwallRows} min={2} max={24} step={1} onChange={(v) => set({ soundwallRows: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.soundwallUsePalette} onCheckedChange={(v) => set({ soundwallUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "geometrynebula" && (
+                    <>
+                      <S label="Amplitude" value={s.geometrynebulaAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ geometrynebulaAmplitude: v })} />
+                      <S label="Shape count" value={s.geometrynebulaCount} min={6} max={120} step={6} onChange={(v) => set({ geometrynebulaCount: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.geometrynebulaUsePalette} onCheckedChange={(v) => set({ geometrynebulaUsePalette: v })} />
                       </div>
                     </>
                   )}
