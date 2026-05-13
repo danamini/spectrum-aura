@@ -70,11 +70,20 @@ For shared tab/system audio in Chrome:
 - `N` toggle stats panel
 - `Shift + N` fullscreen stats panel
 
+Control panel additions:
+
+- Global `Wireframe` toggle in the View section that maps to the active view's wireframe setting (where supported).
+- `Post FX pipeline` master toggle in Post FX that bypasses all post-processing without changing individual effect settings.
+- `Monolith Brightness` slider in Monolith view settings for direct lighting/visibility control.
+
 ### Tunable signal + render pipeline
 
 - FFT size, smoothing, gain, beat sensitivity
 - Camera drift and beat response controls
 - Post FX controls: bloom, chroma, grain, vignette, DOF, glitch, god rays, grading
+- Post FX master pipeline bypass toggle
+- View-specific wireframe controls, plus a global wireframe toggle bound to the current view
+- Dedicated monolith brightness control
 
 ## Presets
 

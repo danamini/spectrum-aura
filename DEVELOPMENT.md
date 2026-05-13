@@ -65,6 +65,11 @@ docs/
 - **Normalization**: Enforces limits on amplitude, vignette, bloom
 - **Randomization**: Smart background picker using WCAG contrast scoring
 
+Recent controls:
+- `postFxEnabled`: Master switch that bypasses the post-processing pipeline at render time.
+- Global Wireframe control in the View panel: writes to the active view-specific wireframe setting.
+- `monolithBrightness`: Dedicated lighting/visibility control for Monolith independent of amplitude.
+
 **Key Settings Limits**:
 - Amplitude floor: 0.5 (MIN_VIEW_AMPLITUDE)
 - Vignette amount: [0.5, 1.25]
@@ -93,6 +98,10 @@ docs/
 2. Bind to store setting: `set({ settingName: value })`
 3. Ensure setting has entry in `DEFAULT_SETTINGS` in `store.ts`
 4. Test in dev mode with `npm run dev`
+
+Notes for mapped/global controls:
+- For global controls that map to view-specific settings (for example wireframe), keep UI mapping logic in `ControlPanel.tsx` and preserve underlying per-view keys in `Settings`.
+- For master bypass toggles (for example post FX), apply the bypass in `Analyser.tsx` render flow so individual effect settings remain unchanged.
 
 ## Testing
 

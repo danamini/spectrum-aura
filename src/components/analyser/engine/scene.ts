@@ -7,17 +7,6 @@ import type { AudioBands } from "./audio";
 
 export type Palette = [string, string, string];
 
-/**
- * Available visualization modes for Spectrum Aura
- * - combo: Radial bars, sphere, particles
- * - classic: Horizontal LED bar analyzer
- * - ripple: Ring-wave field responsive to frequency bands
- * - datastream: Neon point-cloud terrain
- * - nebula: Pulsing volumetric shader sphere
- * - monolith: 32x32 instanced cube grid with spotlight
- * - mandala: Radial audio-reactive ribbons
- * - terrain: Wireframe waterfall displacement grid
- */
 export type ViewMode =
   | "combo"
   | "classic"
@@ -28,12 +17,6 @@ export type ViewMode =
   | "mandala"
   | "terrain";
 
-/**
- * Scene: Manages all 8 visualization modes in a single Three.js scene.
- * 
- * Each view is rendered as a separate group that can be toggled visible.
- * Views share the same camera, lighting, and post-processing pipeline.
- */
 export class Scene {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
@@ -48,7 +31,13 @@ export class Scene {
   bars!: THREE.InstancedMesh;
   private barCount = 0;
   private dummy = new THREE.Object3D();
-  private barColor = new THREE.Color();
+  private tmpColor = new THREE.Color();
+  private white = new THREE.Color(1, 1, 1);
+  private dsColorA = new THREE.Color("#7fd9ff");
+  private dsColorB = new THREE.Color("#d4ffff");
+  private terrainColorA = new THREE.Color("#9ed8ff");
+  private terrainColorB = new THREE.Color("#dcf2ff");
+  private monolithMonoColor = new THREE.Color("#9fc4ff");
 
   sphere!: THREE.Mesh;
   sphereMat!: THREE.ShaderMaterial;
@@ -96,7 +85,6 @@ export class Scene {
   // monolith view
   monolith?: THREE.InstancedMesh;
   monolithSpot?: THREE.SpotLight;
-  monolithFill?: THREE.PointLight;
   private monolithHeights = new Float32Array(0);
   private monolithGrid = 32;
   private monolithCount = 0;
@@ -236,11 +224,6 @@ export class Scene {
     this.terrainGroup.visible = view === "terrain";
   }
 
-  /**
-   * Updates all palette-derived colors across all visualizations.
-   * Synchronizes the 3-color palette with all materials and lights.
-   * Call when user changes the active palette.
-   */
   setPalette(p: Palette) {
     this.palette = p;
     this.paletteThree = [new THREE.Color(p[0]), new THREE.Color(p[1]), new THREE.Color(p[2])];
@@ -306,9 +289,6 @@ export class Scene {
     }
     if (this.monolithSpot) {
       this.monolithSpot.color.copy(this.paletteThree[0]);
-    }
-    if (this.monolithFill) {
-      this.monolithFill.color.copy(this.paletteThree[1]);
     }
 
     // refresh mandala line colors
@@ -648,7 +628,7 @@ export class Scene {
 
     // apply peak material style
     const peakMat = this.classicPeaks.material as THREE.MeshStandardMaterial;
-    const col = new THREE.Color(peakColor);
+    const col = this.tmpColor.set(peakColor);
     peakMat.color.copy(col);
     peakMat.emissive.copy(col);
     if (peakStyle === "glow") { peakMat.emissiveIntensity = 3.5; peakMat.opacity = 1; peakMat.transparent = false; }
@@ -705,6 +685,12 @@ export class Scene {
     const [a, b, c] = this.paletteThree;
     if (t < 0.5) return a.clone().lerp(b, t * 2);
     return b.clone().lerp(c, (t - 0.5) * 2);
+  }
+
+  private colorAtInto(t: number, out: THREE.Color): THREE.Color {
+    const [a, b, c] = this.paletteThree;
+    if (t < 0.5) return out.copy(a).lerp(b, t * 2);
+    return out.copy(b).lerp(c, (t - 0.5) * 2);
   }
 
   buildDataStream(count: number = this.dataStreamCount) {
@@ -812,12 +798,12 @@ export class Scene {
       arr[i * 3 + 2] = base[i * 3 + 2] + (v - 0.5) * 1.4 * high * amp;
       if (colArr) {
         if (opts.datastreamUsePalette) {
-          const c = this.colorAt(freqT).lerp(new THREE.Color(1, 1, 1), 0.08 + v * 0.2 + bass * 0.08);
+          const c = this.colorAtInto(freqT, this.tmpColor).lerp(this.white, 0.02 + v * 0.08 + bass * 0.03);
           colArr[i * 3] = c.r;
           colArr[i * 3 + 1] = c.g;
           colArr[i * 3 + 2] = c.b;
         } else {
-          const c = new THREE.Color("#7fd9ff").lerp(new THREE.Color("#d4ffff"), v);
+          const c = this.tmpColor.copy(this.dsColorA).lerp(this.dsColorB, v);
           colArr[i * 3] = c.r;
           colArr[i * 3 + 1] = c.g;
           colArr[i * 3 + 2] = c.b;
@@ -884,10 +870,14 @@ export class Scene {
         varying vec3 vWorldPos;
         void main() {
           vec3 viewDir = normalize(cameraPosition - vWorldPos);
-          float fresnel = pow(1.0 - max(dot(normalize(vNormalW), viewDir), 0.0), 2.4);
+          vec3 n = normalize(vNormalW);
+          float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 2.4);
           float pulse = 0.5 + 0.5 * sin(uTime * (0.8 + uAvgFrequency * 2.0) + vWorldPos.y * 0.7);
-          vec3 inner = mix(uColorA, uColorB, pulse);
-          vec3 aura = mix(uColorB, uColorC, fresnel);
+          float lat = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
+          vec3 base = mix(uColorA, uColorB, smoothstep(0.0, 0.5, lat));
+          base = mix(base, uColorC, smoothstep(0.5, 1.0, lat));
+          vec3 inner = mix(base, mix(uColorA, uColorB, pulse), 0.35);
+          vec3 aura = mix(base, uColorC, fresnel);
           vec3 col = inner * (0.45 + uAvgFrequency * 0.9) + aura * fresnel * 1.6;
           float alpha = min(1.0, 0.45 + fresnel * 0.75);
           gl_FragColor = vec4(col, alpha);
@@ -903,7 +893,7 @@ export class Scene {
     dt: number,
     time: number,
     audio: AudioBands,
-    opts: { nebulaAmplitude: number; nebulaUsePalette: boolean },
+    opts: { nebulaAmplitude: number; nebulaUsePalette: boolean; nebulaWireframe: boolean },
   ) {
     if (!this.nebula || !this.nebulaMat) return;
     const amp = Math.max(0.05, opts.nebulaAmplitude);
@@ -913,14 +903,15 @@ export class Scene {
     this.nebulaMat.uniforms.uTime.value = time;
     this.nebulaMat.uniforms.uAvgFrequency.value = avgFrequency * amp;
     if (opts.nebulaUsePalette) {
-      this.nebulaMat.uniforms.uColorA.value.copy(this.paletteThree[0]).lerp(this.paletteThree[1], audio.mid * 0.35);
-      this.nebulaMat.uniforms.uColorB.value.copy(this.paletteThree[1]).lerp(this.paletteThree[2], audio.high * 0.4);
-      this.nebulaMat.uniforms.uColorC.value.copy(this.paletteThree[2]).lerp(this.paletteThree[0], audio.bass * 0.35);
+      this.nebulaMat.uniforms.uColorA.value.copy(this.paletteThree[0]);
+      this.nebulaMat.uniforms.uColorB.value.copy(this.paletteThree[1]);
+      this.nebulaMat.uniforms.uColorC.value.copy(this.paletteThree[2]);
     } else {
       this.nebulaMat.uniforms.uColorA.value.set("#ffffff");
       this.nebulaMat.uniforms.uColorB.value.set("#8aa4ff");
       this.nebulaMat.uniforms.uColorC.value.set("#4fd1ff");
     }
+    this.nebulaMat.wireframe = opts.nebulaWireframe;
   }
 
   buildMonolith(gridSize: number = this.monolithGrid) {
@@ -930,7 +921,6 @@ export class Scene {
       (this.monolith.material as THREE.Material).dispose();
     }
     if (this.monolithSpot) this.monolithGroup.remove(this.monolithSpot);
-    if (this.monolithFill) this.monolithGroup.remove(this.monolithFill);
     const size = Math.max(2, Math.round(gridSize));
     this.monolithGrid = size;
     const count = size * size;
@@ -941,9 +931,9 @@ export class Scene {
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: this.paletteThree[2].clone(),
-      emissiveIntensity: 0.7,
-      metalness: 0.08,
-      roughness: 0.55,
+      emissiveIntensity: 0.18,
+      metalness: 0.45,
+      roughness: 0.4,
       vertexColors: true,
     });
     const mesh = new THREE.InstancedMesh(geo, mat, count);
@@ -962,21 +952,20 @@ export class Scene {
     mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
     this.monolith = mesh;
     this.monolithGroup.add(mesh);
-    this.monolithSpot = new THREE.SpotLight(this.paletteThree[0].clone(), 4.2, 58, Math.PI / 7, 0.35, 1.2);
+    this.monolithSpot = new THREE.SpotLight(this.paletteThree[0].clone(), 2.8, 50, Math.PI / 7, 0.35, 1.2);
     this.monolithSpot.position.set(0, 15, 0);
     this.monolithSpot.target.position.set(0, 0, 0);
-    this.monolithFill = new THREE.PointLight(this.paletteThree[1].clone(), 2.2, 75, 1.8);
-    this.monolithFill.position.set(0, 9, 0);
-    this.monolithGroup.add(this.monolithSpot, this.monolithSpot.target, this.monolithFill);
+    this.monolithGroup.add(this.monolithSpot, this.monolithSpot.target);
   }
 
   private updateMonolith(
     dt: number,
     audio: AudioBands,
     time: number,
-    opts: { monolithAmplitude: number; monolithUsePalette: boolean },
+    opts: { monolithAmplitude: number; monolithBrightness: number; monolithUsePalette: boolean; monolithWireframe: boolean },
   ) {
     const amp = Math.max(0.05, opts.monolithAmplitude);
+    const brightness = Math.max(0.2, Math.min(3, opts.monolithBrightness));
     if (!this.monolith || !this.monolithSpot) return;
     const size = this.monolithGrid;
     const bins = audio.bins;
@@ -1004,8 +993,9 @@ export class Scene {
         if (colors) {
           if (opts.monolithUsePalette) {
             const signal = Math.pow(bin / 255, 1.1);
-            const paletteT = Math.min(1, Math.max(0, freqT * 0.58 + signal * 0.42));
-            const c = this.colorAt(paletteT).lerp(new THREE.Color(1, 1, 1), 0.22 + signal * 0.36);
+            const paletteT = Math.min(1, Math.max(0, freqT * 0.8 + signal * 0.35));
+            const c = this.colorAtInto(paletteT, this.tmpColor)
+              .lerp(this.white, Math.min(1, 0.16 + signal * 0.38 + (brightness - 1) * 0.24));
             colors[i * 3] = c.r;
             colors[i * 3 + 1] = c.g;
             colors[i * 3 + 2] = c.b;
@@ -1040,25 +1030,22 @@ export class Scene {
 
     const mat = this.monolith.material as THREE.MeshStandardMaterial;
     mat.color.setRGB(1, 1, 1);
+    mat.wireframe = opts.monolithWireframe;
     if (opts.monolithUsePalette) {
-      mat.emissive.copy(this.colorAt(peakFreqT)).lerp(new THREE.Color(1, 1, 1), 0.26 + audio.high * 0.28);
+      mat.emissive.copy(this.paletteThree[1]).lerp(this.paletteThree[2], 0.45 + audio.high * 0.4);
+      mat.metalness = 0.22;
+      mat.roughness = 0.32;
     } else {
-      mat.emissive.set("#9fc4ff");
+      mat.emissive.copy(this.monolithMonoColor);
+      mat.metalness = 0.45;
+      mat.roughness = 0.4;
     }
-    mat.emissiveIntensity = 0.95 + audio.high * 1.35;
-    this.monolithSpot.intensity = 4.8 + audio.bass * 6.2;
+    mat.emissiveIntensity = (opts.monolithUsePalette ? 1.3 + audio.high * 1.1 : 0.5 + audio.high * 1.2) * brightness;
+    this.monolithSpot.intensity = (opts.monolithUsePalette ? 5.4 + audio.bass * 7.2 : 3.2 + audio.bass * 5.6) * brightness;
     if (opts.monolithUsePalette) {
-      this.monolithSpot.color.copy(this.colorAt(peakFreqT)).lerp(new THREE.Color(1, 1, 1), 0.08 + 0.1 * Math.sin(time * 0.9));
+      this.monolithSpot.color.copy(this.colorAtInto(peakFreqT, this.tmpColor)).lerp(this.white, 0.32);
     } else {
       this.monolithSpot.color.set("#ffffff");
-    }
-    if (this.monolithFill) {
-      this.monolithFill.intensity = 2.6 + audio.mid * 3.4;
-      if (opts.monolithUsePalette) {
-        this.monolithFill.color.copy(this.paletteThree[1]).lerp(this.paletteThree[2], Math.min(1, audio.high * 0.55));
-      } else {
-        this.monolithFill.color.set("#b9d6ff");
-      }
     }
   }
 
@@ -1147,7 +1134,7 @@ export class Scene {
       // LineMaterial width is in screen-space px, so scale slider to a visibly thick range.
       mat.linewidth = Math.max(2, opts.mandalaLineWidth * 6);
       if (opts.mandalaUsePalette) {
-        mat.color.copy(this.colorAt(((i / R) + time * 0.03) % 1)).lerp(this.paletteThree[2], Math.min(1, audio.high * 0.6));
+        mat.color.copy(this.colorAtInto(((i / R) + time * 0.03) % 1, this.tmpColor)).lerp(this.white, Math.min(0.06, audio.high * 0.06));
       } else {
         mat.color.set("#d8e7ff");
       }
@@ -1198,7 +1185,7 @@ export class Scene {
   private updateTerrain(
     audio: AudioBands,
     time: number,
-    opts: { terrainAmplitude: number; terrainUsePalette: boolean },
+    opts: { terrainAmplitude: number; terrainUsePalette: boolean; terrainWireframe: boolean },
   ) {
     const amp = Math.max(0.05, opts.terrainAmplitude);
     if (!this.terrainGeo || !this.terrainHistory || !this.terrain) return;
@@ -1232,12 +1219,12 @@ export class Scene {
           const heightNorm = Math.min(1, (this.terrainHistory[i] ?? 0) / (3.6 * amp + 0.001));
           if (opts.terrainUsePalette) {
             const freqT = cols <= 1 ? 0 : c / (cols - 1);
-            const col = this.colorAt(freqT).lerp(new THREE.Color(1, 1, 1), heightNorm * 0.22);
+            const col = this.colorAtInto(freqT, this.tmpColor).lerp(this.white, heightNorm * 0.22);
             colArr[i * 3] = col.r * rowFade;
             colArr[i * 3 + 1] = col.g * rowFade;
             colArr[i * 3 + 2] = col.b * rowFade;
           } else {
-            const col = new THREE.Color("#9ed8ff").lerp(new THREE.Color("#dcf2ff"), heightNorm * 0.45);
+            const col = this.tmpColor.copy(this.terrainColorA).lerp(this.terrainColorB, heightNorm * 0.45);
             colArr[i * 3] = col.r * rowFade;
             colArr[i * 3 + 1] = col.g * rowFade;
             colArr[i * 3 + 2] = col.b * rowFade;
@@ -1246,27 +1233,14 @@ export class Scene {
       }
       colAttr.needsUpdate = true;
     }
-    this.terrainGeo.computeVertexNormals();
+    // Terrain uses MeshBasicMaterial, so normal recomputation is unnecessary per frame.
     this.terrain.position.z = 4 + Math.sin(performance.now() * 0.00035) * 0.15;
     const terrainMat = this.terrain.material as THREE.MeshBasicMaterial;
     terrainMat.color.setRGB(1, 1, 1);
     terrainMat.opacity = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(time * 0.7));
+    terrainMat.wireframe = opts.terrainWireframe;
   }
 
-  /**
-   * Main animation loop. Called every frame with audio data and settings.
-   * 
-   * Responsibilities:
-   * - Route to the active visualization's update method
-   * - Manage camera motion (orbit, mouse, drift, beat response)
-   * - Handle post-FX boost signals (bloom, glitch)
-   * - Synchronize all view parameters with store settings
-   * 
-   * @param dt - Delta time since last frame (seconds)
-   * @param time - Elapsed time since start (seconds)
-   * @param audio - Current audio analysis frame (bass, mid, high, bins, BPM, etc.)
-   * @param opts - All visualization and camera settings
-   */
   update(dt: number, time: number, audio: AudioBands, opts: {
     sphereDisp: number;
     orbitSpeed: number;
@@ -1284,6 +1258,7 @@ export class Scene {
     cameraMouse: boolean;
     classicSpin: boolean;
     classicSpinSpeed: number;
+    classicWireframe: boolean;
     classicFullscreen: boolean;
     peakColor: string;
     peakStyle: "bar" | "thin" | "glow" | "none";
@@ -1303,9 +1278,12 @@ export class Scene {
     nebulaUsePalette: boolean;
     nebulaAmplitude: number;
     nebulaDetail: number;
+    nebulaWireframe: boolean;
     monolithUsePalette: boolean;
     monolithAmplitude: number;
+    monolithBrightness: number;
     monolithGridSize: number;
+    monolithWireframe: boolean;
     mandalaUsePalette: boolean;
     mandalaAmplitude: number;
     mandalaLineCount: number;
@@ -1313,6 +1291,7 @@ export class Scene {
     terrainUsePalette: boolean;
     terrainAmplitude: number;
     terrainColumns: number;
+    terrainWireframe: boolean;
     comboSphereSize: number;
     comboSphereSpinSpeed: number;
     comboSphereBassPunch: number;
@@ -1320,6 +1299,7 @@ export class Scene {
     comboBarHeightScale: number;
     comboParticleSize: number;
     comboLevelMeter: boolean;
+    comboWireframe: boolean;
     comboFullscreen: boolean;
     rippleFullscreen: boolean;
     datastreamFullscreen: boolean;
@@ -1367,6 +1347,8 @@ export class Scene {
     if (opts.view === "classic") {
       if (this.classicGrid) this.classicGrid.visible = opts.grid;
       if (this.classicGridMat) this.classicGridMat.opacity = opts.gridOpacity;
+      this.classicBarMat.wireframe = opts.classicWireframe;
+      (this.classicPeaks.material as THREE.MeshStandardMaterial).wireframe = opts.classicWireframe;
       this.updateClassic(dt, audio, opts.peakDecay, opts.peakHold, opts.colorBands, opts.blocky, opts.segments, opts.peakColor, opts.peakStyle);
 
       if (opts.classicFullscreen) {
@@ -1530,6 +1512,7 @@ export class Scene {
       this.updateNebula(dt, time, audio, {
         nebulaAmplitude: opts.nebulaAmplitude,
         nebulaUsePalette: opts.nebulaUsePalette,
+        nebulaWireframe: opts.nebulaWireframe,
       });
       if (opts.nebulaFullscreen) {
         const follow = Math.min(1, dt * 8);
@@ -1563,7 +1546,9 @@ export class Scene {
       if (gridSize !== this.monolithGrid) this.buildMonolith(gridSize);
       this.updateMonolith(dt, audio, time, {
         monolithAmplitude: opts.monolithAmplitude,
+        monolithBrightness: opts.monolithBrightness,
         monolithUsePalette: opts.monolithUsePalette,
+        monolithWireframe: opts.monolithWireframe,
       });
       if (opts.monolithFullscreen) {
         const follow = Math.min(1, dt * 8);
@@ -1631,6 +1616,7 @@ export class Scene {
       this.updateTerrain(audio, time, {
         terrainAmplitude: opts.terrainAmplitude,
         terrainUsePalette: opts.terrainUsePalette,
+        terrainWireframe: opts.terrainWireframe,
       });
       if (opts.terrainFullscreen) {
         const follow = Math.min(1, dt * 8);
@@ -1662,6 +1648,8 @@ export class Scene {
     this.postFxBoost.glitch = 0;
 
     // bars
+    this.comboBarMat.wireframe = opts.comboWireframe;
+    this.sphereMat.wireframe = opts.comboWireframe;
     if (this.comboUniforms) this.comboUniforms.uBands.value = opts.comboLevelMeter ? 1 : 0;
     const bins = audio.bins;
     if (bins.length > 0) {

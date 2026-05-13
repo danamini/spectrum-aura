@@ -420,6 +420,7 @@ export function Analyser() {
         cameraMouse: s.cameraMouse,
         classicSpin: s.classicSpin,
         classicSpinSpeed: s.classicSpinSpeed,
+        classicWireframe: s.classicWireframe,
         classicFullscreen: s.classicFullscreen,
         peakColor: s.classicPeakColor,
         peakStyle: s.classicPeakStyle,
@@ -439,9 +440,12 @@ export function Analyser() {
         nebulaUsePalette: s.nebulaUsePalette,
         nebulaAmplitude: s.nebulaAmplitude,
         nebulaDetail: s.nebulaDetail,
+        nebulaWireframe: s.nebulaWireframe,
         monolithUsePalette: s.monolithUsePalette,
         monolithAmplitude: s.monolithAmplitude,
+        monolithBrightness: s.monolithBrightness,
         monolithGridSize: s.monolithGridSize,
+        monolithWireframe: s.monolithWireframe,
         mandalaUsePalette: s.mandalaUsePalette,
         mandalaAmplitude: s.mandalaAmplitude,
         mandalaLineCount: s.mandalaLineCount,
@@ -449,6 +453,7 @@ export function Analyser() {
         terrainUsePalette: s.terrainUsePalette,
         terrainAmplitude: s.terrainAmplitude,
         terrainColumns: s.terrainColumns,
+        terrainWireframe: s.terrainWireframe,
         rippleFullscreen: s.rippleFullscreen,
         datastreamFullscreen: s.datastreamFullscreen,
         nebulaFullscreen: s.nebulaFullscreen,
@@ -462,22 +467,27 @@ export function Analyser() {
         comboBarHeightScale: s.comboBarHeightScale,
         comboParticleSize: s.comboParticleSize,
         comboLevelMeter: s.comboLevelMeter,
+        comboWireframe: s.comboWireframe,
         comboFullscreen: s.comboFullscreen,
         bgColor: s.bgColor,
       });
 
-      const postFxSettings =
-        displayedView === "mandala"
-          ? {
-              ...s,
-              bloomStrength: Math.min(3, s.bloomStrength * scene.postFxBoost.bloom),
-              glitch: s.glitch || scene.postFxBoost.glitch > 0.45,
-              glitchWild: s.glitchWild || scene.postFxBoost.glitch > 0.75,
-            }
-          : s;
-      composer.apply(postFxSettings);
       renderer.info.reset();
-      composer.render(dt);
+      if (s.postFxEnabled) {
+        const postFxSettings =
+          displayedView === "mandala"
+            ? {
+                ...s,
+                bloomStrength: Math.min(3, s.bloomStrength * scene.postFxBoost.bloom),
+                glitch: s.glitch || scene.postFxBoost.glitch > 0.45,
+                glitchWild: s.glitchWild || scene.postFxBoost.glitch > 0.75,
+              }
+            : s;
+        composer.apply(postFxSettings);
+        composer.render(dt);
+      } else {
+        renderer.render(scene.scene, scene.camera);
+      }
 
       if (statsOpenRef.current) {
         statsFrameCounter += 1;

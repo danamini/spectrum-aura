@@ -18,11 +18,20 @@ import {
 } from "./store";
 
 // Cooler, clearer toggle switch with explicit ON/OFF affordance
-function Sw({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (v: boolean) => void }) {
+function Sw({
+  checked,
+  onCheckedChange,
+  disabled = false,
+}: {
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <Switch
       checked={checked}
       onCheckedChange={onCheckedChange}
+      disabled={disabled}
       className={
         "h-5 w-10 border border-white/15 " +
         "data-[state=checked]:bg-emerald-400 data-[state=checked]:border-emerald-300/60 data-[state=checked]:shadow-[0_0_10px_rgba(52,211,153,0.55)] " +
@@ -189,6 +198,21 @@ export function ControlPanel() {
   };
   const fullscreenKey = fullscreenByView[s.view];
   const is2d = Boolean(s[fullscreenKey]);
+  const wireframeByView: Partial<Record<Settings["view"], keyof Settings>> = {
+    combo: "comboWireframe",
+    classic: "classicWireframe",
+    ripple: "rippleWireframe",
+    nebula: "nebulaWireframe",
+    monolith: "monolithWireframe",
+    terrain: "terrainWireframe",
+  };
+  const wireframeKey = wireframeByView[s.view];
+  const hasGlobalWireframe = Boolean(wireframeKey);
+  const globalWireframeEnabled = wireframeKey ? Boolean(s[wireframeKey]) : false;
+  const setCurrentViewWireframe = (value: boolean) => {
+    if (!wireframeKey) return;
+    set({ [wireframeKey]: value } as Partial<Settings>);
+  };
   const setCurrentViewFullscreen = (value: boolean) => {
     if (s.view === "combo") set({ comboFullscreen: value });
     else if (s.view === "classic") set({ classicFullscreen: value });
@@ -234,6 +258,21 @@ export function ControlPanel() {
               <Bn active={!is2d} onClick={() => setCurrentViewFullscreen(false)}>3D</Bn>
               <Bn active={is2d} onClick={() => setCurrentViewFullscreen(true)}>2D</Bn>
             </div>
+            <div className="flex items-center justify-between mt-2 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2.5">
+              <div>
+                <Label className="text-[11px]">Wireframe</Label>
+                {!hasGlobalWireframe && (
+                  <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
+                    Not available for this view
+                  </div>
+                )}
+              </div>
+              <Sw
+                checked={globalWireframeEnabled}
+                onCheckedChange={setCurrentViewWireframe}
+                disabled={!hasGlobalWireframe}
+              />
+            </div>
           </Row>
 
           {hasViewSettings && (
@@ -270,6 +309,10 @@ export function ControlPanel() {
                         <Label className="text-[11px]">Level meter colours (R/Y/G)</Label>
                         <Sw checked={s.comboLevelMeter} onCheckedChange={(v) => set({ comboLevelMeter: v })} />
                       </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Wireframe</Label>
+                        <Sw checked={s.comboWireframe} onCheckedChange={(v) => set({ comboWireframe: v })} />
+                      </div>
                     </>
                   )}
                   {s.view === "classic" && (
@@ -298,6 +341,10 @@ export function ControlPanel() {
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px]">Frequency labels in 2D fit</Label>
                         <Sw checked={s.classicShowFreqLabels} onCheckedChange={(v) => set({ classicShowFreqLabels: v })} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Wireframe</Label>
+                        <Sw checked={s.classicWireframe} onCheckedChange={(v) => set({ classicWireframe: v })} />
                       </div>
                       <S label="Peak hold (sec)" value={s.classicPeakHold} min={0} max={5} step={0.1} onChange={(v) => set({ classicPeakHold: v })} />
                       <S label="Peak decay (units/sec)" value={s.classicPeakDecay} min={0.05} max={3} step={0.05} onChange={(v) => set({ classicPeakDecay: v })} />
@@ -359,7 +406,7 @@ export function ControlPanel() {
                       />
                       <S label="Max radius" value={s.rippleMaxRadius} min={2} max={14} step={0.1} onChange={(v) => set({ rippleMaxRadius: v })} />
                       <S label="Wave speed" value={s.rippleSpeed} min={0} max={4} step={0.05} onChange={(v) => set({ rippleSpeed: v })} />
-                      <S label="Amplitude" value={s.rippleAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ rippleAmplitude: v })} />
+                      <S label="Amplitude" value={s.rippleAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ rippleAmplitude: v })} />
                       <S label="Wave cycles" value={s.rippleWaveCycles} min={0.2} max={6} step={0.1} onChange={(v) => set({ rippleWaveCycles: v })} />
                       <S label="Ring thickness" value={s.rippleThickness} min={0.2} max={3} step={0.05} onChange={(v) => set({ rippleThickness: v })} />
                       <S label="Rotation speed" value={s.rippleRotationSpeed} min={-1} max={1} step={0.02} onChange={(v) => set({ rippleRotationSpeed: v })} />
@@ -372,7 +419,7 @@ export function ControlPanel() {
                   )}
                   {s.view === "datastream" && (
                     <>
-                      <S label="Amplitude" value={s.datastreamAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ datastreamAmplitude: v })} />
+                      <S label="Amplitude" value={s.datastreamAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ datastreamAmplitude: v })} />
                       <S label="Particle count" value={s.datastreamItemCount} min={500} max={30000} step={500} onChange={(v) => set({ datastreamItemCount: Math.round(v) })} />
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px]">Use selected palette</Label>
@@ -382,27 +429,36 @@ export function ControlPanel() {
                   )}
                   {s.view === "nebula" && (
                     <>
-                      <S label="Amplitude" value={s.nebulaAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ nebulaAmplitude: v })} />
+                      <S label="Amplitude" value={s.nebulaAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ nebulaAmplitude: v })} />
                       <S label="Detail" value={s.nebulaDetail} min={24} max={220} step={4} onChange={(v) => set({ nebulaDetail: Math.round(v) })} />
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px]">Use selected palette</Label>
                         <Sw checked={s.nebulaUsePalette} onCheckedChange={(v) => set({ nebulaUsePalette: v })} />
                       </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Wireframe</Label>
+                        <Sw checked={s.nebulaWireframe} onCheckedChange={(v) => set({ nebulaWireframe: v })} />
+                      </div>
                     </>
                   )}
                   {s.view === "monolith" && (
                     <>
-                      <S label="Amplitude" value={s.monolithAmplitude} min={0.5} max={1.5} step={0.05} onChange={(v) => set({ monolithAmplitude: v })} />
+                      <S label="Amplitude" value={s.monolithAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ monolithAmplitude: v })} />
+                      <S label="Brightness" value={s.monolithBrightness} min={0.2} max={3} step={0.05} onChange={(v) => set({ monolithBrightness: v })} />
                       <S label="Grid size (NxN squares)" value={s.monolithGridSize} min={2} max={40} step={1} onChange={(v) => set({ monolithGridSize: Math.round(v) })} />
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px]">Use selected palette</Label>
                         <Sw checked={s.monolithUsePalette} onCheckedChange={(v) => set({ monolithUsePalette: v })} />
                       </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Wireframe</Label>
+                        <Sw checked={s.monolithWireframe} onCheckedChange={(v) => set({ monolithWireframe: v })} />
+                      </div>
                     </>
                   )}
                   {s.view === "mandala" && (
                     <>
-                      <S label="Amplitude" value={s.mandalaAmplitude} min={0.5} max={3} step={0.05} onChange={(v) => set({ mandalaAmplitude: v })} />
+                      <S label="Amplitude" value={s.mandalaAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ mandalaAmplitude: v })} />
                       <S label="Line count" value={s.mandalaLineCount} min={2} max={48} step={1} onChange={(v) => set({ mandalaLineCount: Math.round(v) })} />
                       <S label="Line width" value={s.mandalaLineWidth} min={1} max={8} step={0.5} onChange={(v) => set({ mandalaLineWidth: v })} />
                       <div className="flex items-center justify-between">
@@ -413,11 +469,15 @@ export function ControlPanel() {
                   )}
                   {s.view === "terrain" && (
                     <>
-                      <S label="Amplitude" value={s.terrainAmplitude} min={0.5} max={4} step={0.05} onChange={(v) => set({ terrainAmplitude: v })} />
+                      <S label="Amplitude" value={s.terrainAmplitude} min={0.05} max={4} step={0.05} onChange={(v) => set({ terrainAmplitude: v })} />
                       <S label="Columns" value={s.terrainColumns} min={16} max={256} step={8} onChange={(v) => set({ terrainColumns: Math.round(v) })} />
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px]">Use selected palette</Label>
                         <Sw checked={s.terrainUsePalette} onCheckedChange={(v) => set({ terrainUsePalette: v })} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Wireframe</Label>
+                        <Sw checked={s.terrainWireframe} onCheckedChange={(v) => set({ terrainWireframe: v })} />
                       </div>
                     </>
                   )}
@@ -581,6 +641,11 @@ export function ControlPanel() {
 
               {ui.activeTab === "post" && (
                 <div className="space-y-3">
+                  <ToggleRow
+                    label="Post FX pipeline"
+                    enabled={s.postFxEnabled}
+                    onToggle={(v) => set({ postFxEnabled: v })}
+                  />
                   <Row label="Presets">
                     <div className="flex flex-wrap gap-1.5">
                       {Object.keys(PRESETS).map((name) => (
@@ -708,7 +773,7 @@ export function ControlPanel() {
                     <S label="Amount" value={s.grainAmount} min={0} max={1} step={0.05} onChange={(v) => set({ grainAmount: v })} />
                   </ToggleRow>
                   <ToggleRow label="Vignette" enabled={s.vignette} onToggle={(v) => set({ vignette: v })}>
-                    <S label="Amount" value={s.vignetteAmount} min={0.5} max={1.25} step={0.05} onChange={(v) => set({ vignetteAmount: v })} />
+                    <S label="Amount" value={s.vignetteAmount} min={0.5} max={2} step={0.05} onChange={(v) => set({ vignetteAmount: v })} />
                   </ToggleRow>
                   <ToggleRow label="Depth of field" enabled={s.dof} onToggle={(v) => set({ dof: v })}>
                     <S label="Focus" value={s.dofFocus} min={1} max={20} step={0.1} onChange={(v) => set({ dofFocus: v })} />
