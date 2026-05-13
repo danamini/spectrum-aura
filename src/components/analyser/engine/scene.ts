@@ -1392,8 +1392,8 @@ export class Scene {
   }
 
   private updateObsidian(
-    dt: number,
-    time: number,
+    _dt: number,
+    _time: number,
     audio: AudioBands,
     opts: { obsidianAmplitude: number; obsidianUsePalette: boolean },
   ) {
@@ -1455,8 +1455,6 @@ export class Scene {
     // Boost bloom on peaks
     this.postFxBoost.bloom = 1 + bass * 1.2 + mid * 0.4;
     this.postFxBoost.glitch = 0;
-
-    void time; void dt;
   }
 
   // ─── Hyper-Torus Particle Accelerator ───────────────────────────────────────
@@ -1501,7 +1499,7 @@ export class Scene {
     for (let i = 0; i < count; i++) {
       angles[i] = Math.random() * Math.PI * 2;
       minors[i] = Math.random() * Math.PI * 2;
-      const r = 0.5 + Math.random() * 0.5; // radius within tube (0-1 normalised)
+      const r = 0.5 + Math.random() * 0.5; // radius within tube (0-1 normalized)
       const major = angles[i]!;
       const minor = minors[i]!;
       const R = 4.5, tube = 1.1 * r;
@@ -1534,7 +1532,7 @@ export class Scene {
 
   private updateTorus(
     dt: number,
-    time: number,
+    _time: number,
     audio: AudioBands,
     opts: { torusAmplitude: number; torusUsePalette: boolean; torusParticleCount: number; torusSpeed: number },
   ) {
@@ -1614,7 +1612,6 @@ export class Scene {
 
     this.postFxBoost.bloom = 1 + bass * 0.8 + mid * 0.3;
     this.postFxBoost.glitch = 0;
-    void time;
   }
 
   // ─── Brutalist Sound-Wall ───────────────────────────────────────────────────
@@ -1674,7 +1671,7 @@ export class Scene {
   private updateSoundwall(
     dt: number,
     audio: AudioBands,
-    time: number,
+    _time: number,
     opts: { soundwallAmplitude: number; soundwallUsePalette: boolean; soundwallColumns: number; soundwallRows: number },
   ) {
     const C = Math.max(4, Math.round(opts.soundwallColumns));
@@ -1745,7 +1742,6 @@ export class Scene {
     // FOV distortion on mid-spikes is applied by the caller (update opts)
     this.postFxBoost.bloom = 1 + mid * 0.8 + bass * 0.4;
     this.postFxBoost.glitch = Math.max(0, mid - 0.6) * 1.5;
-    void time;
   }
 
   // ─── Floating Geometry Nebula ───────────────────────────────────────────────
