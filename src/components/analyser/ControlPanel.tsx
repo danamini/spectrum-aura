@@ -152,6 +152,7 @@ export function ControlPanel() {
   const slots = useSlots();
   const [open, setOpen] = useState(false);
   const [ui, setUi] = useState<UIState>(loadUI);
+  const flyoutPanelRef = React.useRef<HTMLDivElement | null>(null);
   const updateUi = (patch: Partial<UIState>) => {
     setUi((prev) => {
       const next = { ...prev, ...patch };
@@ -162,6 +163,22 @@ export function ControlPanel() {
   const viewSettingsOpen = ui.viewSettingsOpen;
   const setViewSettingsOpen = (v: boolean | ((o: boolean) => boolean)) =>
     updateUi({ viewSettingsOpen: typeof v === "function" ? v(ui.viewSettingsOpen) : v });
+  const blurFlyoutFocus = () => {
+    const panel = flyoutPanelRef.current;
+    const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+    if (panel && activeEl instanceof HTMLElement && panel.contains(activeEl)) {
+      activeEl.blur();
+    }
+  };
+  const closeFlyout = () => {
+    blurFlyoutFocus();
+    updateUi({ activeTab: "" });
+  };
+  React.useEffect(() => {
+    if (!ui.activeTab) {
+      blurFlyoutFocus();
+    }
+  }, [ui.activeTab]);
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
 
   const hasViewSettings = true;
@@ -174,6 +191,10 @@ export function ControlPanel() {
     monolith: "Brutalist Monolith settings",
     mandala: "Symmetric Mandala settings",
     terrain: "Audio-Reactive Terrain settings",
+    obsidian: "Obsidian Shard settings",
+    torus: "Hyper-Torus Accelerator settings",
+    soundwall: "Brutalist Sound-Wall settings",
+    geometrynebula: "Floating Geometry Nebula settings",
   };
   const viewLabel = viewLabels[s.view];
   const viewOptions = [
@@ -185,6 +206,10 @@ export function ControlPanel() {
     { id: "monolith", label: "Monolith" },
     { id: "mandala", label: "Mandala" },
     { id: "terrain", label: "Terrain" },
+    { id: "obsidian", label: "Obsidian" },
+    { id: "torus", label: "Torus" },
+    { id: "soundwall", label: "Sound-Wall" },
+    { id: "geometrynebula", label: "Geo Nebula" },
   ] as const;
   const fullscreenByView: Record<Settings["view"], keyof Settings> = {
     combo: "comboFullscreen",
@@ -195,6 +220,10 @@ export function ControlPanel() {
     monolith: "monolithFullscreen",
     mandala: "mandalaFullscreen",
     terrain: "terrainFullscreen",
+    obsidian: "obsidianFullscreen",
+    torus: "torusFullscreen",
+    soundwall: "soundwallFullscreen",
+    geometrynebula: "geometrynebulaFullscreen",
   };
   const fullscreenKey = fullscreenByView[s.view];
   const is2d = Boolean(s[fullscreenKey]);
@@ -222,6 +251,10 @@ export function ControlPanel() {
     else if (s.view === "monolith") set({ monolithFullscreen: value });
     else if (s.view === "mandala") set({ mandalaFullscreen: value });
     else if (s.view === "terrain") set({ terrainFullscreen: value });
+    else if (s.view === "obsidian") set({ obsidianFullscreen: value });
+    else if (s.view === "torus") set({ torusFullscreen: value });
+    else if (s.view === "soundwall") set({ soundwallFullscreen: value });
+    else if (s.view === "geometrynebula") set({ geometrynebulaFullscreen: value });
   };
 
   return (
@@ -481,6 +514,100 @@ export function ControlPanel() {
                       </div>
                     </>
                   )}
+                  {s.view === "obsidian" && (
+                    <>
+                      <S label="Amplitude" value={s.obsidianAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ obsidianAmplitude: v })} />
+                      <Row label="Shard detail">
+                        <div className="flex gap-1.5">
+                          {([0, 1, 2, 3] as const).map((d) => (
+                            <Bn key={d} active={s.obsidianShardDetail === d} className="flex-1" onClick={() => set({ obsidianShardDetail: d })}>
+                              {d === 0 ? "Low" : d === 1 ? "Med" : d === 2 ? "High" : "Ultra"}
+                            </Bn>
+                          ))}
+                        </div>
+                      </Row>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.obsidianUsePalette} onCheckedChange={(v) => set({ obsidianUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "torus" && (
+                    <>
+                      <S label="Amplitude" value={s.torusAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ torusAmplitude: v })} />
+                      <S label="Orbit speed" value={s.torusSpeed} min={0.1} max={4} step={0.1} onChange={(v) => set({ torusSpeed: v })} />
+                      <S label="Torus count" value={s.torusCount} min={1} max={5} step={1} onChange={(v) => set({ torusCount: Math.round(v) })} />
+                      <S label="Torus spacing" value={s.torusSpacing} min={6} max={24} step={0.2} onChange={(v) => set({ torusSpacing: v })} />
+                      <S label="Torus size" value={s.torusSize} min={0.5} max={1.8} step={0.05} onChange={(v) => set({ torusSize: v })} />
+                      <S label="Particle size" value={s.torusParticleSize} min={0.01} max={0.16} step={0.005} onChange={(v) => set({ torusParticleSize: v })} />
+                      <S label="Particle count" value={s.torusParticleCount} min={200} max={20000} step={200} onChange={(v) => set({ torusParticleCount: Math.round(v) })} />
+                      <Row label="Color mode">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {([
+                            ["shared", "Shared"],
+                            ["individual", "Individual"],
+                          ] as const).map(([mode, label]) => (
+                            <Bn
+                              key={mode}
+                              active={s.torusColorMode === mode}
+                              className="justify-start"
+                              onClick={() => set({ torusColorMode: mode })}
+                            >
+                              {label}
+                            </Bn>
+                          ))}
+                        </div>
+                      </Row>
+                      <Row label="Rotation mode">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {([
+                            ["flat", "Flat"],
+                            ["odd-upright", "Odd up"],
+                            ["alternating-x", "Alt X"],
+                            ["alternating-z", "Alt Z"],
+                            ["fan", "Fan"],
+                          ] as const).map(([mode, label]) => (
+                            <Bn
+                              key={mode}
+                              active={s.torusRotationMode === mode}
+                              className="justify-start"
+                              onClick={() => set({ torusRotationMode: mode })}
+                            >
+                              {label}
+                            </Bn>
+                          ))}
+                        </div>
+                      </Row>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.torusUsePalette} onCheckedChange={(v) => set({ torusUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "soundwall" && (
+                    <>
+                      <S label="Amplitude" value={s.soundwallAmplitude} min={0.05} max={3} step={0.05} onChange={(v) => set({ soundwallAmplitude: v })} />
+                      <S label="Columns per side" value={s.soundwallColumns} min={4} max={40} step={1} onChange={(v) => set({ soundwallColumns: Math.round(v) })} />
+                      <S label="History rows (depth)" value={s.soundwallRows} min={2} max={24} step={1} onChange={(v) => set({ soundwallRows: Math.round(v) })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.soundwallUsePalette} onCheckedChange={(v) => set({ soundwallUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
+                  {s.view === "geometrynebula" && (
+                    <>
+                      <S label="Amplitude" value={s.geometrynebulaAmplitude} min={0.05} max={5} step={0.05} onChange={(v) => set({ geometrynebulaAmplitude: v })} />
+                      <S label="Shape count" value={s.geometrynebulaCount} min={6} max={120} step={6} onChange={(v) => set({ geometrynebulaCount: Math.round(v) })} />
+                      <S label="Shape spread" value={s.geometrynebulaSpread} min={0.8} max={3} step={0.05} onChange={(v) => set({ geometrynebulaSpread: v })} />
+                      <S label="Orbit speed" value={s.geometrynebulaOrbitSpeed} min={0.1} max={2.5} step={0.05} onChange={(v) => set({ geometrynebulaOrbitSpeed: v })} />
+                      <S label="Spin speed" value={s.geometrynebulaSpinSpeed} min={0.1} max={4} step={0.05} onChange={(v) => set({ geometrynebulaSpinSpeed: v })} />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Use selected palette</Label>
+                        <Sw checked={s.geometrynebulaUsePalette} onCheckedChange={(v) => set({ geometrynebulaUsePalette: v })} />
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -526,7 +653,9 @@ export function ControlPanel() {
           {/* Slide-out content panel — appears to the left of the tab strip */}
           <div
             data-analyser-flyout
+            ref={flyoutPanelRef}
             aria-hidden={!ui.activeTab}
+            inert={!ui.activeTab}
             className={
               "analyser-scroll fixed right-[416px] top-0 z-[55] h-screen w-[360px] overflow-y-auto " +
               "bg-black/85 backdrop-blur-xl border-l border-r border-white/10 text-white text-[12px] " +
@@ -540,7 +669,7 @@ export function ControlPanel() {
                   {ui.activeTab === "audio" ? "Audio" : ui.activeTab === "scene" ? "Scene" : ui.activeTab === "post" ? "Post FX" : ""}
                 </span>
                 <button
-                  onClick={() => updateUi({ activeTab: "" })}
+                  onClick={closeFlyout}
                   className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/50 hover:text-white"
                 >
                   close →
@@ -662,6 +791,18 @@ export function ControlPanel() {
                         <Shuffle className="mr-1 h-3 w-3" /> Randomize
                       </Bn>
                       <Bn variant="ghost" onClick={() => settingsStore.reset()}>Reset</Bn>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-2.5">
+                      <div>
+                        <Label className="text-[11px]">Randomize view settings</Label>
+                        <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
+                          off = post FX only
+                        </div>
+                      </div>
+                      <Sw
+                        checked={s.randomizeViewSettings}
+                        onCheckedChange={(v) => set({ randomizeViewSettings: v })}
+                      />
                     </div>
                   </Row>
 

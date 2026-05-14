@@ -14,12 +14,16 @@ src/
 │       ├── ControlPanel.tsx        # Settings UI (sliders, toggles, dropdowns)
 │       ├── Shortcuts.tsx           # Keyboard handler + view switching
 │       ├── store.ts                # Settings state, presets, slots
-│       ├── store.test.ts           # Settings & slot tests
+│       ├── store.normalization.test.ts
+│       ├── store.randomize.test.ts
+│       ├── store.slots.test.ts
+│       ├── test-helpers.ts         # Shared test fixtures
 │       └── engine/
-│           ├── scene.ts            # Three.js scene, 8 visualization modes
+│           ├── scene.ts            # Three.js scene, 12 visualization modes
 │           ├── composer.ts         # Post-processing effects pipeline
 │           ├── audio.ts            # Web Audio API wrapper, FFT, beat detection
 │           ├── bpm-detector.ts     # BPM estimation from bass energy
+│           ├── bpm-detector.test.ts
 │           └── shaders.ts          # Reusable shader code snippets
 │   └── ui/                         # Shadcn/ui component library
 docs/
@@ -49,7 +53,7 @@ docs/
 ### Visualization Architecture
 
 **Three.js Scene** (`engine/scene.ts`):
-- **8 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain
+- **12 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
 - **Post-processing**: Bloom, chromatic aberration, glitch, god rays, etc. via Composer
@@ -68,6 +72,7 @@ docs/
 Recent controls:
 - `postFxEnabled`: Master switch that bypasses the post-processing pipeline at render time.
 - Global Wireframe control in the View panel: writes to the active view-specific wireframe setting.
+- `randomizeViewSettings`: Keeps randomize constrained to post FX by default; when enabled it also touches view-specific geometry and palette controls.
 - `monolithBrightness`: Dedicated lighting/visibility control for Monolith independent of amplitude.
 
 **Key Settings Limits**:
@@ -108,30 +113,25 @@ Notes for mapped/global controls:
 ### Run Tests
 
 ```bash
-npm run test -- --run          # Single run
+npm run test:run               # Single run
 npm run test                   # Watch mode
 ```
 
 ### Test Coverage
 
-- **Store tests** (`store.test.ts`):
-  - Slot bootstrap and localStorage persistence
-  - Settings normalization (amplitude floor, vignette clamp, bloom cap)
-  - Randomization produces valid colors
-  - Preset application and loading
-
-- **Key functions tested**:
-  - `normalizeSettings()` - validates all amplitude/vignette ranges
-  - `randomize()` - produces contrast-safe background colors
-  - `applyPreset()` - presets respect all constraints
-  - `saveSlot()` / `loadSlot()` - persistence round-trips
+- **Store tests**:
+  - `store.slots.test.ts`: slot bootstrap, localStorage hydration, legacy ripple migration, slot-cycle preservation
+  - `store.normalization.test.ts`: amplitude floor, vignette bounds, bloom cap, preset clearing, reset baseline
+  - `store.randomize.test.ts`: randomize scope toggle behavior and new torus/geometry-nebula defaults
+- **Engine tests**:
+  - `engine/bpm-detector.test.ts`: tempo stability, bounded BPM output, reset behavior
 
 ### Adding Tests
 
-1. Add to appropriate `describe()` block in `store.test.ts`
-2. Use `settingsStore.get()` to read current state
-3. Test side effects via settings validation
-4. Keep tests isolated and deterministic
+1. Add tests beside the module under test (for example `store.*.test.ts` or `engine/*.test.ts`)
+2. Use `vi.resetModules()` and a localStorage mock for deterministic store tests
+3. Test behavior through public APIs (`settingsStore`, `BPMDetector`) instead of implementation details
+4. Keep test files focused by concern (normalization, randomize, slots, engine units)
 
 Example:
 ```typescript
@@ -173,6 +173,17 @@ npm run preview               # Preview production build locally
 - **Three.js**: Use `THREE.` namespace prefix consistently
 - **Shaders**: Documented with `/* glsl */` comment, uniform names prefixed `u`
 - **Settings**: Always add to `DEFAULT_SETTINGS` and set sane limits
+
+## Repository conventions
+
+- Keep documentation inside `docs/` unless it is a top-level product artifact (`README.md`, license, tooling config).
+- Keep tests adjacent to implementation files with `*.test.ts` naming.
+- Prefer concern-specific test files (`store.normalization.test.ts`, `store.slots.test.ts`) over catch-all files.
+- When adding a new setting, update all required layers in one change set:
+  1. `Settings` type + `DEFAULT_SETTINGS` in `store.ts`
+  2. pass-through in `Analyser.tsx` and `Scene.update()` options
+  3. controls in `ControlPanel.tsx` (if user-facing)
+  4. at least one targeted test
 
 ## Known Limitations
 

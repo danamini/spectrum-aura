@@ -15,7 +15,11 @@ export type ViewMode =
   | "nebula"
   | "monolith"
   | "mandala"
-  | "terrain";
+  | "terrain"
+  | "obsidian"
+  | "torus"
+  | "soundwall"
+  | "geometrynebula";
 
 export class Scene {
   scene = new THREE.Scene();
@@ -27,6 +31,10 @@ export class Scene {
   monolithGroup = new THREE.Group();
   mandalaGroup = new THREE.Group();
   terrainGroup = new THREE.Group();
+  obsidianGroup = new THREE.Group();
+  torusGroup = new THREE.Group();
+  soundwallGroup = new THREE.Group();
+  geometrynebulaGroup = new THREE.Group();
 
   bars!: THREE.InstancedMesh;
   private barCount = 0;
@@ -111,6 +119,65 @@ export class Scene {
   private readonly terrainWidth = 18;
   private readonly terrainDepth = 26;
 
+  // obsidian shard view
+  private obsidianShards: Array<{
+    mesh: THREE.Mesh;
+    mat: THREE.MeshStandardMaterial;
+    basePos: THREE.Vector3;
+    axis: THREE.Vector3;
+    rotSpeed: number;
+  }> = [];
+  private obsidianFloor?: THREE.Mesh;
+  private obsidianCore?: THREE.PointLight;
+  private obsidianDetail = 1;
+
+  // torus particle accelerator view
+  private torusMesh?: THREE.Mesh;
+  private torusMat?: THREE.MeshPhysicalMaterial;
+  private torusParticles?: THREE.Points;
+  private torusParticleMat?: THREE.PointsMaterial;
+  private torusParticleGeo?: THREE.BufferGeometry;
+  private torusParticleAngles?: Float32Array;
+  private torusParticleMinor?: Float32Array;
+  private torusParticleCount = 5000;
+  private torusParticleColors?: Float32Array;
+  private torusCells: Array<{
+    root: THREE.Group;
+    mesh: THREE.Mesh;
+    particles: THREE.Points;
+    meshMat: THREE.MeshPhysicalMaterial;
+    particleMat: THREE.PointsMaterial;
+  }> = [];
+  private torusCount = 1;
+  private torusSpacing = 11.4;
+  private torusSize = 1;
+  private torusOddUpright = false;
+  private torusColorMode: "shared" | "individual" = "individual";
+  private torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan" = "odd-upright";
+
+  // sound wall view
+  private soundwallPillars?: THREE.InstancedMesh;
+  private soundwallMat?: THREE.MeshStandardMaterial;
+  private soundwallHistory?: Float32Array;
+  private soundwallCols = 20;
+  private soundwallRows = 12;
+  private soundwallStrobeLight?: THREE.PointLight;
+
+  // floating geometry nebula view
+  private geoNebulaMeshes: Array<{
+    mesh: THREE.Mesh;
+    freqBin: number;
+    basePos: THREE.Vector3;
+    rotAxis: THREE.Vector3;
+    rotSpeed: number;
+    baseScale: number;
+    mat: THREE.MeshStandardMaterial;
+  }> = [];
+  private geoNebulaFloor?: THREE.Mesh;
+  private geoNebulaCoreLight?: THREE.PointLight;
+  private geoNebulaCount = 60;
+  private geoNebulaSpread = 1.6;
+
   postFxBoost = { bloom: 1, glitch: 0 };
 
   view: ViewMode = "combo";
@@ -138,6 +205,10 @@ export class Scene {
     this.scene.add(this.monolithGroup);
     this.scene.add(this.mandalaGroup);
     this.scene.add(this.terrainGroup);
+    this.scene.add(this.obsidianGroup);
+    this.scene.add(this.torusGroup);
+    this.scene.add(this.soundwallGroup);
+    this.scene.add(this.geometrynebulaGroup);
     this.classicGroup.visible = false;
     this.rippleGroup.visible = false;
     this.dataStreamGroup.visible = false;
@@ -145,6 +216,10 @@ export class Scene {
     this.monolithGroup.visible = false;
     this.mandalaGroup.visible = false;
     this.terrainGroup.visible = false;
+    this.obsidianGroup.visible = false;
+    this.torusGroup.visible = false;
+    this.soundwallGroup.visible = false;
+    this.geometrynebulaGroup.visible = false;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.25);
     const dir = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -168,6 +243,10 @@ export class Scene {
     this.buildMonolith();
     this.buildMandala();
     this.buildTerrain();
+    this.buildObsidian();
+    this.buildTorus();
+    this.buildSoundwall();
+    this.buildGeoNebula();
 
     // Ensure every view material/light starts with the active palette.
     this.setPalette(this.palette);
@@ -222,6 +301,10 @@ export class Scene {
     this.monolithGroup.visible = view === "monolith";
     this.mandalaGroup.visible = view === "mandala";
     this.terrainGroup.visible = view === "terrain";
+    this.obsidianGroup.visible = view === "obsidian";
+    this.torusGroup.visible = view === "torus";
+    this.soundwallGroup.visible = view === "soundwall";
+    this.geometrynebulaGroup.visible = view === "geometrynebula";
   }
 
   setPalette(p: Palette) {
@@ -230,6 +313,7 @@ export class Scene {
     this.sphereMat.uniforms.uColorA.value.copy(this.paletteThree[0]);
     this.sphereMat.uniforms.uColorB.value.copy(this.paletteThree[1]);
     this.sphereMat.uniforms.uColorC.value.copy(this.paletteThree[2]);
+    this.refreshTorusColors();
     // refresh combo bar colors
     if (this.bars?.instanceColor) {
       const arr = this.bars.instanceColor.array as Float32Array;
@@ -325,6 +409,37 @@ export class Scene {
       this.nebulaMat.uniforms.uColorB.value.copy(this.paletteThree[1]);
       this.nebulaMat.uniforms.uColorC.value.copy(this.paletteThree[2]);
     }
+  }
+
+  private refreshTorusColors() {
+    if (this.torusCells.length === 0) return;
+    const count = this.torusCells.length;
+    for (let i = 0; i < count; i++) {
+      const cell = this.torusCells[i]!;
+      if (this.torusColorMode === "individual") {
+        const t = count <= 1 ? 0 : i / (count - 1);
+        const body = this.colorAtInto(t, this.tmpColor);
+        const accent = this.colorAtInto(Math.min(1, t + 0.18), new THREE.Color());
+        cell.meshMat.color.copy(body).multiplyScalar(0.9);
+        cell.meshMat.emissive.copy(body).lerp(this.paletteThree[2], 0.2);
+        cell.particleMat.color.copy(accent);
+      } else {
+        cell.meshMat.color.copy(this.paletteThree[1]);
+        cell.meshMat.emissive.copy(this.paletteThree[2]);
+        cell.particleMat.color.copy(this.paletteThree[0]);
+      }
+      cell.meshMat.needsUpdate = true;
+      cell.particleMat.needsUpdate = true;
+    }
+  }
+
+  private disposeTorusCells() {
+    for (const cell of this.torusCells) {
+      this.torusGroup.remove(cell.root);
+      cell.meshMat.dispose();
+      cell.particleMat.dispose();
+    }
+    this.torusCells = [];
   }
 
   comboBarMat!: THREE.MeshStandardMaterial;
@@ -1241,6 +1356,727 @@ export class Scene {
     terrainMat.wireframe = opts.terrainWireframe;
   }
 
+  // ─── Obsidian Shard ────────────────────────────────────────────────────────
+
+  buildObsidian(detail: number = this.obsidianDetail) {
+    // dispose previous
+    for (const s of this.obsidianShards) {
+      this.obsidianGroup.remove(s.mesh);
+      s.mesh.geometry.dispose();
+      s.mat.dispose();
+    }
+    this.obsidianShards = [];
+    if (this.obsidianFloor) {
+      this.obsidianGroup.remove(this.obsidianFloor);
+      this.obsidianFloor.geometry.dispose();
+      (this.obsidianFloor.material as THREE.Material).dispose();
+    }
+    if (this.obsidianCore) {
+      this.obsidianGroup.remove(this.obsidianCore);
+    }
+    this.obsidianDetail = Math.max(0, Math.min(3, detail));
+
+    // Build individual shard faces from an icosahedron
+    const icoGeo = new THREE.IcosahedronGeometry(1.8, this.obsidianDetail);
+    const posAttr = icoGeo.getAttribute("position") as THREE.BufferAttribute;
+    const triCount = posAttr.count / 3;
+    for (let t = 0; t < triCount; t++) {
+      const va = new THREE.Vector3().fromBufferAttribute(posAttr, t * 3);
+      const vb = new THREE.Vector3().fromBufferAttribute(posAttr, t * 3 + 1);
+      const vc = new THREE.Vector3().fromBufferAttribute(posAttr, t * 3 + 2);
+      const center = new THREE.Vector3().add(va).add(vb).add(vc).divideScalar(3);
+      // Create a small shard face geometry from these 3 verts
+      const geo = new THREE.BufferGeometry();
+      const verts = new Float32Array(9);
+      verts[0] = va.x; verts[1] = va.y; verts[2] = va.z;
+      verts[3] = vb.x; verts[4] = vb.y; verts[5] = vb.z;
+      verts[6] = vc.x; verts[7] = vc.y; verts[8] = vc.z;
+      geo.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+      geo.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x050510,
+        metalness: 1.0,
+        roughness: 0.0,
+        emissive: this.paletteThree[0].clone(),
+        emissiveIntensity: 0.4,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.frustumCulled = false;
+      this.obsidianGroup.add(mesh);
+      const axis = center.clone().normalize().cross(new THREE.Vector3(0, 1, 0.3)).normalize();
+      if (axis.lengthSq() < 0.0001) axis.set(0, 1, 0);
+      this.obsidianShards.push({
+        mesh,
+        mat,
+        basePos: center.clone(),
+        axis,
+        rotSpeed: 0.3 + Math.random() * 1.8,
+      });
+    }
+    icoGeo.dispose();
+
+    // Mirrored floor plane
+    const floorGeo = new THREE.PlaneGeometry(30, 30);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      metalness: 1.0,
+      roughness: 0.05,
+      envMapIntensity: 1.0,
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -3.2;
+    this.obsidianFloor = floor;
+    this.obsidianGroup.add(floor);
+
+    // Core point light (triggers bloom "lens flare")
+    const core = new THREE.PointLight(0xffffff, 0, 20);
+    core.position.set(0, 0, 0);
+    this.obsidianCore = core;
+    this.obsidianGroup.add(core);
+  }
+
+  private updateObsidian(
+    dt: number,
+    _time: number,
+    audio: AudioBands,
+    opts: { obsidianAmplitude: number; obsidianUsePalette: boolean },
+  ) {
+    if (this.obsidianShards.length === 0) return;
+    const amp = Math.max(0.05, opts.obsidianAmplitude);
+    const bass = Math.max(0, Math.min(1, audio.bass));
+    const high = Math.max(0, Math.min(1, audio.high));
+    const mid = Math.max(0, Math.min(1, audio.mid));
+    const bins = audio.bins;
+    const n = this.obsidianShards.length;
+
+    // Explosion distance driven by sub-bass
+    const explodeDist = bass * 3.0 * amp;
+
+    // Core brightness — peaks on transient (beat)
+    const peakFlare = audio.beat ? 1 : 0;
+    if (this.obsidianCore) {
+      const targetIntensity = (1.5 + bass * 8 + peakFlare * 12) * amp;
+      this.obsidianCore.intensity += (targetIntensity - this.obsidianCore.intensity) * Math.min(1, dt * 10);
+      this.obsidianCore.color.copy(opts.obsidianUsePalette ? this.paletteThree[1] : this.tmpColor.set(0xffffff));
+    }
+
+    for (let i = 0; i < n; i++) {
+      const s = this.obsidianShards[i]!;
+      // frequency bin for this shard
+      const freqT = n <= 1 ? 0 : i / (n - 1);
+      const binIdx = Math.floor(freqT * Math.max(1, Math.floor(bins.length * 0.75)));
+      const binVal = (bins[binIdx] ?? 0) / 255;
+
+      // Explode outward
+      const dir = s.basePos.clone().normalize();
+      const targetPos = s.basePos.clone().add(dir.multiplyScalar(explodeDist + binVal * 1.2 * amp));
+      s.mesh.position.lerp(targetPos, Math.min(1, dt * 8));
+
+      // Rotation speed locked to high-end
+      const spinSpeed = s.rotSpeed * (0.4 + high * 2.5 + binVal * 1.5);
+      s.mesh.rotateOnWorldAxis(s.axis, dt * spinSpeed);
+
+      // Material — deep obsidian with palette-tinted emissive edge glow
+      if (opts.obsidianUsePalette) {
+        const c = this.colorAtInto(freqT, this.tmpColor);
+        s.mat.emissive.copy(c).lerp(this.white, 0.1 + bass * 0.15);
+        s.mat.emissiveIntensity = (0.3 + binVal * 1.6 + bass * 0.8) * amp;
+      } else {
+        s.mat.emissive.set(0x3a3aaa);
+        s.mat.emissiveIntensity = 0.2 + binVal * 0.8;
+      }
+    }
+
+    // Subtle floor pulse
+    if (this.obsidianFloor) {
+      const floorMat = this.obsidianFloor.material as THREE.MeshStandardMaterial;
+      floorMat.roughness = Math.max(0.02, 0.15 - bass * 0.13);
+      if (opts.obsidianUsePalette) {
+        floorMat.emissive.copy(this.paletteThree[0]).multiplyScalar(bass * 0.3 * amp);
+      }
+    }
+
+    // Boost bloom on peaks
+    this.postFxBoost.bloom = 1 + bass * 1.2 + mid * 0.4;
+    this.postFxBoost.glitch = 0;
+  }
+
+  // ─── Hyper-Torus Particle Accelerator ───────────────────────────────────────
+
+  buildTorus(particleCount: number = this.torusParticleCount) {
+    this.disposeTorusCells();
+
+    // Dispose previous
+    if (this.torusMesh) {
+      this.torusMesh.geometry.dispose();
+      this.torusMat?.dispose();
+      this.torusMesh = undefined;
+      this.torusMat = undefined;
+    }
+    if (this.torusParticles) {
+      this.torusParticleGeo?.dispose();
+      this.torusParticleMat?.dispose();
+      this.torusParticles = undefined;
+      this.torusParticleGeo = undefined;
+      this.torusParticleMat = undefined;
+    }
+    this.torusParticleCount = Math.max(200, particleCount);
+
+    // Glass torus shell
+    const torusGeo = new THREE.TorusGeometry(4.5, 1.2, 48, 128);
+    const torusMat = new THREE.MeshPhysicalMaterial({
+      color: 0xaaddff,
+      transparent: true,
+      opacity: 0.18,
+      metalness: 0.0,
+      roughness: 0.0,
+      transmission: 0.92,
+      thickness: 1.2,
+      side: THREE.DoubleSide,
+    });
+    this.torusMat = torusMat;
+    this.torusMesh = new THREE.Mesh(torusGeo, torusMat);
+    this.torusMesh.rotation.x = Math.PI / 2;
+    this.torusMesh.visible = false;
+
+    // Particles orbiting inside the torus tube
+    const count = this.torusParticleCount;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const angles = new Float32Array(count);     // major angle (around ring)
+    const minors = new Float32Array(count);     // minor angle (inside tube)
+    for (let i = 0; i < count; i++) {
+      angles[i] = Math.random() * Math.PI * 2;
+      minors[i] = Math.random() * Math.PI * 2;
+      const r = 0.5 + Math.random() * 0.5; // radius within tube (0-1 normalized)
+      const major = angles[i]!;
+      const minor = minors[i]!;
+      const R = 4.5, tube = 1.1 * r;
+      positions[i * 3]     = (R + tube * Math.cos(minor)) * Math.cos(major);
+      positions[i * 3 + 1] = tube * Math.sin(minor);
+      positions[i * 3 + 2] = (R + tube * Math.cos(minor)) * Math.sin(major);
+      const freqT = i / count;
+      const c = this.colorAt(freqT);
+      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+    }
+    this.torusParticleAngles = angles;
+    this.torusParticleMinor  = minors;
+    this.torusParticleColors = colors;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color",    new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.06,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.torusParticleGeo = geo;
+    this.torusParticleMat = mat;
+    this.torusParticles = new THREE.Points(geo, mat);
+    this.syncTorusLayout(this.torusCount, this.torusOddUpright, this.torusSpacing, this.torusSize, this.torusRotationMode, this.torusColorMode);
+  }
+
+  private syncTorusLayout(
+    rawCount: number,
+    oddUpright: boolean,
+    spacing: number,
+    size: number,
+    rotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan",
+    colorMode: "shared" | "individual",
+  ) {
+    const count = Math.max(1, Math.min(5, Math.round(rawCount)));
+    this.torusCount = count;
+    this.torusOddUpright = oddUpright;
+    this.torusSpacing = Math.max(6, Math.min(24, spacing));
+    this.torusSize = Math.max(0.5, Math.min(1.8, size));
+    this.torusRotationMode = rotationMode;
+    this.torusColorMode = colorMode;
+    if (!this.torusMesh || !this.torusParticles) return;
+
+    this.disposeTorusCells();
+
+    while (this.torusCells.length < count) {
+      const root = new THREE.Group();
+      const meshMat = this.torusMat!.clone();
+      const particleMat = this.torusParticleMat!.clone();
+      const mesh = new THREE.Mesh(this.torusMesh.geometry, meshMat);
+      const particles = new THREE.Points(this.torusParticleGeo!, particleMat);
+      mesh.rotation.x = this.torusMesh.rotation.x;
+      mesh.visible = false;
+      root.add(mesh);
+      root.add(particles);
+      this.torusGroup.add(root);
+      this.torusCells.push({ root, mesh, particles, meshMat, particleMat });
+    }
+
+    const center = (count - 1) / 2;
+    for (let i = 0; i < this.torusCells.length; i++) {
+      const cell = this.torusCells[i]!;
+      cell.root.position.set((i - center) * this.torusSpacing, 0, 0);
+      cell.root.scale.setScalar(this.torusSize);
+      const odd = i % 2 === 1;
+      switch (rotationMode) {
+        case "flat":
+          cell.root.rotation.set(0, 0, 0);
+          break;
+        case "odd-upright":
+          cell.root.rotation.set(0, 0, odd ? Math.PI / 2 : 0);
+          break;
+        case "alternating-x":
+          cell.root.rotation.set(odd ? Math.PI / 2 : 0, 0, 0);
+          break;
+        case "alternating-z":
+          cell.root.rotation.set(0, 0, odd ? Math.PI / 2 : -Math.PI / 2);
+          break;
+        case "fan":
+          cell.root.rotation.set(odd ? Math.PI / 3 : 0, i * 0.18, odd ? Math.PI / 4 : 0);
+          break;
+      }
+    }
+
+    this.refreshTorusColors();
+  }
+
+  private updateTorus(
+    dt: number,
+    _time: number,
+    audio: AudioBands,
+    opts: {
+      torusAmplitude: number;
+      torusUsePalette: boolean;
+      torusParticleCount: number;
+      torusSpeed: number;
+      torusCount: number;
+      torusSpacing: number;
+      torusSize: number;
+      torusParticleSize: number;
+      torusColorMode: "shared" | "individual";
+      torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
+      torusOddUpright: boolean;
+      torusFullscreen: boolean;
+    },
+  ) {
+    if (!this.torusMesh || !this.torusParticles || !this.torusParticleAngles || !this.torusParticleMinor) return;
+    const amp = Math.max(0.05, opts.torusAmplitude);
+    const bass = Math.max(0, Math.min(1, audio.bass));
+    const mid  = Math.max(0, Math.min(1, audio.mid));
+    const high = Math.max(0, Math.min(1, audio.high));
+    const bins = audio.bins;
+
+    // Rebuild if particle count changed
+    if (opts.torusParticleCount !== this.torusParticleCount) {
+      this.buildTorus(opts.torusParticleCount);
+      return;
+    }
+    const rotationMode = opts.torusFullscreen ? "flat" : opts.torusRotationMode;
+    if (
+      opts.torusCount !== this.torusCount ||
+      opts.torusOddUpright !== this.torusOddUpright ||
+      opts.torusSpacing !== this.torusSpacing ||
+      opts.torusSize !== this.torusSize ||
+      opts.torusColorMode !== this.torusColorMode ||
+      rotationMode !== this.torusRotationMode
+    ) {
+      this.syncTorusLayout(
+        opts.torusCount,
+        opts.torusOddUpright,
+        opts.torusSpacing,
+        opts.torusSize,
+        rotationMode,
+        opts.torusColorMode,
+      );
+    }
+
+    // BPM-locked speed: higher BPM = faster orbit
+    const bpmFactor = audio.bpm > 0 && audio.bpmConfidence > 0.35
+      ? audio.bpm / 128
+      : 1;
+    const orbitSpeed = (0.25 + bass * 0.4) * bpmFactor * opts.torusSpeed * amp;
+
+    // Tube radius pulse with frequency spectrum
+    const tubeScale = 1 + (bass * 0.35 + mid * 0.25) * amp;
+
+    // Torus mesh pulsing
+    this.torusMesh.scale.setScalar(tubeScale);
+    this.torusMesh.rotation.z += dt * 0.08 * (1 + high * 0.5);
+
+    // Update glass material
+    if (this.torusMat) {
+      this.torusMat.opacity = 0.12 + bass * 0.1;
+      if (opts.torusUsePalette) {
+        (this.torusMat as THREE.MeshPhysicalMaterial).color.copy(this.paletteThree[1]).lerp(this.paletteThree[2], mid);
+      }
+    }
+
+    const count = this.torusParticleCount;
+    const pos = this.torusParticleGeo!.attributes.position as THREE.BufferAttribute;
+    const colArr = this.torusParticleColors;
+    const angles = this.torusParticleAngles;
+    const minors = this.torusParticleMinor;
+    const R = 4.5;
+
+    for (let i = 0; i < count; i++) {
+      // Orbit speed varies per particle based on their frequency bin
+      const freqT = count <= 1 ? 0 : i / (count - 1);
+      const binIdx = Math.floor(freqT * Math.max(1, Math.floor(bins.length * 0.8)));
+      const binVal = (bins[binIdx] ?? 0) / 255;
+
+      angles[i] += dt * (orbitSpeed + binVal * 0.8 * amp);
+      minors[i] += dt * 0.05; // slow inner rotation
+      const major = angles[i]!;
+      const minor = minors[i]!;
+      const tubePulse = (1.0 + binVal * 0.6 * amp) * tubeScale;
+      const tube = 1.1 * tubePulse * (0.4 + 0.6 * (0.5 + 0.5 * Math.sin(minor)));
+      pos.setXYZ(
+        i,
+        (R + tube * Math.cos(minor)) * Math.cos(major),
+        tube * Math.sin(minor),
+        (R + tube * Math.cos(minor)) * Math.sin(major),
+      );
+
+      if (colArr) {
+        if (opts.torusUsePalette) {
+          const c = this.colorAtInto(freqT, this.tmpColor).lerp(this.white, 0.05 + binVal * 0.15 + bass * 0.04);
+          colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
+        }
+      }
+    }
+    pos.needsUpdate = true;
+    if (colArr) (this.torusParticleGeo!.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+
+    if (this.torusParticleMat) {
+      const particleSize = Math.max(0.005, opts.torusParticleSize) * (0.8 + bass * 0.5) * Math.max(0.5, amp);
+      this.torusParticleMat.size = particleSize;
+      for (const cell of this.torusCells) {
+        cell.particleMat.size = particleSize;
+        cell.meshMat.opacity = this.torusMat.opacity;
+      }
+    }
+
+    this.postFxBoost.bloom = 1 + bass * 0.8 + mid * 0.3;
+    this.postFxBoost.glitch = 0;
+  }
+
+  // ─── Brutalist Sound-Wall ───────────────────────────────────────────────────
+
+  buildSoundwall(cols: number = this.soundwallCols, rows: number = this.soundwallRows) {
+    // Dispose previous
+    if (this.soundwallPillars) {
+      this.soundwallGroup.remove(this.soundwallPillars);
+      this.soundwallPillars.geometry.dispose();
+      this.soundwallMat?.dispose();
+    }
+    if (this.soundwallStrobeLight) {
+      this.soundwallGroup.remove(this.soundwallStrobeLight);
+    }
+    this.soundwallCols = Math.max(4, Math.round(cols));
+    this.soundwallRows = Math.max(2, Math.round(rows));
+    const C = this.soundwallCols;
+    const R = this.soundwallRows;
+    this.soundwallHistory = new Float32Array(C * R);
+
+    // Two corridors of pillars (left side + right side) for each column × row
+    // Each pillar = one instance; 2 sides × C columns × R rows
+    const count = 2 * C * R;
+    const geo = new THREE.BoxGeometry(0.55, 1, 0.55);
+    geo.translate(0, 0.5, 0);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      metalness: 1.0,
+      roughness: 0.03,
+      emissive: this.paletteThree[0].clone(),
+      emissiveIntensity: 0.1,
+      envMapIntensity: 1.0,
+      vertexColors: false,
+    });
+    this.soundwallMat = mat;
+    const mesh = new THREE.InstancedMesh(geo, mat, count);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // Initialise all instances at identity
+    const d = new THREE.Object3D();
+    for (let i = 0; i < count; i++) {
+      d.position.set(0, 0, 0);
+      d.scale.set(1, 0.2, 1);
+      d.updateMatrix();
+      mesh.setMatrixAt(i, d.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    this.soundwallPillars = mesh;
+    this.soundwallGroup.add(mesh);
+
+    // Strobe point light for bass transients
+    const strobe = new THREE.PointLight(0xffffff, 0, 35);
+    strobe.position.set(0, 6, 0);
+    this.soundwallStrobeLight = strobe;
+    this.soundwallGroup.add(strobe);
+  }
+
+  private updateSoundwall(
+    dt: number,
+    audio: AudioBands,
+    _time: number,
+    opts: { soundwallAmplitude: number; soundwallUsePalette: boolean; soundwallColumns: number; soundwallRows: number },
+  ) {
+    const C = Math.max(4, Math.round(opts.soundwallColumns));
+    const R = Math.max(2, Math.round(opts.soundwallRows));
+    if (C !== this.soundwallCols || R !== this.soundwallRows) {
+      this.buildSoundwall(C, R);
+    }
+    if (!this.soundwallPillars || !this.soundwallHistory || !this.soundwallMat) return;
+    const amp = Math.max(0.05, opts.soundwallAmplitude);
+    const bass = Math.max(0, Math.min(1, audio.bass));
+    const mid  = Math.max(0, Math.min(1, audio.mid));
+    const bins = audio.bins;
+    const activeBins = Math.max(1, Math.floor(bins.length * 0.7));
+
+    // Shift history one row forward (like a waterfall scrolling toward camera)
+    this.soundwallHistory.copyWithin(C, 0, C * (R - 1));
+    // Read current spectrum into row 0
+    for (let c = 0; c < C; c++) {
+      const idx = Math.floor((c / C) * activeBins);
+      const v = (bins[idx] ?? 0) / 255;
+      this.soundwallHistory[c] = Math.pow(v, 1.2) * 12 * amp;
+    }
+
+    // Strobe light: flash on bass transients
+    if (this.soundwallStrobeLight) {
+      const targetIntensity = audio.beat ? (3 + bass * 18) * amp : 0;
+      this.soundwallStrobeLight.intensity += (targetIntensity - this.soundwallStrobeLight.intensity) * Math.min(1, dt * 20);
+      if (opts.soundwallUsePalette) {
+        this.soundwallStrobeLight.color.copy(this.paletteThree[0]).lerp(this.paletteThree[1], bass);
+      } else {
+        this.soundwallStrobeLight.color.setRGB(1, 1, 1);
+      }
+    }
+
+    const d = this.dummy;
+    const xGap = 1.1;   // spacing between columns
+    const zSpacing = 1.5; // depth spacing between rows
+    const sideOffset = 2.8; // corridor half-width
+
+    for (let side = 0; side < 2; side++) {
+      const sideSign = side === 0 ? -1 : 1;
+      for (let r = 0; r < R; r++) {
+        for (let c = 0; c < C; c++) {
+          const instanceIdx = side * C * R + r * C + c;
+          const h = Math.max(0.08, this.soundwallHistory[r * C + c]!);
+          const x = (c - (C - 1) / 2) * xGap + sideSign * sideOffset;
+          const z = -(r * zSpacing) + 4; // rows scroll toward camera
+          d.position.set(x, 0, z);
+          d.scale.set(1, h, 1);
+          d.rotation.set(0, 0, 0);
+          d.updateMatrix();
+          this.soundwallPillars.setMatrixAt(instanceIdx, d.matrix);
+        }
+      }
+    }
+    this.soundwallPillars.instanceMatrix.needsUpdate = true;
+
+    // Material: chrome tint + mid-spike emissive flare
+    this.soundwallMat.color.setRGB(1, 1, 1);
+    if (opts.soundwallUsePalette) {
+      this.soundwallMat.emissive.copy(this.paletteThree[1]).lerp(this.paletteThree[2], mid);
+      this.soundwallMat.emissiveIntensity = (0.08 + mid * 0.7 + bass * 0.3) * amp;
+    } else {
+      this.soundwallMat.emissive.setRGB(0.5, 0.6, 0.8);
+      this.soundwallMat.emissiveIntensity = 0.1 + mid * 0.5;
+    }
+
+    // FOV distortion on mid-spikes is applied by the caller (update opts)
+    this.postFxBoost.bloom = 1 + mid * 0.8 + bass * 0.4;
+    this.postFxBoost.glitch = Math.max(0, mid - 0.6) * 1.5;
+  }
+
+  // ─── Floating Geometry Nebula ───────────────────────────────────────────────
+
+  buildGeoNebula(count: number = this.geoNebulaCount, spread: number = this.geoNebulaSpread) {
+    // Dispose previous
+    for (const s of this.geoNebulaMeshes) {
+      this.geometrynebulaGroup.remove(s.mesh);
+      s.mesh.geometry.dispose();
+      s.mat.dispose();
+    }
+    this.geoNebulaMeshes = [];
+    if (this.geoNebulaFloor) {
+      this.geometrynebulaGroup.remove(this.geoNebulaFloor);
+      this.geoNebulaFloor.geometry.dispose();
+      (this.geoNebulaFloor.material as THREE.Material).dispose();
+    }
+    if (this.geoNebulaCoreLight) {
+      this.geometrynebulaGroup.remove(this.geoNebulaCoreLight);
+    }
+    this.geoNebulaCount = Math.max(6, Math.round(count));
+    this.geoNebulaSpread = Math.max(0.8, Math.min(3, spread));
+    const N = this.geoNebulaCount;
+
+    // Create a mix of geometry types
+    const geoFactories: Array<() => THREE.BufferGeometry> = [
+      () => new THREE.BoxGeometry(0.55, 0.55, 0.55),
+      () => new THREE.OctahedronGeometry(0.38),
+      () => new THREE.SphereGeometry(0.32, 12, 8),
+      () => new THREE.TetrahedronGeometry(0.42),
+      () => new THREE.IcosahedronGeometry(0.34, 0),
+    ];
+
+    // Arrange shapes in a sphere cluster
+    const phi = Math.PI * (3 - Math.sqrt(5)); // golden angle
+    for (let i = 0; i < N; i++) {
+      const y = 1 - (i / (N - 1)) * 2;
+      const rad = Math.sqrt(1 - y * y);
+      const theta = phi * i;
+      const baseRadius = (3.2 + Math.sin(i * 2.3) * 0.6) * this.geoNebulaSpread;
+      const bx = Math.cos(theta) * rad * baseRadius;
+      const by = y * baseRadius;
+      const bz = Math.sin(theta) * rad * baseRadius;
+
+      const factory = geoFactories[i % geoFactories.length]!;
+      const geo = factory();
+      const freqT = N <= 1 ? 0 : i / (N - 1);
+      const baseColor = this.colorAt(freqT);
+      const mat = new THREE.MeshStandardMaterial({
+        color: baseColor,
+        metalness: 0.85,
+        roughness: 0.1,
+        emissive: baseColor.clone(),
+        emissiveIntensity: 0.6,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(bx, by, bz);
+      this.geometrynebulaGroup.add(mesh);
+      const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      this.geoNebulaMeshes.push({
+        mesh,
+        freqBin: i,
+        basePos: new THREE.Vector3(bx, by, bz),
+        rotAxis: axis,
+        rotSpeed: 0.4 + Math.random() * 1.2,
+        baseScale: 0.8 + Math.random() * 0.8,
+        mat,
+      });
+    }
+
+    // Wet pavement floor
+    const floorGeo = new THREE.PlaneGeometry(32, 32);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x080810,
+      metalness: 0.9,
+      roughness: 0.08,
+      envMapIntensity: 1.0,
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -4;
+    this.geoNebulaFloor = floor;
+    this.geometrynebulaGroup.add(floor);
+
+    // High-intensity center light
+    const coreLight = new THREE.PointLight(0xffffff, 2.5, 40);
+    coreLight.position.set(0, 0, 0);
+    this.geoNebulaCoreLight = coreLight;
+    this.geometrynebulaGroup.add(coreLight);
+  }
+
+  private updateGeoNebula(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: {
+      geometrynebulaAmplitude: number;
+      geometrynebulaUsePalette: boolean;
+      geometrynebulaCount: number;
+      geometrynebulaSpread: number;
+      geometrynebulaOrbitSpeed: number;
+      geometrynebulaSpinSpeed: number;
+    },
+  ) {
+    const targetCount = Math.max(6, Math.round(opts.geometrynebulaCount));
+    const targetSpread = Math.max(0.8, Math.min(3, opts.geometrynebulaSpread));
+    if (targetCount !== this.geoNebulaCount || targetSpread !== this.geoNebulaSpread) {
+      this.buildGeoNebula(targetCount, targetSpread);
+      return;
+    }
+    if (this.geoNebulaMeshes.length === 0) return;
+    const amp = Math.max(0.05, opts.geometrynebulaAmplitude);
+    const bass = Math.max(0, Math.min(1, audio.bass));
+    const mid  = Math.max(0, Math.min(1, audio.mid));
+    const high = Math.max(0, Math.min(1, audio.high));
+    const bins = audio.bins;
+    const N = this.geoNebulaMeshes.length;
+    const activeBins = Math.max(1, Math.floor(bins.length * 0.8));
+    const orbitSpeed = Math.max(0.1, opts.geometrynebulaOrbitSpeed);
+    const spinSpeed = Math.max(0.1, opts.geometrynebulaSpinSpeed);
+
+    // Whole cluster slow rotation
+    this.geometrynebulaGroup.rotation.y += dt * (0.08 + mid * 0.25) * orbitSpeed;
+    this.geometrynebulaGroup.rotation.x += dt * 0.03 * (0.3 + bass * 0.7) * orbitSpeed;
+
+    // Core light
+    if (this.geoNebulaCoreLight) {
+      const targetIntensity = (2.4 + bass * 14 + mid * 6) * amp * orbitSpeed;
+      this.geoNebulaCoreLight.intensity += (targetIntensity - this.geoNebulaCoreLight.intensity) * Math.min(1, dt * 6);
+      if (opts.geometrynebulaUsePalette) {
+        this.geoNebulaCoreLight.color.copy(this.paletteThree[1]).lerp(this.paletteThree[0], bass);
+      }
+    }
+
+    for (let i = 0; i < N; i++) {
+      const s = this.geoNebulaMeshes[i]!;
+      const freqT = N <= 1 ? 0 : i / (N - 1);
+      const binIdx = Math.floor(freqT * activeBins);
+      const binVal = (bins[binIdx] ?? 0) / 255;
+
+      // Scale pulse to assigned frequency
+      const targetScale = s.baseScale * (1 + binVal * 2.1 * amp + bass * 0.35);
+      const curScale = s.mesh.scale.x;
+      s.mesh.scale.setScalar(curScale + (targetScale - curScale) * Math.min(1, dt * (9 + orbitSpeed * 4)));
+
+      // Position — orbit gently around base position
+      const orbitAmt = (0.45 + high * 1.1) * amp * orbitSpeed;
+      const wobble = 0.18 + binVal * 0.4;
+      const px = s.basePos.x + Math.sin(time * (0.7 + orbitSpeed * 0.25) + i * 0.5) * orbitAmt * wobble;
+      const py = s.basePos.y + Math.cos(time * (0.55 + orbitSpeed * 0.18) + i * 0.4) * orbitAmt * 0.7 * wobble;
+      const pz = s.basePos.z + Math.cos(time * (0.6 + orbitSpeed * 0.22) + i * 0.6) * orbitAmt * wobble;
+      s.mesh.position.set(px, py, pz);
+
+      // Rotation per shape
+      s.mesh.rotateOnWorldAxis(s.rotAxis, dt * s.rotSpeed * spinSpeed * (0.5 + binVal * 2.4));
+
+      // Holographic color update
+      if (opts.geometrynebulaUsePalette) {
+        const c = this.colorAtInto(freqT, this.tmpColor);
+        s.mat.color.copy(c).lerp(this.white, binVal * 0.25);
+        s.mat.emissive.copy(c).lerp(this.white, 0.1 + binVal * 0.3 + bass * 0.15);
+        s.mat.emissiveIntensity = (0.5 + binVal * 2.2 + bass * 0.6) * amp;
+        s.mat.opacity = 0.7 + binVal * 0.3;
+      } else {
+        s.mat.color.setRGB(0.8, 0.9, 1.0);
+        s.mat.emissive.setRGB(0.2, 0.4, 0.8);
+        s.mat.emissiveIntensity = 0.4 + binVal * 1.2;
+        s.mat.opacity = 0.75 + binVal * 0.25;
+      }
+    }
+
+    // Wet floor responds to bass
+    if (this.geoNebulaFloor) {
+      const floorMat = this.geoNebulaFloor.material as THREE.MeshStandardMaterial;
+      floorMat.roughness = Math.max(0.04, 0.12 - bass * 0.1);
+      if (opts.geometrynebulaUsePalette) {
+        floorMat.emissive.copy(this.paletteThree[2]).multiplyScalar(bass * 0.25 * amp);
+        floorMat.emissiveIntensity = 1;
+      }
+    }
+
+    this.postFxBoost.bloom = 1 + bass * 1.15 + mid * 0.65 + high * 0.25;
+    this.postFxBoost.glitch = 0;
+  }
+
   update(dt: number, time: number, audio: AudioBands, opts: {
     sphereDisp: number;
     orbitSpeed: number;
@@ -1307,6 +2143,31 @@ export class Scene {
     monolithFullscreen: boolean;
     mandalaFullscreen: boolean;
     terrainFullscreen: boolean;
+    obsidianFullscreen: boolean;
+    obsidianUsePalette: boolean;
+    obsidianAmplitude: number;
+    obsidianShardDetail: number;
+    torusFullscreen: boolean;
+    torusUsePalette: boolean;
+    torusAmplitude: number;
+    torusParticleCount: number;
+    torusSpeed: number;
+    torusCount: number;
+    torusSpacing: number;
+    torusSize: number;
+    torusParticleSize: number;
+    torusColorMode: "shared" | "individual";
+    torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
+    torusOddUpright: boolean;
+    soundwallFullscreen: boolean;
+    soundwallUsePalette: boolean;
+    soundwallAmplitude: number;
+    soundwallColumns: number;
+    soundwallRows: number;
+    geometrynebulaFullscreen: boolean;
+    geometrynebulaUsePalette: boolean;
+    geometrynebulaAmplitude: number;
+    geometrynebulaCount: number;
     bgColor: string;
     view: ViewMode;
   }) {
@@ -1343,6 +2204,13 @@ export class Scene {
     const drift = opts.cameraDrift && driftAmt > 1e-4 ? driftAmt : 0;
     // Position drift scaled down so the lens stays near the subject; FOV still uses full `drift`.
     const driftPos = drift > 0 ? drift * 0.26 : 0;
+    const applyCameraDrift = (scale = 1) => {
+      if (drift <= 0) return;
+      const a = driftPos * scale * 1.35;
+      this.camera.position.x += Math.sin(time * 0.27) * a + Math.cos(time * 0.16) * a * 0.7 + Math.sin(time * 0.43) * a * 0.35;
+      this.camera.position.y += Math.sin(time * 0.24) * a * 0.85 + Math.sin(time * 0.38) * a * 0.45;
+      this.camera.position.z += Math.cos(time * 0.22) * a * 1.05 + Math.sin(time * 0.2) * a * 0.65 + Math.cos(time * 0.31) * a * 0.3;
+    };
 
     if (opts.view === "classic") {
       if (this.classicGrid) this.classicGrid.visible = opts.grid;
@@ -1500,6 +2368,7 @@ export class Scene {
         const rad = 12;
         this.camera.position.set(Math.sin(this.orbitAngle) * rad, 4.5, Math.cos(this.orbitAngle) * rad);
       }
+      applyCameraDrift(2.5);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -1535,6 +2404,7 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.7 + 0.05);
         this.camera.position.set(Math.sin(this.orbitAngle) * 8.5, Math.sin(time * 0.4) * 0.7, Math.cos(this.orbitAngle) * 8.5);
       }
+      applyCameraDrift(2.2);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -1571,6 +2441,7 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.5 + 0.045);
         this.camera.position.set(Math.sin(this.orbitAngle) * 24, 12, Math.cos(this.orbitAngle) * 24);
       }
+      applyCameraDrift(3.2);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -1604,6 +2475,7 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.85 + 0.12);
         this.camera.position.set(Math.sin(this.orbitAngle) * 10.5, Math.sin(time * 0.5) * 1.2, Math.cos(this.orbitAngle) * 10.5);
       }
+      applyCameraDrift(2.4);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -1639,11 +2511,175 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.45 + 0.02);
         this.camera.position.set(Math.sin(this.orbitAngle) * 15, 7, Math.cos(this.orbitAngle) * 15);
       }
+      applyCameraDrift(2.8);
       this.camera.lookAt(0, -1.5, 7);
       return;
     }
 
-    // bpmPhase already computed above — reused here for visual syncing
+    if (opts.view === "obsidian") {
+      // Rebuild if detail changed
+      if (opts.obsidianShardDetail !== this.obsidianDetail) this.buildObsidian(opts.obsidianShardDetail);
+      this.updateObsidian(dt, time, audio, {
+        obsidianAmplitude: opts.obsidianAmplitude,
+        obsidianUsePalette: opts.obsidianUsePalette,
+      });
+      if (opts.obsidianFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (0 - this.camera.position.y) * follow;
+        this.camera.position.z += (10 - this.camera.position.z) * follow;
+        this.camera.fov += (50 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.8;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          Math.sin(this.mousePitch) * r * 0.5,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.6 + 0.05);
+        const rad = 9 + audio.bass * 1.5;
+        this.camera.position.set(Math.sin(this.orbitAngle) * rad, 2 + Math.sin(time * 0.4) * 1.2, Math.cos(this.orbitAngle) * rad);
+      }
+      const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
+      applyCameraDrift(4.2);
+      this.camera.position.y += bk * 1.2;
+      this.camera.fov += (55 - this.kick * 8 - this.camera.fov) * Math.min(1, dt * 10);
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+    if (opts.view === "torus") {
+      this.updateTorus(dt, time, audio, {
+        torusAmplitude: opts.torusAmplitude,
+        torusUsePalette: opts.torusUsePalette,
+        torusParticleCount: opts.torusParticleCount,
+        torusSpeed: opts.torusSpeed,
+        torusCount: opts.torusCount,
+        torusSpacing: opts.torusSpacing,
+        torusSize: opts.torusSize,
+        torusParticleSize: opts.torusParticleSize,
+        torusColorMode: opts.torusColorMode,
+        torusRotationMode: opts.torusRotationMode,
+        torusOddUpright: opts.torusOddUpright,
+        torusFullscreen: opts.torusFullscreen,
+      });
+      if (opts.torusFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (20 - this.camera.position.y) * follow;
+        this.camera.position.z += (0.01 - this.camera.position.z) * follow;
+        this.camera.fov += (52 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.9;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          Math.sin(this.mousePitch) * r * 0.6,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.4 + 0.04);
+        this.camera.position.set(Math.sin(this.orbitAngle) * 12, Math.sin(time * 0.3) * 2.5 + 0.5, Math.cos(this.orbitAngle) * 12);
+      }
+      const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
+      applyCameraDrift(4.5);
+      this.camera.position.y += bk * 1.0;
+      this.camera.fov += (55 - bk * 6 - this.camera.fov) * Math.min(1, dt * 10);
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+    if (opts.view === "soundwall") {
+      this.updateSoundwall(dt, audio, time, {
+        soundwallAmplitude: opts.soundwallAmplitude,
+        soundwallUsePalette: opts.soundwallUsePalette,
+        soundwallColumns: opts.soundwallColumns,
+        soundwallRows: opts.soundwallRows,
+      });
+      if (opts.soundwallFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (4 - this.camera.position.y) * follow;
+        this.camera.position.z += (8 - this.camera.position.z) * follow;
+        this.camera.fov += (60 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 2, -4);
+        return;
+      }
+      const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
+      // FOV distortion on mid spikes (anamorphic feel)
+      const mid = audio.mid;
+      const fovDistort = Math.max(0, mid - 0.5) * 18;
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.9;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          4 + Math.sin(this.mousePitch) * r * 0.4,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.camera.position.x += (0 - this.camera.position.x) * Math.min(1, dt * 3);
+        this.camera.position.y += (4.5 - this.camera.position.y) * Math.min(1, dt * 3);
+        this.camera.position.z += (9 - this.camera.position.z) * Math.min(1, dt * 3);
+      }
+      applyCameraDrift(4.8);
+      this.camera.position.y += bk * 1.5;
+      this.camera.fov += (60 + fovDistort - bk * 8 - this.camera.fov) * Math.min(1, dt * 12);
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(0, 2, -4);
+      return;
+    }
+
+    if (opts.view === "geometrynebula") {
+      this.updateGeoNebula(dt, time, audio, {
+        geometrynebulaAmplitude: opts.geometrynebulaAmplitude,
+        geometrynebulaUsePalette: opts.geometrynebulaUsePalette,
+        geometrynebulaCount: opts.geometrynebulaCount,
+        geometrynebulaSpread: opts.geometrynebulaSpread,
+        geometrynebulaOrbitSpeed: opts.geometrynebulaOrbitSpeed,
+        geometrynebulaSpinSpeed: opts.geometrynebulaSpinSpeed,
+      });
+      if (opts.geometrynebulaFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (0 - this.camera.position.y) * follow;
+        this.camera.position.z += (14 - this.camera.position.z) * follow;
+        this.camera.fov += (46 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.88;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          Math.sin(this.mousePitch) * r * 0.5,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.65 + 0.05);
+        this.camera.position.set(Math.sin(this.orbitAngle) * 11, Math.sin(time * 0.35) * 1.8 + 1, Math.cos(this.orbitAngle) * 11);
+      }
+      const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
+      applyCameraDrift(2.7);
+      this.camera.position.y += bk * 1.2;
+      this.camera.fov += (52 - bk * 7 - this.camera.fov) * Math.min(1, dt * 10);
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+
     this.postFxBoost.bloom = 1;
     this.postFxBoost.glitch = 0;
 
@@ -1991,5 +3027,21 @@ export class Scene {
     this.mandalaRibbons = [];
     if (this.terrainGeo) this.terrainGeo.dispose();
     if (this.terrain) (this.terrain.material as THREE.Material).dispose();
+    // obsidian
+    for (const s of this.obsidianShards) {
+      s.mesh.geometry.dispose();
+      s.mat.dispose();
+    }
+    this.obsidianShards = [];
+    if (this.obsidianFloor) { this.obsidianFloor.geometry.dispose(); (this.obsidianFloor.material as THREE.Material).dispose(); }
+    // torus
+    if (this.torusMesh) { this.torusMesh.geometry.dispose(); this.torusMat?.dispose(); }
+    if (this.torusParticles) { this.torusParticleGeo?.dispose(); this.torusParticleMat?.dispose(); }
+    // sound wall
+    if (this.soundwallPillars) { this.soundwallPillars.geometry.dispose(); this.soundwallMat?.dispose(); }
+    // geometry nebula
+    for (const s of this.geoNebulaMeshes) { s.mesh.geometry.dispose(); s.mat.dispose(); }
+    this.geoNebulaMeshes = [];
+    if (this.geoNebulaFloor) { this.geoNebulaFloor.geometry.dispose(); (this.geoNebulaFloor.material as THREE.Material).dispose(); }
   }
 }

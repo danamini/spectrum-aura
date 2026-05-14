@@ -8,7 +8,11 @@ export type ViewMode =
   | "nebula"
   | "monolith"
   | "mandala"
-  | "terrain";
+  | "terrain"
+  | "obsidian"
+  | "torus"
+  | "soundwall"
+  | "geometrynebula";
 
 export type Settings = {
   // view
@@ -98,6 +102,42 @@ export type Settings = {
   terrainColumns: number;
   terrainWireframe: boolean;
 
+  // obsidian shard view
+  obsidianFullscreen: boolean;
+  obsidianUsePalette: boolean;
+  obsidianAmplitude: number;
+  obsidianShardDetail: number; // icosahedron detail level (0–3)
+
+  // torus particle accelerator view
+  torusFullscreen: boolean;
+  torusUsePalette: boolean;
+  torusAmplitude: number;
+  torusParticleCount: number;
+  torusSpeed: number; // base orbit speed multiplier
+  torusCount: number; // number of side-by-side toruses (1..5)
+  torusSpacing: number; // distance between torus centers
+  torusSize: number; // overall torus scale
+  torusParticleSize: number; // base particle size for the torus view
+  torusColorMode: "shared" | "individual";
+  torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
+  torusOddUpright: boolean; // rotate odd-indexed toruses by 90 degrees
+
+  // brutalist sound-wall view
+  soundwallFullscreen: boolean;
+  soundwallUsePalette: boolean;
+  soundwallAmplitude: number;
+  soundwallColumns: number; // pillars per side
+  soundwallRows: number;    // history depth
+
+  // floating geometry nebula view
+  geometrynebulaFullscreen: boolean;
+  geometrynebulaUsePalette: boolean;
+  geometrynebulaAmplitude: number;
+  geometrynebulaCount: number;
+  geometrynebulaSpread: number;
+  geometrynebulaOrbitSpeed: number;
+  geometrynebulaSpinSpeed: number;
+
   // 3D combo view
   comboSphereSize: number;       // base sphere scale (1 = default)
   comboSphereSpinSpeed: number;  // sphere rotation speed
@@ -132,6 +172,9 @@ export type Settings = {
   bgColor: string; // scene background colour
 
   activePreset: string | null; // last applied built-in preset, cleared on manual edits
+
+  /** Randomize scope toggle: false = post FX only, true = post FX + view settings. */
+  randomizeViewSettings: boolean;
 
   /** When on, saved slots (1–5) are loaded in rotation, skipping empty slots. */
   slotCycleMode: boolean;
@@ -207,6 +250,34 @@ export const DEFAULT_SETTINGS: Settings = {
   terrainAmplitude: 1,
   terrainColumns: 128,
   terrainWireframe: true,
+  obsidianFullscreen: false,
+  obsidianUsePalette: true,
+  obsidianAmplitude: 1,
+  obsidianShardDetail: 1,
+  torusFullscreen: false,
+  torusUsePalette: true,
+  torusAmplitude: 1,
+  torusParticleCount: 5000,
+  torusSpeed: 1,
+  torusCount: 1,
+  torusSpacing: 11.4,
+  torusSize: 1,
+  torusParticleSize: 0.06,
+  torusColorMode: "individual",
+  torusRotationMode: "odd-upright",
+  torusOddUpright: false,
+  soundwallFullscreen: false,
+  soundwallUsePalette: true,
+  soundwallAmplitude: 1,
+  soundwallColumns: 20,
+  soundwallRows: 12,
+  geometrynebulaFullscreen: false,
+  geometrynebulaUsePalette: true,
+  geometrynebulaAmplitude: 1.5,
+  geometrynebulaCount: 60,
+  geometrynebulaSpread: 1.6,
+  geometrynebulaOrbitSpeed: 1,
+  geometrynebulaSpinSpeed: 1,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,
@@ -254,6 +325,7 @@ export const DEFAULT_SETTINGS: Settings = {
   performance: false,
   bgColor: "#05060a",
   activePreset: null,
+  randomizeViewSettings: false,
 
   slotCycleMode: false,
   slotCycleSeconds: 22,
@@ -303,8 +375,64 @@ const RANDOM_BG_COLORS = [
   "#ff3d00",
   "#ff2ad4",
   "#ff1744",
-  "#ffffff",
 ] as const;
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace("#", "").trim();
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const v = Number.parseInt(full, 16);
+  return {
+    r: (v >> 16) & 255,
+    g: (v >> 8) & 255,
+    b: v & 255,
+  };
+}
+
+function srgbToLinear(u8: number): number {
+  const c = u8 / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex: string): number {
+  const { r, g, b } = hexToRgb(hex);
+  const R = srgbToLinear(r);
+  const G = srgbToLinear(g);
+  const B = srgbToLinear(b);
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+
+function contrastRatio(a: string, b: string): number {
+  const L1 = relativeLuminance(a);
+  const L2 = relativeLuminance(b);
+  const hi = Math.max(L1, L2);
+  const lo = Math.min(L1, L2);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+function colorDistance(a: string, b: string): number {
+  const A = hexToRgb(a);
+  const B = hexToRgb(b);
+  const dr = A.r - B.r;
+  const dg = A.g - B.g;
+  const db = A.b - B.b;
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+function pickReadableRandomBackground(palette: readonly string[]): string {
+  const scored = RANDOM_BG_COLORS.map((bg) => {
+    let minContrast = Infinity;
+    let minDistance = Infinity;
+    for (const fg of palette) {
+      minContrast = Math.min(minContrast, contrastRatio(bg, fg));
+      minDistance = Math.min(minDistance, colorDistance(bg, fg));
+    }
+    return { bg, score: minContrast * 1.15 + minDistance / 140 };
+  }).sort((a, b) => b.score - a.score);
+
+  const candidates = scored.filter((s) => s.score >= scored[0]!.score * 0.82);
+  const pool = candidates.length > 0 ? candidates : scored;
+  return pool[Math.floor(Math.random() * pool.length)]!.bg;
+}
 
 function normalizeBloomForExtreme(settings: Settings): Settings {
   if (settings.bloomExtreme) return settings;
@@ -588,56 +716,27 @@ export const settingsStore = {
   randomize: () => {
     const r = (min: number, max: number) => min + Math.random() * (max - min);
     const b = (p = 0.5) => Math.random() < p;
+    const pick = <T,>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)]!;
     const keepRippleColumns = state.rippleColumns;
-    const useExtremeBloom = b(0.14);
+    const includeViewSettings = state.randomizeViewSettings;
+    const paletteIndex = Math.floor(Math.random() * PALETTES.length);
+    const palette = PALETTES[paletteIndex]?.colors ?? PALETTES[0].colors;
+    const bgColor = pickReadableRandomBackground(palette);
+    const bgLum = relativeLuminance(bgColor);
+    // Reduce extreme-bloom probability on brighter backgrounds.
+    const useExtremeBloom = bgLum < 0.12 && b(0.07);
     const bloomStrength = useExtremeBloom
-      ? r(0.7, 2)
-      : r(0.12, BLOOM_STRENGTH_MAX_NORMAL);
-    state = normalizeSettings({
-      ...state,
-      activePreset: null,
-      rippleColumns: keepRippleColumns,
-      paletteIndex: Math.floor(Math.random() * PALETTES.length),
-      sphereDisplacement: r(0.1, 1.4),
-      orbitSpeed: r(0, 0.6),
-      barCount: Math.round(r(48, 200) / 8) * 8,
-
-      rippleAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
-
-      datastreamUsePalette: b(0.7),
-      datastreamAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
-      datastreamItemCount: Math.round(r(1000, 30000) / 500) * 500,
-
-      nebulaUsePalette: b(0.7),
-      nebulaAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
-      nebulaDetail: Math.round(r(24, 220) / 4) * 4,
-
-      monolithUsePalette: b(0.7),
-      monolithAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
-      monolithBrightness: r(0.65, 2.4),
-      monolithGridSize: Math.round(r(2, 40)),
-
-      mandalaUsePalette: b(0.7),
-      mandalaAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
-      mandalaLineCount: Math.round(r(2, 48)),
-      mandalaLineWidth: r(1, 8),
-
-      terrainUsePalette: b(0.7),
-      terrainAmplitude: r(MIN_VIEW_AMPLITUDE, 4),
-      terrainColumns: Math.round(r(16, 256) / 8) * 8,
-
-      comboWireframe: b(0.3),
-      classicWireframe: b(0.3),
-      rippleWireframe: b(0.35),
-      nebulaWireframe: b(0.25),
-      monolithWireframe: b(0.3),
-      terrainWireframe: b(0.65),
-
+      ? r(0.45, 1.05)
+      : r(0.07, 0.2);
+    const bloomThreshold = bgLum < 0.1 ? r(0.12, 0.3) : r(0.22, 0.42);
+    const bloomRadius = bgLum < 0.1 ? r(0.25, 0.9) : r(0.2, 0.65);
+    const exposure = bgLum < 0.12 ? r(0.85, 1.15) : r(0.75, 1.02);
+    const postFxPatch: Partial<Settings> = {
       bloom: true,
       bloomExtreme: useExtremeBloom,
       bloomStrength,
-      bloomRadius: r(0.2, 1.2),
-      bloomThreshold: r(0, 0.4),
+      bloomRadius,
+      bloomThreshold,
       chroma: b(0.85), chromaAmount: r(0.0005, 0.008),
       grain: b(0.7), grainAmount: r(0.05, 0.6),
       vignette: b(0.85), vignetteAmount: r(0.7, VIGNETTE_AMOUNT_MAX),
@@ -646,9 +745,126 @@ export const settingsStore = {
       godRays: b(0.7), godRaysAmount: r(0.2, 1.2),
       pixelate: b(0.1), pixelSize: Math.round(r(2, 12)),
       tiltShift: b(0.25), tiltAmount: r(0.5, 2.5),
-      grading: true, exposure: r(0.8, 1.4), contrast: r(0.9, 1.4),
+      grading: true, exposure, contrast: r(0.95, 1.35),
       saturation: r(0.6, 1.6), hue: r(-0.2, 0.2),
-      bgColor: RANDOM_BG_COLORS[Math.floor(Math.random() * RANDOM_BG_COLORS.length)],
+    };
+
+    const viewPatch: Partial<Settings> = includeViewSettings
+      ? {
+          paletteIndex,
+          bgColor,
+
+          // global scene variation
+          particleCount: Math.round(r(2000, 12000) / 500) * 500,
+          sphereDisplacement: r(0.1, 1.4),
+          orbitSpeed: r(0, 0.6),
+          barCount: Math.round(r(48, 200) / 8) * 8,
+
+          // combo
+          comboSphereSize: r(0.2, 3),
+          comboSphereBassPunch: r(0, 1.5),
+          comboSphereSpinSpeed: r(-1.5, 1.5),
+          comboBarRadius: r(2, 10),
+          comboBarHeightScale: r(0.1, 3),
+          comboParticleSize: r(0.2, 4),
+          comboLevelMeter: b(0.75),
+          comboWireframe: b(0.3),
+
+          // classic
+          classicSpin: b(0.4),
+          classicSpinSpeed: r(-2, 2),
+          classicPeakDecay: r(0.05, 3),
+          classicPeakHold: r(0, 5),
+          classicColorBands: b(0.8),
+          classicBlocky: b(0.65),
+          classicSegments: Math.round(r(4, 40)),
+          classicGrid: b(0.7),
+          classicGridOpacity: r(0.05, 0.45),
+          classicPeakStyle: pick(["bar", "thin", "glow", "none"] as const),
+          classicPeakColor: pick([...palette, "#ffffff"]),
+          classicWireframe: b(0.3),
+
+          // ripple
+          rippleColumns: keepRippleColumns,
+          rippleRingCount: Math.round(r(4, 120)),
+          rippleMaxRadius: r(2, 14),
+          rippleSpeed: r(0, 4),
+          rippleAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          rippleWaveCycles: r(0.2, 6),
+          rippleThickness: r(0.2, 3),
+          rippleRotationSpeed: r(-1, 1),
+          rippleOpacity: r(0.1, 1),
+          rippleWireframe: b(0.35),
+
+          // datastream
+          datastreamUsePalette: b(0.7),
+          datastreamAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          datastreamItemCount: Math.round(r(1000, 30000) / 500) * 500,
+
+          // nebula
+          nebulaUsePalette: b(0.7),
+          nebulaAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          nebulaDetail: Math.round(r(24, 220) / 4) * 4,
+          nebulaWireframe: b(0.25),
+
+          // monolith
+          monolithUsePalette: b(0.7),
+          monolithAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          monolithBrightness: r(0.65, 2.4),
+          monolithGridSize: Math.round(r(2, 40)),
+          monolithWireframe: b(0.3),
+
+          // mandala
+          mandalaUsePalette: b(0.7),
+          mandalaAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          mandalaLineCount: Math.round(r(2, 48)),
+          mandalaLineWidth: r(1, 8),
+
+          // terrain
+          terrainUsePalette: b(0.7),
+          terrainAmplitude: r(MIN_VIEW_AMPLITUDE, 4),
+          terrainColumns: Math.round(r(16, 256) / 8) * 8,
+          terrainWireframe: b(0.65),
+
+          // obsidian
+          obsidianUsePalette: b(0.7),
+          obsidianAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          obsidianShardDetail: Math.round(r(0, 3)),
+
+          // torus
+          torusUsePalette: b(0.7),
+          torusAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          torusParticleCount: Math.round(r(200, 20000) / 200) * 200,
+          torusSpeed: r(0.1, 4),
+          torusCount: Math.round(r(1, 5)),
+          torusSpacing: r(6, 24),
+          torusSize: r(0.5, 1.8),
+          torusParticleSize: r(0.01, 0.16),
+          torusColorMode: pick(["shared", "individual"] as const),
+          torusRotationMode: pick(["flat", "odd-upright", "alternating-x", "alternating-z", "fan"] as const),
+          torusOddUpright: b(0.5),
+
+          // sound-wall
+          soundwallUsePalette: b(0.7),
+          soundwallAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          soundwallColumns: Math.round(r(4, 40)),
+          soundwallRows: Math.round(r(2, 24)),
+
+          // geometry nebula
+          geometrynebulaUsePalette: b(0.7),
+          geometrynebulaAmplitude: r(0.05, 5),
+          geometrynebulaCount: Math.round(r(6, 120) / 6) * 6,
+          geometrynebulaSpread: r(0.8, 3),
+          geometrynebulaOrbitSpeed: r(0.1, 2.5),
+          geometrynebulaSpinSpeed: r(0.1, 4),
+        }
+      : {};
+
+    state = normalizeSettings({
+      ...state,
+      activePreset: null,
+      ...viewPatch,
+      ...postFxPatch,
     });
     emit();
   },

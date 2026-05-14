@@ -28,6 +28,10 @@ export function Shortcuts() {
     monolith: "monolithFullscreen",
     mandala: "mandalaFullscreen",
     terrain: "terrainFullscreen",
+    obsidian: "obsidianFullscreen",
+    torus: "torusFullscreen",
+    soundwall: "soundwallFullscreen",
+    geometrynebula: "geometrynebulaFullscreen",
   };
   const is3DMode = !Boolean(settings[fullscreenByView[settings.view]]);
 
@@ -62,8 +66,16 @@ export function Shortcuts() {
       "mandala2d",
       "terrain",
       "terrain2d",
+      "obsidian",
+      "obsidian2d",
+      "torus",
+      "torus2d",
+      "soundwall",
+      "soundwall2d",
+      "geometrynebula",
+      "geometrynebula2d",
     ] as const;
-    const labelByView: Record<"combo" | "classic" | "ripple" | "datastream" | "nebula" | "monolith" | "mandala" | "terrain", string> = {
+    const labelByView: Record<Settings["view"], string> = {
       combo: "Combo",
       classic: "Classic",
       ripple: "Ripple",
@@ -72,9 +84,13 @@ export function Shortcuts() {
       monolith: "Monolith",
       mandala: "Mandala",
       terrain: "Terrain",
+      obsidian: "Obsidian",
+      torus: "Torus",
+      soundwall: "Sound-Wall",
+      geometrynebula: "Geo Nebula",
     };
     const current = settingsStore.get();
-    const fullKeyByView = {
+    const fullKeyByView: Record<Settings["view"], keyof Settings> = {
       combo: "comboFullscreen",
       classic: "classicFullscreen",
       ripple: "rippleFullscreen",
@@ -83,13 +99,17 @@ export function Shortcuts() {
       monolith: "monolithFullscreen",
       mandala: "mandalaFullscreen",
       terrain: "terrainFullscreen",
-    } as const;
+      obsidian: "obsidianFullscreen",
+      torus: "torusFullscreen",
+      soundwall: "soundwallFullscreen",
+      geometrynebula: "geometrynebulaFullscreen",
+    };
     const cur = current[fullKeyByView[current.view]]
       ? (`${current.view}2d` as typeof order[number])
       : (current.view as typeof order[number]);
     const next = order[(order.indexOf(cur) + 1) % order.length] ?? "combo";
     const is2d = next.endsWith("2d");
-    const view = (is2d ? next.slice(0, -2) : next) as keyof typeof labelByView;
+    const view = (is2d ? next.slice(0, -2) : next) as Settings["view"];
     if (view === "combo") settingsStore.set({ view, comboFullscreen: is2d });
     else if (view === "classic") settingsStore.set({ view, classicFullscreen: is2d });
     else if (view === "ripple") settingsStore.set({ view, rippleFullscreen: is2d });
@@ -98,6 +118,10 @@ export function Shortcuts() {
     else if (view === "monolith") settingsStore.set({ view, monolithFullscreen: is2d });
     else if (view === "mandala") settingsStore.set({ view, mandalaFullscreen: is2d });
     else if (view === "terrain") settingsStore.set({ view, terrainFullscreen: is2d });
+    else if (view === "obsidian") settingsStore.set({ view, obsidianFullscreen: is2d });
+    else if (view === "torus") settingsStore.set({ view, torusFullscreen: is2d });
+    else if (view === "soundwall") settingsStore.set({ view, soundwallFullscreen: is2d });
+    else if (view === "geometrynebula") settingsStore.set({ view, geometrynebulaFullscreen: is2d });
     showFlash(`${labelByView[view]} ${is2d ? "2D" : "3D"}`);
   };
   const doFullscreen = () => { toggleFullscreen(); };
