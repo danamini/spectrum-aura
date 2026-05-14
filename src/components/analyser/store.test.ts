@@ -132,21 +132,66 @@ describe("analyser store utility functions", () => {
     expect(state.bloomStrength).toBe(1.0);
   });
 
-  it("randomize produces valid background color with contrast", async () => {
+  it("exposes the new torus and geometry nebula defaults", async () => {
     const { settingsStore } = await import("./store");
 
-    for (let i = 0; i < 5; i++) {
-      settingsStore.randomize();
-      const state = settingsStore.get();
-      
-      // Check that bgColor is a valid hex color
-      expect(state.bgColor).toMatch(/^#[0-9a-f]{6}$/i);
-      // Should have variance in background colors
-      if (i > 0) {
-        // At least some randomizations should produce different colors
-        expect(state.bgColor).toBeDefined();
-      }
-    }
+    const state = settingsStore.get();
+
+    expect(state.randomizeViewSettings).toBe(false);
+    expect(state.torusCount).toBe(1);
+    expect(state.torusSpacing).toBe(11.4);
+    expect(state.torusParticleSize).toBe(0.06);
+    expect(state.geometrynebulaAmplitude).toBe(1.5);
+    expect(state.geometrynebulaSpread).toBe(1.6);
+    expect(state.geometrynebulaOrbitSpeed).toBe(1);
+    expect(state.geometrynebulaSpinSpeed).toBe(1);
+  });
+
+  it("keeps randomize scoped to post fx when view settings are disabled", async () => {
+    const { settingsStore } = await import("./store");
+
+    settingsStore.set({
+      torusCount: 4,
+      geometrynebulaSpread: 2.2,
+      randomizeViewSettings: false,
+    });
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+
+    settingsStore.randomize();
+    const state = settingsStore.get();
+
+    expect(state.torusCount).toBe(4);
+    expect(state.geometrynebulaSpread).toBe(2.2);
+    expect(state.randomizeViewSettings).toBe(false);
+    expect(state.bgColor).toMatch(/^#[0-9a-f]{6}$/i);
+
+    randomSpy.mockRestore();
+  });
+
+  it("randomizes the new view settings when the scope toggle is enabled", async () => {
+    const { settingsStore } = await import("./store");
+
+    settingsStore.set({
+      torusCount: 1,
+      geometrynebulaSpread: 1.6,
+      geometrynebulaOrbitSpeed: 1,
+      geometrynebulaSpinSpeed: 1,
+      randomizeViewSettings: true,
+    });
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+
+    settingsStore.randomize();
+    const state = settingsStore.get();
+
+    expect(state.randomizeViewSettings).toBe(true);
+    expect(state.torusCount).toBe(5);
+    expect(state.geometrynebulaSpread).toBeGreaterThan(2.9);
+    expect(state.geometrynebulaOrbitSpeed).toBeGreaterThan(2.4);
+    expect(state.geometrynebulaSpinSpeed).toBeGreaterThan(3.8);
+
+    randomSpy.mockRestore();
   });
 
   it("applies presets and normalizes settings", async () => {
@@ -182,7 +227,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("save and load slots preserve settings", async () => {
-    const { settingsStore, SLOT_COUNT } = await import("./store");
+    const { settingsStore } = await import("./store");
 
     // Customize settings
     settingsStore.set({ view: "classic", barCount: 100, vignetteAmount: 0.8 });

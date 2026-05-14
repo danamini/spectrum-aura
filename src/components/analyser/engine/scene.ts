@@ -141,6 +141,19 @@ export class Scene {
   private torusParticleMinor?: Float32Array;
   private torusParticleCount = 5000;
   private torusParticleColors?: Float32Array;
+  private torusCells: Array<{
+    root: THREE.Group;
+    mesh: THREE.Mesh;
+    particles: THREE.Points;
+    meshMat: THREE.MeshPhysicalMaterial;
+    particleMat: THREE.PointsMaterial;
+  }> = [];
+  private torusCount = 1;
+  private torusSpacing = 11.4;
+  private torusSize = 1;
+  private torusOddUpright = false;
+  private torusColorMode: "shared" | "individual" = "individual";
+  private torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan" = "odd-upright";
 
   // sound wall view
   private soundwallPillars?: THREE.InstancedMesh;
@@ -163,6 +176,7 @@ export class Scene {
   private geoNebulaFloor?: THREE.Mesh;
   private geoNebulaCoreLight?: THREE.PointLight;
   private geoNebulaCount = 60;
+  private geoNebulaSpread = 1.6;
 
   postFxBoost = { bloom: 1, glitch: 0 };
 
@@ -299,6 +313,7 @@ export class Scene {
     this.sphereMat.uniforms.uColorA.value.copy(this.paletteThree[0]);
     this.sphereMat.uniforms.uColorB.value.copy(this.paletteThree[1]);
     this.sphereMat.uniforms.uColorC.value.copy(this.paletteThree[2]);
+    this.refreshTorusColors();
     // refresh combo bar colors
     if (this.bars?.instanceColor) {
       const arr = this.bars.instanceColor.array as Float32Array;
@@ -394,6 +409,37 @@ export class Scene {
       this.nebulaMat.uniforms.uColorB.value.copy(this.paletteThree[1]);
       this.nebulaMat.uniforms.uColorC.value.copy(this.paletteThree[2]);
     }
+  }
+
+  private refreshTorusColors() {
+    if (this.torusCells.length === 0) return;
+    const count = this.torusCells.length;
+    for (let i = 0; i < count; i++) {
+      const cell = this.torusCells[i]!;
+      if (this.torusColorMode === "individual") {
+        const t = count <= 1 ? 0 : i / (count - 1);
+        const body = this.colorAtInto(t, this.tmpColor);
+        const accent = this.colorAtInto(Math.min(1, t + 0.18), new THREE.Color());
+        cell.meshMat.color.copy(body).multiplyScalar(0.9);
+        cell.meshMat.emissive.copy(body).lerp(this.paletteThree[2], 0.2);
+        cell.particleMat.color.copy(accent);
+      } else {
+        cell.meshMat.color.copy(this.paletteThree[1]);
+        cell.meshMat.emissive.copy(this.paletteThree[2]);
+        cell.particleMat.color.copy(this.paletteThree[0]);
+      }
+      cell.meshMat.needsUpdate = true;
+      cell.particleMat.needsUpdate = true;
+    }
+  }
+
+  private disposeTorusCells() {
+    for (const cell of this.torusCells) {
+      this.torusGroup.remove(cell.root);
+      cell.meshMat.dispose();
+      cell.particleMat.dispose();
+    }
+    this.torusCells = [];
   }
 
   comboBarMat!: THREE.MeshStandardMaterial;
@@ -1392,7 +1438,7 @@ export class Scene {
   }
 
   private updateObsidian(
-    _dt: number,
+    dt: number,
     _time: number,
     audio: AudioBands,
     opts: { obsidianAmplitude: number; obsidianUsePalette: boolean },
@@ -1460,16 +1506,21 @@ export class Scene {
   // ─── Hyper-Torus Particle Accelerator ───────────────────────────────────────
 
   buildTorus(particleCount: number = this.torusParticleCount) {
+    this.disposeTorusCells();
+
     // Dispose previous
     if (this.torusMesh) {
-      this.torusGroup.remove(this.torusMesh);
       this.torusMesh.geometry.dispose();
       this.torusMat?.dispose();
+      this.torusMesh = undefined;
+      this.torusMat = undefined;
     }
     if (this.torusParticles) {
-      this.torusGroup.remove(this.torusParticles);
       this.torusParticleGeo?.dispose();
       this.torusParticleMat?.dispose();
+      this.torusParticles = undefined;
+      this.torusParticleGeo = undefined;
+      this.torusParticleMat = undefined;
     }
     this.torusParticleCount = Math.max(200, particleCount);
 
@@ -1488,7 +1539,7 @@ export class Scene {
     this.torusMat = torusMat;
     this.torusMesh = new THREE.Mesh(torusGeo, torusMat);
     this.torusMesh.rotation.x = Math.PI / 2;
-    this.torusGroup.add(this.torusMesh);
+    this.torusMesh.visible = false;
 
     // Particles orbiting inside the torus tube
     const count = this.torusParticleCount;
@@ -1527,14 +1578,88 @@ export class Scene {
     this.torusParticleGeo = geo;
     this.torusParticleMat = mat;
     this.torusParticles = new THREE.Points(geo, mat);
-    this.torusGroup.add(this.torusParticles);
+    this.syncTorusLayout(this.torusCount, this.torusOddUpright, this.torusSpacing, this.torusSize, this.torusRotationMode, this.torusColorMode);
+  }
+
+  private syncTorusLayout(
+    rawCount: number,
+    oddUpright: boolean,
+    spacing: number,
+    size: number,
+    rotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan",
+    colorMode: "shared" | "individual",
+  ) {
+    const count = Math.max(1, Math.min(5, Math.round(rawCount)));
+    this.torusCount = count;
+    this.torusOddUpright = oddUpright;
+    this.torusSpacing = Math.max(6, Math.min(24, spacing));
+    this.torusSize = Math.max(0.5, Math.min(1.8, size));
+    this.torusRotationMode = rotationMode;
+    this.torusColorMode = colorMode;
+    if (!this.torusMesh || !this.torusParticles) return;
+
+    this.disposeTorusCells();
+
+    while (this.torusCells.length < count) {
+      const root = new THREE.Group();
+      const meshMat = this.torusMat!.clone();
+      const particleMat = this.torusParticleMat!.clone();
+      const mesh = new THREE.Mesh(this.torusMesh.geometry, meshMat);
+      const particles = new THREE.Points(this.torusParticleGeo!, particleMat);
+      mesh.rotation.x = this.torusMesh.rotation.x;
+      mesh.visible = false;
+      root.add(mesh);
+      root.add(particles);
+      this.torusGroup.add(root);
+      this.torusCells.push({ root, mesh, particles, meshMat, particleMat });
+    }
+
+    const center = (count - 1) / 2;
+    for (let i = 0; i < this.torusCells.length; i++) {
+      const cell = this.torusCells[i]!;
+      cell.root.position.set((i - center) * this.torusSpacing, 0, 0);
+      cell.root.scale.setScalar(this.torusSize);
+      const odd = i % 2 === 1;
+      switch (rotationMode) {
+        case "flat":
+          cell.root.rotation.set(0, 0, 0);
+          break;
+        case "odd-upright":
+          cell.root.rotation.set(0, 0, odd ? Math.PI / 2 : 0);
+          break;
+        case "alternating-x":
+          cell.root.rotation.set(odd ? Math.PI / 2 : 0, 0, 0);
+          break;
+        case "alternating-z":
+          cell.root.rotation.set(0, 0, odd ? Math.PI / 2 : -Math.PI / 2);
+          break;
+        case "fan":
+          cell.root.rotation.set(odd ? Math.PI / 3 : 0, i * 0.18, odd ? Math.PI / 4 : 0);
+          break;
+      }
+    }
+
+    this.refreshTorusColors();
   }
 
   private updateTorus(
     dt: number,
     _time: number,
     audio: AudioBands,
-    opts: { torusAmplitude: number; torusUsePalette: boolean; torusParticleCount: number; torusSpeed: number },
+    opts: {
+      torusAmplitude: number;
+      torusUsePalette: boolean;
+      torusParticleCount: number;
+      torusSpeed: number;
+      torusCount: number;
+      torusSpacing: number;
+      torusSize: number;
+      torusParticleSize: number;
+      torusColorMode: "shared" | "individual";
+      torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
+      torusOddUpright: boolean;
+      torusFullscreen: boolean;
+    },
   ) {
     if (!this.torusMesh || !this.torusParticles || !this.torusParticleAngles || !this.torusParticleMinor) return;
     const amp = Math.max(0.05, opts.torusAmplitude);
@@ -1547,6 +1672,24 @@ export class Scene {
     if (opts.torusParticleCount !== this.torusParticleCount) {
       this.buildTorus(opts.torusParticleCount);
       return;
+    }
+    const rotationMode = opts.torusFullscreen ? "flat" : opts.torusRotationMode;
+    if (
+      opts.torusCount !== this.torusCount ||
+      opts.torusOddUpright !== this.torusOddUpright ||
+      opts.torusSpacing !== this.torusSpacing ||
+      opts.torusSize !== this.torusSize ||
+      opts.torusColorMode !== this.torusColorMode ||
+      rotationMode !== this.torusRotationMode
+    ) {
+      this.syncTorusLayout(
+        opts.torusCount,
+        opts.torusOddUpright,
+        opts.torusSpacing,
+        opts.torusSize,
+        rotationMode,
+        opts.torusColorMode,
+      );
     }
 
     // BPM-locked speed: higher BPM = faster orbit
@@ -1607,7 +1750,12 @@ export class Scene {
     if (colArr) (this.torusParticleGeo!.attributes.color as THREE.BufferAttribute).needsUpdate = true;
 
     if (this.torusParticleMat) {
-      this.torusParticleMat.size = (0.045 + bass * 0.1) * Math.max(0.5, amp);
+      const particleSize = Math.max(0.005, opts.torusParticleSize) * (0.8 + bass * 0.5) * Math.max(0.5, amp);
+      this.torusParticleMat.size = particleSize;
+      for (const cell of this.torusCells) {
+        cell.particleMat.size = particleSize;
+        cell.meshMat.opacity = this.torusMat.opacity;
+      }
     }
 
     this.postFxBoost.bloom = 1 + bass * 0.8 + mid * 0.3;
@@ -1746,7 +1894,7 @@ export class Scene {
 
   // ─── Floating Geometry Nebula ───────────────────────────────────────────────
 
-  buildGeoNebula(count: number = this.geoNebulaCount) {
+  buildGeoNebula(count: number = this.geoNebulaCount, spread: number = this.geoNebulaSpread) {
     // Dispose previous
     for (const s of this.geoNebulaMeshes) {
       this.geometrynebulaGroup.remove(s.mesh);
@@ -1763,6 +1911,7 @@ export class Scene {
       this.geometrynebulaGroup.remove(this.geoNebulaCoreLight);
     }
     this.geoNebulaCount = Math.max(6, Math.round(count));
+    this.geoNebulaSpread = Math.max(0.8, Math.min(3, spread));
     const N = this.geoNebulaCount;
 
     // Create a mix of geometry types
@@ -1780,7 +1929,7 @@ export class Scene {
       const y = 1 - (i / (N - 1)) * 2;
       const rad = Math.sqrt(1 - y * y);
       const theta = phi * i;
-      const baseRadius = 3.2 + Math.sin(i * 2.3) * 0.6;
+      const baseRadius = (3.2 + Math.sin(i * 2.3) * 0.6) * this.geoNebulaSpread;
       const bx = Math.cos(theta) * rad * baseRadius;
       const by = y * baseRadius;
       const bz = Math.sin(theta) * rad * baseRadius;
@@ -1808,7 +1957,7 @@ export class Scene {
         basePos: new THREE.Vector3(bx, by, bz),
         rotAxis: axis,
         rotSpeed: 0.4 + Math.random() * 1.2,
-        baseScale: 1,
+        baseScale: 0.8 + Math.random() * 0.8,
         mat,
       });
     }
@@ -1838,11 +1987,19 @@ export class Scene {
     dt: number,
     time: number,
     audio: AudioBands,
-    opts: { geometrynebulaAmplitude: number; geometrynebulaUsePalette: boolean; geometrynebulaCount: number },
+    opts: {
+      geometrynebulaAmplitude: number;
+      geometrynebulaUsePalette: boolean;
+      geometrynebulaCount: number;
+      geometrynebulaSpread: number;
+      geometrynebulaOrbitSpeed: number;
+      geometrynebulaSpinSpeed: number;
+    },
   ) {
     const targetCount = Math.max(6, Math.round(opts.geometrynebulaCount));
-    if (targetCount !== this.geoNebulaCount) {
-      this.buildGeoNebula(targetCount);
+    const targetSpread = Math.max(0.8, Math.min(3, opts.geometrynebulaSpread));
+    if (targetCount !== this.geoNebulaCount || targetSpread !== this.geoNebulaSpread) {
+      this.buildGeoNebula(targetCount, targetSpread);
       return;
     }
     if (this.geoNebulaMeshes.length === 0) return;
@@ -1853,13 +2010,16 @@ export class Scene {
     const bins = audio.bins;
     const N = this.geoNebulaMeshes.length;
     const activeBins = Math.max(1, Math.floor(bins.length * 0.8));
+    const orbitSpeed = Math.max(0.1, opts.geometrynebulaOrbitSpeed);
+    const spinSpeed = Math.max(0.1, opts.geometrynebulaSpinSpeed);
 
     // Whole cluster slow rotation
-    this.geometrynebulaGroup.rotation.y += dt * (0.08 + mid * 0.25);
+    this.geometrynebulaGroup.rotation.y += dt * (0.08 + mid * 0.25) * orbitSpeed;
+    this.geometrynebulaGroup.rotation.x += dt * 0.03 * (0.3 + bass * 0.7) * orbitSpeed;
 
     // Core light
     if (this.geoNebulaCoreLight) {
-      const targetIntensity = (2 + bass * 12 + mid * 5) * amp;
+      const targetIntensity = (2.4 + bass * 14 + mid * 6) * amp * orbitSpeed;
       this.geoNebulaCoreLight.intensity += (targetIntensity - this.geoNebulaCoreLight.intensity) * Math.min(1, dt * 6);
       if (opts.geometrynebulaUsePalette) {
         this.geoNebulaCoreLight.color.copy(this.paletteThree[1]).lerp(this.paletteThree[0], bass);
@@ -1873,19 +2033,20 @@ export class Scene {
       const binVal = (bins[binIdx] ?? 0) / 255;
 
       // Scale pulse to assigned frequency
-      const targetScale = (1 + binVal * 1.8 * amp) * (1 + bass * 0.3);
+      const targetScale = s.baseScale * (1 + binVal * 2.1 * amp + bass * 0.35);
       const curScale = s.mesh.scale.x;
-      s.mesh.scale.setScalar(curScale + (targetScale - curScale) * Math.min(1, dt * 9));
+      s.mesh.scale.setScalar(curScale + (targetScale - curScale) * Math.min(1, dt * (9 + orbitSpeed * 4)));
 
       // Position — orbit gently around base position
-      const orbitAmt = (0.2 + high * 0.6) * amp;
-      const px = s.basePos.x + Math.sin(time * 0.7 + i * 0.5) * orbitAmt;
-      const py = s.basePos.y + Math.cos(time * 0.5 + i * 0.4) * orbitAmt * 0.5;
-      const pz = s.basePos.z + Math.cos(time * 0.6 + i * 0.6) * orbitAmt;
+      const orbitAmt = (0.45 + high * 1.1) * amp * orbitSpeed;
+      const wobble = 0.18 + binVal * 0.4;
+      const px = s.basePos.x + Math.sin(time * (0.7 + orbitSpeed * 0.25) + i * 0.5) * orbitAmt * wobble;
+      const py = s.basePos.y + Math.cos(time * (0.55 + orbitSpeed * 0.18) + i * 0.4) * orbitAmt * 0.7 * wobble;
+      const pz = s.basePos.z + Math.cos(time * (0.6 + orbitSpeed * 0.22) + i * 0.6) * orbitAmt * wobble;
       s.mesh.position.set(px, py, pz);
 
       // Rotation per shape
-      s.mesh.rotateOnWorldAxis(s.rotAxis, dt * s.rotSpeed * (0.5 + binVal * 2));
+      s.mesh.rotateOnWorldAxis(s.rotAxis, dt * s.rotSpeed * spinSpeed * (0.5 + binVal * 2.4));
 
       // Holographic color update
       if (opts.geometrynebulaUsePalette) {
@@ -1912,7 +2073,7 @@ export class Scene {
       }
     }
 
-    this.postFxBoost.bloom = 1 + bass * 1.0 + mid * 0.5;
+    this.postFxBoost.bloom = 1 + bass * 1.15 + mid * 0.65 + high * 0.25;
     this.postFxBoost.glitch = 0;
   }
 
@@ -1991,6 +2152,13 @@ export class Scene {
     torusAmplitude: number;
     torusParticleCount: number;
     torusSpeed: number;
+    torusCount: number;
+    torusSpacing: number;
+    torusSize: number;
+    torusParticleSize: number;
+    torusColorMode: "shared" | "individual";
+    torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
+    torusOddUpright: boolean;
     soundwallFullscreen: boolean;
     soundwallUsePalette: boolean;
     soundwallAmplitude: number;
@@ -2036,6 +2204,13 @@ export class Scene {
     const drift = opts.cameraDrift && driftAmt > 1e-4 ? driftAmt : 0;
     // Position drift scaled down so the lens stays near the subject; FOV still uses full `drift`.
     const driftPos = drift > 0 ? drift * 0.26 : 0;
+    const applyCameraDrift = (scale = 1) => {
+      if (drift <= 0) return;
+      const a = driftPos * scale * 1.35;
+      this.camera.position.x += Math.sin(time * 0.27) * a + Math.cos(time * 0.16) * a * 0.7 + Math.sin(time * 0.43) * a * 0.35;
+      this.camera.position.y += Math.sin(time * 0.24) * a * 0.85 + Math.sin(time * 0.38) * a * 0.45;
+      this.camera.position.z += Math.cos(time * 0.22) * a * 1.05 + Math.sin(time * 0.2) * a * 0.65 + Math.cos(time * 0.31) * a * 0.3;
+    };
 
     if (opts.view === "classic") {
       if (this.classicGrid) this.classicGrid.visible = opts.grid;
@@ -2193,6 +2368,7 @@ export class Scene {
         const rad = 12;
         this.camera.position.set(Math.sin(this.orbitAngle) * rad, 4.5, Math.cos(this.orbitAngle) * rad);
       }
+      applyCameraDrift(2.5);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -2228,6 +2404,7 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.7 + 0.05);
         this.camera.position.set(Math.sin(this.orbitAngle) * 8.5, Math.sin(time * 0.4) * 0.7, Math.cos(this.orbitAngle) * 8.5);
       }
+      applyCameraDrift(2.2);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -2264,6 +2441,7 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.5 + 0.045);
         this.camera.position.set(Math.sin(this.orbitAngle) * 24, 12, Math.cos(this.orbitAngle) * 24);
       }
+      applyCameraDrift(3.2);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -2297,6 +2475,7 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.85 + 0.12);
         this.camera.position.set(Math.sin(this.orbitAngle) * 10.5, Math.sin(time * 0.5) * 1.2, Math.cos(this.orbitAngle) * 10.5);
       }
+      applyCameraDrift(2.4);
       this.camera.lookAt(0, 0, 0);
       return;
     }
@@ -2332,6 +2511,7 @@ export class Scene {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.45 + 0.02);
         this.camera.position.set(Math.sin(this.orbitAngle) * 15, 7, Math.cos(this.orbitAngle) * 15);
       }
+      applyCameraDrift(2.8);
       this.camera.lookAt(0, -1.5, 7);
       return;
     }
@@ -2366,6 +2546,7 @@ export class Scene {
         this.camera.position.set(Math.sin(this.orbitAngle) * rad, 2 + Math.sin(time * 0.4) * 1.2, Math.cos(this.orbitAngle) * rad);
       }
       const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
+      applyCameraDrift(4.2);
       this.camera.position.y += bk * 1.2;
       this.camera.fov += (55 - this.kick * 8 - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
@@ -2379,12 +2560,20 @@ export class Scene {
         torusUsePalette: opts.torusUsePalette,
         torusParticleCount: opts.torusParticleCount,
         torusSpeed: opts.torusSpeed,
+        torusCount: opts.torusCount,
+        torusSpacing: opts.torusSpacing,
+        torusSize: opts.torusSize,
+        torusParticleSize: opts.torusParticleSize,
+        torusColorMode: opts.torusColorMode,
+        torusRotationMode: opts.torusRotationMode,
+        torusOddUpright: opts.torusOddUpright,
+        torusFullscreen: opts.torusFullscreen,
       });
       if (opts.torusFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
-        this.camera.position.y += (0 - this.camera.position.y) * follow;
-        this.camera.position.z += (12 - this.camera.position.z) * follow;
+        this.camera.position.y += (20 - this.camera.position.y) * follow;
+        this.camera.position.z += (0.01 - this.camera.position.z) * follow;
         this.camera.fov += (52 - this.camera.fov) * Math.min(1, dt * 10);
         this.camera.updateProjectionMatrix();
         this.camera.lookAt(0, 0, 0);
@@ -2402,6 +2591,7 @@ export class Scene {
         this.camera.position.set(Math.sin(this.orbitAngle) * 12, Math.sin(time * 0.3) * 2.5 + 0.5, Math.cos(this.orbitAngle) * 12);
       }
       const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
+      applyCameraDrift(4.5);
       this.camera.position.y += bk * 1.0;
       this.camera.fov += (55 - bk * 6 - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
@@ -2442,6 +2632,7 @@ export class Scene {
         this.camera.position.y += (4.5 - this.camera.position.y) * Math.min(1, dt * 3);
         this.camera.position.z += (9 - this.camera.position.z) * Math.min(1, dt * 3);
       }
+      applyCameraDrift(4.8);
       this.camera.position.y += bk * 1.5;
       this.camera.fov += (60 + fovDistort - bk * 8 - this.camera.fov) * Math.min(1, dt * 12);
       this.camera.updateProjectionMatrix();
@@ -2454,6 +2645,9 @@ export class Scene {
         geometrynebulaAmplitude: opts.geometrynebulaAmplitude,
         geometrynebulaUsePalette: opts.geometrynebulaUsePalette,
         geometrynebulaCount: opts.geometrynebulaCount,
+        geometrynebulaSpread: opts.geometrynebulaSpread,
+        geometrynebulaOrbitSpeed: opts.geometrynebulaOrbitSpeed,
+        geometrynebulaSpinSpeed: opts.geometrynebulaSpinSpeed,
       });
       if (opts.geometrynebulaFullscreen) {
         const follow = Math.min(1, dt * 8);
@@ -2477,6 +2671,7 @@ export class Scene {
         this.camera.position.set(Math.sin(this.orbitAngle) * 11, Math.sin(time * 0.35) * 1.8 + 1, Math.cos(this.orbitAngle) * 11);
       }
       const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
+      applyCameraDrift(2.7);
       this.camera.position.y += bk * 1.2;
       this.camera.fov += (52 - bk * 7 - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
