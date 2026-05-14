@@ -80,6 +80,26 @@ Recent controls:
 - Vignette amount: [0.5, 1.25]
 - Bloom strength: ≤ 0.25 (unless bloomExtreme)
 
+## Shortcut Map
+
+Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bottom shortcut bar:
+
+- `R`: Randomize
+- `V`: Cycle Visual
+- `X`: Source (stops current audio engine)
+- `F`: Toggle fullscreen
+- `N`: Toggle Stats panel
+- `G`: Show/Hide shortcut hints
+- `A`: Auto Cycle Saves (slot auto-cycle mode)
+- `S`: Toggle settings panel
+- `1` to `5`: Load save slot
+- `Shift+1` to `Shift+5`: Save to slot
+
+Settings panel and flyout behavior:
+- The `S` shortcut toggles the panel even when focus is inside a text input/slider control.
+- Clicking the `S` shortcut button toggles open/close (no immediate re-open).
+- Flyout tabs (`Audio`, `Scene`, `Post FX`) delay slightly on open and slide from the sheet edge.
+
 ## Common Tasks
 
 ### Adding a New Visualization Mode
@@ -123,6 +143,8 @@ npm run test                   # Watch mode
   - `store.slots.test.ts`: slot bootstrap, localStorage hydration, legacy ripple migration, slot-cycle preservation
   - `store.normalization.test.ts`: amplitude floor, vignette bounds, bloom cap, preset clearing, reset baseline
   - `store.randomize.test.ts`: randomize scope toggle behavior and new torus/geometry-nebula defaults
+- **Shortcut tests**:
+  - `Shortcuts.test.tsx`: updated labels, `S` settings toggle event, `S` while input focused, `A` auto-cycle toggle
 - **Engine tests**:
   - `engine/bpm-detector.test.ts`: tempo stability, bounded BPM output, reset behavior
 

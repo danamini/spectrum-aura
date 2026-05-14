@@ -1,12 +1,11 @@
 import * as React from "react";
 import { useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ChevronDown, Save, Settings as SettingsIcon, Shuffle, Trash2 } from "lucide-react";
+import { ChevronDown, Save, Shuffle, Trash2 } from "lucide-react";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
   PALETTES,
@@ -16,6 +15,8 @@ import {
   useSlots,
   type Settings,
 } from "./store";
+
+const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 
 // Cooler, clearer toggle switch with explicit ON/OFF affordance
 function Sw({
@@ -151,6 +152,7 @@ export function ControlPanel() {
   const s = useSettings();
   const slots = useSlots();
   const [open, setOpen] = useState(false);
+  const [flyoutVisible, setFlyoutVisible] = useState(false);
   const [ui, setUi] = useState<UIState>(loadUI);
   const flyoutPanelRef = React.useRef<HTMLDivElement | null>(null);
   const updateUi = (patch: Partial<UIState>) => {
@@ -179,6 +181,14 @@ export function ControlPanel() {
       blurFlyoutFocus();
     }
   }, [ui.activeTab]);
+  React.useEffect(() => {
+    if (!open) {
+      setFlyoutVisible(false);
+      return;
+    }
+    const id = window.setTimeout(() => setFlyoutVisible(true), 220);
+    return () => window.clearTimeout(id);
+  }, [open]);
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
 
   const hasViewSettings = true;
@@ -257,20 +267,20 @@ export function ControlPanel() {
     else if (s.view === "geometrynebula") set({ geometrynebulaFullscreen: value });
   };
 
+  React.useEffect(() => {
+    const onToggleSettingsPanel = () => {
+      setOpen((v) => !v);
+    };
+    window.addEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
+    return () => window.removeEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
+  }, []);
+
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
-      <SheetTrigger asChild>
-        <Button
-          size="icon"
-          className="fixed bottom-3 right-3 z-[101] bg-black/50 backdrop-blur border border-white/10 hover:bg-black/70 opacity-20 hover:opacity-100 transition-opacity duration-300"
-        >
-          <SettingsIcon className="h-4 w-4" />
-        </Button>
-      </SheetTrigger>
       <SheetContent
         onInteractOutside={(e) => {
           const t = e.target as HTMLElement | null;
-          if (t && t.closest("[data-analyser-flyout]")) e.preventDefault();
+          if (t && (t.closest("[data-analyser-flyout]") || t.closest("[data-settings-shortcut='true']"))) e.preventDefault();
         }}
         className="analyser-scroll w-[380px] overflow-y-auto bg-black/85 backdrop-blur-xl border-white/10 text-white text-[12px] sm:max-w-[380px]"
       >
@@ -620,7 +630,14 @@ export function ControlPanel() {
       {open && (
         <>
           {/* Vertical tab strip — sits just to the left of the 380px sheet */}
-          <div data-analyser-flyout className="fixed right-[380px] top-1/2 z-[60] -translate-y-1/2 flex flex-col gap-1 animate-fade-in">
+          <div
+            data-analyser-flyout
+            className={
+              "fixed right-[380px] top-1/2 z-[60] -translate-y-1/2 flex flex-col gap-1 " +
+              "transition-all duration-[220ms] ease-out " +
+              (flyoutVisible ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0 pointer-events-none")
+            }
+          >
             {([
               { id: "audio", label: "Audio" },
               { id: "scene", label: "Scene" },
@@ -660,7 +677,7 @@ export function ControlPanel() {
               "analyser-scroll fixed right-[416px] top-0 z-[55] h-screen w-[360px] overflow-y-auto " +
               "bg-black/85 backdrop-blur-xl border-l border-r border-white/10 text-white text-[12px] " +
               "transition-transform duration-300 ease-out " +
-              (ui.activeTab ? "translate-x-0 opacity-100" : "translate-x-[420px] opacity-0 pointer-events-none")
+              (ui.activeTab && flyoutVisible ? "translate-x-0 opacity-100" : "translate-x-[420px] opacity-0 pointer-events-none")
             }
           >
             <div className="p-4 pb-12 space-y-4">

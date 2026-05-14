@@ -1,16 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { settingsStore, useSettings, useSlots, type Settings } from "./store";
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
-
-async function toggleFullscreen() {
-  try {
-    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-    else await document.exitFullscreen();
-  } catch (e) {
-    console.error(e);
-  }
-}
+const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
+const TOGGLE_FULLSCREEN_EVENT = "spectrum-aura:toggle-fullscreen";
+const STOP_AUDIO_EVENT = "spectrum-aura:stop-audio";
 
 export function Shortcuts() {
   const slots = useSlots();
@@ -124,7 +118,9 @@ export function Shortcuts() {
     else if (view === "geometrynebula") settingsStore.set({ view, geometrynebulaFullscreen: is2d });
     showFlash(`${labelByView[view]} ${is2d ? "2D" : "3D"}`);
   };
-  const doFullscreen = () => { toggleFullscreen(); };
+  const doFullscreen = () => {
+    window.dispatchEvent(new Event(TOGGLE_FULLSCREEN_EVENT));
+  };
   const doToggleSlotCycle = () => {
     const on = !settingsStore.get().slotCycleMode;
     if (on) {
@@ -135,11 +131,19 @@ export function Shortcuts() {
       }
     }
     settingsStore.set({ slotCycleMode: on });
-    showFlash(on ? "Preset cycle ON" : "Preset cycle OFF");
+    showFlash(on ? "Save cycle ON" : "Save cycle OFF");
   };
   const doToggleStats = () => {
     window.dispatchEvent(new Event(TOGGLE_STATS_PANEL_EVENT));
     showFlash("Stats for nerds");
+  };
+  const doToggleSettings = () => {
+    window.dispatchEvent(new Event(TOGGLE_SETTINGS_PANEL_EVENT));
+    showFlash("Settings");
+  };
+  const doStopAudio = () => {
+    window.dispatchEvent(new Event(STOP_AUDIO_EVENT));
+    showFlash("Audio stopped");
   };
   const doToggleHints = () => setVisible((v) => !v);
   const doSlot = (i: number) => {
@@ -164,8 +168,9 @@ export function Shortcuts() {
       return byKey != null ? parseInt(byKey, 10) - 1 : null;
     };
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable='true'], [role='textbox']")) return;
+      const k = e.key.toLowerCase();
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target?.closest("input, textarea, [contenteditable='true'], [role='textbox']") && k !== "s") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const slotIdx = slotIndexFromEvent(e);
@@ -177,7 +182,6 @@ export function Shortcuts() {
         return;
       }
 
-      const k = e.key.toLowerCase();
       if (k === "r") {
         doRandomize();
         e.preventDefault();
@@ -188,13 +192,23 @@ export function Shortcuts() {
         e.preventDefault();
         e.stopPropagation();
       }
-      else if (k === "c") {
+      else if (k === "a") {
         doToggleSlotCycle();
         e.preventDefault();
         e.stopPropagation();
       }
       else if (k === "f") {
         doFullscreen();
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      else if (k === "s") {
+        doToggleSettings();
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      else if (k === "x") {
+        doStopAudio();
         e.preventDefault();
         e.stopPropagation();
       }
@@ -210,15 +224,23 @@ export function Shortcuts() {
 
   void slots;
 
-  type Hint = { key: string; label?: string; onClick: (ev: MouseEvent<HTMLButtonElement>) => void; title?: string };
+  type Hint = {
+    key: string;
+    label?: string;
+    onClick: (ev: MouseEvent<HTMLButtonElement>) => void;
+    title?: string;
+    icon?: ReactNode;
+  };
   const hints: Hint[] = [
     { key: "R", label: "Randomize", onClick: () => { doRandomize(); } },
-    { key: "V", label: "Toggle view", onClick: () => { doToggleView(); } },
-    { key: "C", label: "Cycle presets", onClick: () => { doToggleSlotCycle(); } },
+    { key: "V", label: "Cycle Visual", onClick: () => { doToggleView(); } },
+    { key: "X", label: "Source", onClick: () => { doStopAudio(); } },
     { key: "F", label: "Fullscreen", onClick: () => { doFullscreen(); } },
-    { key: "N", label: "Stats for nerds", onClick: () => { doToggleStats(); } },
+    { key: "N", label: "Stats", onClick: () => { doToggleStats(); }, title: "Stats for nerds" },
     { key: "G", label: "Hide hints", onClick: () => { doToggleHints(); } },
   ];
+  const settingsHint: Hint = { key: "S", label: "Settings", onClick: () => { doToggleSettings(); } };
+  const cycleSavesHint: Hint = { key: "A", label: "Auto Cycle Saves", onClick: () => { doToggleSlotCycle(); } };
   const slotHints: Hint[] = [1, 2, 3, 4, 5].map((n) => ({
     key: String(n),
     label: "",
@@ -234,11 +256,13 @@ export function Shortcuts() {
       type="button"
       onClick={h.onClick}
       title={h.title ?? `Press ${h.key}`}
+      data-settings-shortcut={h.key === "S" ? "true" : undefined}
       className="pointer-events-auto flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition-colors hover:bg-white/10 hover:text-white/90"
     >
       <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/70 group-hover:border-white/40">
         {h.key}
       </kbd>
+      {h.icon ? <span className="text-white/75">{h.icon}</span> : null}
       {h.label ? <span>{h.label}</span> : null}
     </button>
   );
@@ -261,9 +285,12 @@ export function Shortcuts() {
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-white/5 bg-black/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70 hover:opacity-100 transition-opacity">
             {hints.map((h) => <Btn key={h.key} h={h} />)}
             <span className="mx-1 h-3 w-px bg-white/10" />
-            <span className="ml-1 text-white/25 normal-case tracking-normal">Slot</span>
+            <Btn h={cycleSavesHint} />
+            <span className="ml-1 text-white/25 normal-case tracking-normal">Saves</span>
             {slotHints.map((h) => <Btn key={h.key} h={h} />)}
             <span className="ml-1 text-white/25 normal-case tracking-normal">⇧+1–5 save</span>
+            <span className="mx-1 h-3 w-px bg-white/10" />
+            <Btn h={settingsHint} />
             </div>
           </div>
         </div>

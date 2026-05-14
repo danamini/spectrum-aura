@@ -4,8 +4,7 @@ import { Scene } from "./engine/scene";
 import { Composer } from "./engine/composer";
 import { AudioEngine } from "./engine/audio";
 import { PALETTES, settingsStore, SLOT_COUNT, useSettings, type ViewMode } from "./store";
-import { Button } from "@/components/ui/button";
-import { Activity, Maximize2, Mic, Minimize2, MonitorSpeaker, Power, X } from "lucide-react";
+import { Maximize2, Mic, Minimize2, MonitorSpeaker, X } from "lucide-react";
 
 type NerdStats = {
   fps: number;
@@ -86,6 +85,8 @@ const EMPTY_STATS: NerdStats = {
 };
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
+const TOGGLE_FULLSCREEN_EVENT = "spectrum-aura:toggle-fullscreen";
+const STOP_AUDIO_EVENT = "spectrum-aura:stop-audio";
 
 export function Analyser() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -93,7 +94,6 @@ export function Analyser() {
   const settings = useSettings();
   const [audioStatus, setAudioStatus] = useState<"idle" | "running" | "error">("idle");
   const [audioError, setAudioError] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [statsFullscreen, setStatsFullscreen] = useState(false);
   const [stats, setStats] = useState<NerdStats>(EMPTY_STATS);
@@ -103,12 +103,6 @@ export function Analyser() {
   useEffect(() => {
     statsOpenRef.current = statsOpen;
   }, [statsOpen]);
-
-  useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
 
   const toggleFullscreen = async () => {
     try {
@@ -162,6 +156,14 @@ export function Analyser() {
     };
     window.addEventListener(TOGGLE_STATS_PANEL_EVENT, onToggleStatsPanel);
     return () => window.removeEventListener(TOGGLE_STATS_PANEL_EVENT, onToggleStatsPanel);
+  }, []);
+
+  useEffect(() => {
+    const onToggleFullscreen = () => {
+      void toggleFullscreen();
+    };
+    window.addEventListener(TOGGLE_FULLSCREEN_EVENT, onToggleFullscreen);
+    return () => window.removeEventListener(TOGGLE_FULLSCREEN_EVENT, onToggleFullscreen);
   }, []);
 
   // engine refs
@@ -658,6 +660,14 @@ export function Analyser() {
     setLiveTempo({ beat: false, bpm: 0, bpmConfidence: 0 });
   };
 
+  useEffect(() => {
+    const onStopAudio = () => {
+      handleStop();
+    };
+    window.addEventListener(STOP_AUDIO_EVENT, onStopAudio);
+    return () => window.removeEventListener(STOP_AUDIO_EVENT, onStopAudio);
+  }, []);
+
   return (
     <div ref={containerRef} className="absolute inset-0 overflow-hidden" style={{ backgroundColor: settings.bgColor }}>
       {audioStatus !== "running" && (
@@ -725,34 +735,6 @@ export function Analyser() {
           </div>
         </div>
       )}
-
-      <div className="fixed bottom-3 right-14 z-[101] flex items-center gap-2 pointer-events-auto">
-        {audioStatus === "running" && (
-          <button
-            onClick={handleStop}
-            className="flex h-10 items-center gap-2 rounded-md border border-white/10 bg-black/50 px-3 font-mono text-[10px] uppercase tracking-[0.2em] text-white/60 backdrop-blur opacity-20 transition-all duration-300 hover:opacity-100 hover:border-red-400/60 hover:bg-red-500/10 hover:text-red-200"
-            title="Stop audio"
-          >
-            <Power className="h-3.5 w-3.5" />
-            Stop
-          </button>
-        )}
-        <Button
-          size="icon"
-          onClick={toggleFullscreen}
-          className="bg-black/50 backdrop-blur border border-white/10 hover:bg-black/70 opacity-20 hover:opacity-100 transition-opacity duration-300 cursor-pointer"
-          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-        >
-          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        </Button>
-        <button
-          onClick={toggleStatsPanel}
-          className="flex items-center justify-center h-10 w-10 rounded-md bg-black/50 backdrop-blur border border-white/10 hover:bg-black/70 opacity-20 hover:opacity-100 transition-opacity duration-300 cursor-pointer"
-          title={statsOpen ? "Hide stats (N)" : "Show stats (N)"}
-        >
-          <Activity className="h-4 w-4" />
-        </button>
-      </div>
 
       {statsOpen && (
         <StatsForNerdsPanel
