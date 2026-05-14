@@ -1,3 +1,5 @@
+import * as THREE from "three";
+
 // Custom shader-pass definitions and the sphere displacement shader.
 
 export const ChromaticAberrationShader = {
@@ -162,6 +164,87 @@ export const ColorGradeShader = {
       hsv.y *= saturation;
       col = hsv2rgb(hsv);
       gl_FragColor = vec4(col, c.a);
+    }
+  `,
+};
+
+export const RadialBlurShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    center: { value: new THREE.Vector2(0.5, 0.5) },
+    strength: { value: 0.0 },
+    zoom: { value: 0.35 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 center;
+    uniform float strength;
+    uniform float zoom;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 dir = center - vUv;
+      vec4 acc = vec4(0.0);
+      float total = 0.0;
+
+      const int SAMPLES = 10;
+      for (int i = 0; i < SAMPLES; i++) {
+        float t = float(i) / float(SAMPLES - 1);
+        float w = 1.0 - t;
+        vec2 uv = vUv + dir * t * zoom * strength;
+        acc += texture2D(tDiffuse, uv) * w;
+        total += w;
+      }
+
+      gl_FragColor = total > 0.0 ? acc / total : texture2D(tDiffuse, vUv);
+    }
+  `,
+};
+
+export const BlueprintSobelShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(1920, 1080) },
+    edgeStrength: { value: 1.5 },
+    threshold: { value: 0.15 },
+    bgColor: { value: new THREE.Color("#07111f") },
+    lineColor: { value: new THREE.Color("#7fdcff") },
+    fillMix: { value: 0.08 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float edgeStrength;
+    uniform float threshold;
+    uniform vec3 bgColor;
+    uniform vec3 lineColor;
+    uniform float fillMix;
+    varying vec2 vUv;
+
+    float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+    void main() {
+      vec2 texel = 1.0 / resolution;
+
+      float tl = luma(texture2D(tDiffuse, vUv + texel * vec2(-1.0, -1.0)).rgb);
+      float l = luma(texture2D(tDiffuse, vUv + texel * vec2(-1.0, 0.0)).rgb);
+      float bl = luma(texture2D(tDiffuse, vUv + texel * vec2(-1.0, 1.0)).rgb);
+      float tr = luma(texture2D(tDiffuse, vUv + texel * vec2(1.0, -1.0)).rgb);
+      float r = luma(texture2D(tDiffuse, vUv + texel * vec2(1.0, 0.0)).rgb);
+      float br = luma(texture2D(tDiffuse, vUv + texel * vec2(1.0, 1.0)).rgb);
+      float top = luma(texture2D(tDiffuse, vUv + texel * vec2(0.0, -1.0)).rgb);
+      float bot = luma(texture2D(tDiffuse, vUv + texel * vec2(0.0, 1.0)).rgb);
+
+      float gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
+      float gy = -tl - 2.0 * top - tr + bl + 2.0 * bot + br;
+      float edge = length(vec2(gx, gy)) * edgeStrength;
+      edge = smoothstep(threshold, threshold + 0.2, edge);
+
+      float base = luma(texture2D(tDiffuse, vUv).rgb) * fillMix;
+      vec3 color = mix(bgColor + base, lineColor, edge);
+      gl_FragColor = vec4(color, 1.0);
     }
   `,
 };

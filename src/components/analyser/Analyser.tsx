@@ -232,7 +232,11 @@ export function Analyser() {
       powerPreference: "high-performance",
     });
     renderer.info.autoReset = false;
-    renderer.setPixelRatio(settingsRef.current.performance ? Math.min(window.devicePixelRatio, 0.85) : Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(
+      settingsRef.current.performance
+        ? Math.min(window.devicePixelRatio, 0.85)
+        : Math.min(window.devicePixelRatio, 2),
+    );
     renderer.setSize(width, height);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -269,11 +273,15 @@ export function Analyser() {
     let lastOpacity = "";
     let lastStatsCommitAt = 0;
     let lastLiveTempoCommitAt = 0;
+    let radialKickEnv = 0;
+    let lastComposerResetKey = `${displayedView}|${settingsRef.current.activePreset ?? ""}|${settingsRef.current.postFxEnabled ? 1 : 0}|${settingsRef.current.motionTrails ? 1 : 0}`;
 
     const onResize = () => {
       const w = container.clientWidth;
       const h = container.clientHeight;
-      const ratio = settingsRef.current.performance ? Math.min(window.devicePixelRatio, 0.85) : Math.min(window.devicePixelRatio, 2);
+      const ratio = settingsRef.current.performance
+        ? Math.min(window.devicePixelRatio, 0.85)
+        : Math.min(window.devicePixelRatio, 2);
       renderer.setPixelRatio(ratio);
       renderer.setSize(w, h);
       scene.resize(w, h);
@@ -284,7 +292,8 @@ export function Analyser() {
     // mouse / pointer drag camera control (active when settings.cameraMouse)
     let dragging = false;
     let activePointerId: number | null = null;
-    let lastX = 0, lastY = 0;
+    let lastX = 0,
+      lastY = 0;
     const dom = renderer.domElement;
     dom.style.touchAction = "none";
     dom.style.display = "block";
@@ -395,6 +404,7 @@ export function Analyser() {
       }
 
       const bands = audio.read(s.beatSensitivity);
+      radialKickEnv = bands.beat ? 1 : Math.max(0, radialKickEnv - dt * 5);
       if (now - lastLiveTempoCommitAt >= 120) {
         lastLiveTempoCommitAt = now;
         setLiveTempo({
@@ -503,7 +513,16 @@ export function Analyser() {
       });
 
       renderer.info.reset();
+      const composerResetKey = `${displayedView}|${s.activePreset ?? ""}|${s.postFxEnabled ? 1 : 0}|${s.motionTrails ? 1 : 0}`;
+      if (composerResetKey !== lastComposerResetKey) {
+        composer.resetTemporalEffects();
+        lastComposerResetKey = composerResetKey;
+      }
       if (s.postFxEnabled) {
+        const bpmPulse =
+          bands.bpm > 0 && bands.bpmConfidence > 0.4
+            ? Math.max(0, Math.sin(((t * (bands.bpm / 60)) % 1) * Math.PI))
+            : radialKickEnv;
         const postFxSettings =
           displayedView === "mandala"
             ? {
@@ -513,7 +532,15 @@ export function Analyser() {
                 glitchWild: s.glitchWild || scene.postFxBoost.glitch > 0.75,
               }
             : s;
-        composer.apply(postFxSettings);
+        composer.apply(postFxSettings, {
+          bass: bands.bass,
+          mid: bands.mid,
+          high: bands.high,
+          centroid: bands.centroid,
+          beat: bands.beat,
+          pulse: bpmPulse,
+          performance: s.performance,
+        });
         composer.render(dt);
       } else {
         renderer.render(scene.scene, scene.camera);
@@ -522,10 +549,13 @@ export function Analyser() {
       if (statsOpenRef.current) {
         statsFrameCounter += 1;
         renderer.getDrawingBufferSize(drawBufferSize);
-        const perfMemory = (performance as Performance & {
-          memory?: { usedJSHeapSize: number };
-        }).memory;
-        const programs = (renderer.info as unknown as { programs?: unknown[] }).programs?.length ?? 0;
+        const perfMemory = (
+          performance as Performance & {
+            memory?: { usedJSHeapSize: number };
+          }
+        ).memory;
+        const programs =
+          (renderer.info as unknown as { programs?: unknown[] }).programs?.length ?? 0;
         if (statsFrameCounter % 3 === 0) {
           pushHistory(fpsHistory, smoothedFps);
           pushHistory(drawCallsHistory, renderer.info.render.calls);
@@ -669,7 +699,11 @@ export function Analyser() {
   }, []);
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden" style={{ backgroundColor: settings.bgColor }}>
+    <div
+      ref={containerRef}
+      className="absolute inset-0 overflow-hidden"
+      style={{ backgroundColor: settings.bgColor }}
+    >
       {audioStatus !== "running" && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
           <div className="pointer-events-auto w-full max-w-md rounded-md border border-white/10 bg-black/70 p-7 backdrop-blur-xl shadow-[0_0_60px_rgba(52,211,153,0.08)]">
@@ -715,26 +749,30 @@ export function Analyser() {
         </div>
       )}
 
-      {audioStatus === "running" && liveTempo.bpm > 0 && liveTempo.bpmConfidence > 0.4 && (settings.showBPM ?? true) && (
-        <div className="absolute bottom-3 left-3 z-10 pointer-events-none">
-          <div className="text-center">
-            <div className="font-mono text-xs uppercase tracking-widest text-white/40 mb-1 flex items-center justify-center gap-2">
-              BPM
-              <span className="px-1.5 py-0.5 rounded text-[6px] font-bold bg-white/10 text-white/50 border border-white/15">
-                EXPERIMENTAL
-              </span>
-            </div>
-            <div className="font-mono text-3xl font-bold text-white/70 tabular-nums"
-              style={{
-                textShadow: `0 0 ${Math.max(8, liveTempo.bpmConfidence * 20)}px rgba(52, 211, 153, ${liveTempo.bpmConfidence * 0.6})`,
-                opacity: 0.3 + liveTempo.bpmConfidence * 0.4
-              }}
-            >
-              {liveTempo.bpm}
+      {audioStatus === "running" &&
+        liveTempo.bpm > 0 &&
+        liveTempo.bpmConfidence > 0.4 &&
+        (settings.showBPM ?? true) && (
+          <div className="absolute bottom-3 left-3 z-10 pointer-events-none">
+            <div className="text-center">
+              <div className="font-mono text-xs uppercase tracking-widest text-white/40 mb-1 flex items-center justify-center gap-2">
+                BPM
+                <span className="px-1.5 py-0.5 rounded text-[6px] font-bold bg-white/10 text-white/50 border border-white/15">
+                  EXPERIMENTAL
+                </span>
+              </div>
+              <div
+                className="font-mono text-3xl font-bold text-white/70 tabular-nums"
+                style={{
+                  textShadow: `0 0 ${Math.max(8, liveTempo.bpmConfidence * 20)}px rgba(52, 211, 153, ${liveTempo.bpmConfidence * 0.6})`,
+                  opacity: 0.3 + liveTempo.bpmConfidence * 0.4,
+                }}
+              >
+                {liveTempo.bpm}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {statsOpen && (
         <StatsForNerdsPanel
@@ -748,9 +786,10 @@ export function Analyser() {
         />
       )}
 
-      {settings.view === "classic" && settings.classicFullscreen && settings.classicShowFreqLabels && audioStatus === "running" && (
-        <FreqLabels />
-      )}
+      {settings.view === "classic" &&
+        settings.classicFullscreen &&
+        settings.classicShowFreqLabels &&
+        audioStatus === "running" && <FreqLabels />}
     </div>
   );
 }
@@ -770,8 +809,20 @@ function StatsForNerdsPanel({
   const [panelSize, setPanelSize] = useState({ width: 360, height: 520 });
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
-  const dragStartRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
-  const resizeStartRef = useRef<{ pointerId: number; startX: number; startY: number; originWidth: number; originHeight: number } | null>(null);
+  const dragStartRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const resizeStartRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originWidth: number;
+    originHeight: number;
+  } | null>(null);
 
   const panelClasses = fullscreen
     ? "fixed inset-4 z-[120]"
@@ -874,8 +925,12 @@ function StatsForNerdsPanel({
         onPointerCancel={onHeaderPointerUp}
       >
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-emerald-300/80">Stats for nerds</p>
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">N toggle • Shift+N full page</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-emerald-300/80">
+            Stats for nerds
+          </p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
+            N toggle • Shift+N full page
+          </p>
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -883,7 +938,11 @@ function StatsForNerdsPanel({
             className="rounded border border-white/15 bg-white/5 p-1.5 text-white/75 transition-colors hover:bg-white/10 hover:text-white"
             title={fullscreen ? "Dock panel" : "Full page"}
           >
-            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            {fullscreen ? (
+              <Minimize2 className="h-3.5 w-3.5" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" />
+            )}
           </button>
           <button
             onClick={onClose}
@@ -904,8 +963,18 @@ function StatsForNerdsPanel({
         </StatSection>
 
         <StatSection title="Renderer">
-          <Stat label="Draw calls" value={String(stats.drawCalls)} sparkline={stats.drawCallsHistory} color="cyan" />
-          <Stat label="Triangles" value={String(stats.triangles)} sparkline={stats.trianglesHistory} color="amber" />
+          <Stat
+            label="Draw calls"
+            value={String(stats.drawCalls)}
+            sparkline={stats.drawCallsHistory}
+            color="cyan"
+          />
+          <Stat
+            label="Triangles"
+            value={String(stats.triangles)}
+            sparkline={stats.trianglesHistory}
+            color="amber"
+          />
           <Stat label="Lines" value={String(stats.lines)} />
           <Stat label="Points" value={String(stats.points)} />
           <Stat label="Objects" value={String(stats.objects)} />
@@ -927,9 +996,19 @@ function StatsForNerdsPanel({
           <Stat label="FFT size" value={stats.fftSize ? String(stats.fftSize) : "n/a"} />
           <Stat label="Smoothing" value={fmt(stats.smoothing, 3)} />
           <Stat label="Gain" value={fmt(stats.gain, 2)} />
-          <Stat label="Bass" value={fmt(stats.bass, 3)} sparkline={stats.bassHistory} color="emerald" />
+          <Stat
+            label="Bass"
+            value={fmt(stats.bass, 3)}
+            sparkline={stats.bassHistory}
+            color="emerald"
+          />
           <Stat label="Mid" value={fmt(stats.mid, 3)} sparkline={stats.midHistory} color="cyan" />
-          <Stat label="High" value={fmt(stats.high, 3)} sparkline={stats.highHistory} color="amber" />
+          <Stat
+            label="High"
+            value={fmt(stats.high, 3)}
+            sparkline={stats.highHistory}
+            color="amber"
+          />
           <Stat label="Centroid" value={fmt(stats.centroid, 3)} />
           <Stat label="Beat" value={stats.beat ? "yes" : "no"} />
           <Stat label="BPM" value={stats.bpm > 0 ? `${stats.bpm} bpm` : "detecting"} />
@@ -981,7 +1060,9 @@ function Stat({
     <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
       <span className="text-white/45">{label}</span>
       <div className="flex items-center gap-2">
-        {sparkline && sparkline.length > 1 && <Sparkline values={sparkline} colorClass={sparkColor} />}
+        {sparkline && sparkline.length > 1 && (
+          <Sparkline values={sparkline} colorClass={sparkColor} />
+        )}
         <span className="text-right text-white/90 tabular-nums">{value}</span>
       </div>
     </div>
@@ -1037,23 +1118,26 @@ function FreqLabels() {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-14 z-[5] flex justify-center px-6 sm:px-10">
       <div className="relative h-6 w-full max-w-[1500px]">
-        <div className="absolute inset-x-1/2 top-0 h-full -translate-x-1/2" style={{ width: spectrumWidth }}>
-        {visibleLabels.map((hz, index) => {
-          const left = `${tFor(hz) * 100}%`;
-          const isFirst = index === 0;
-          const isLast = index === visibleLabels.length - 1;
-          return (
-            <div
-              key={hz}
-              className={`absolute top-0 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-white/45 ${isFirst ? "translate-x-0" : isLast ? "-translate-x-full" : "-translate-x-1/2"}`}
-              style={{ left, minWidth: isFirst || isLast ? undefined : 0 }}
-            >
-              <div className="mx-auto mb-1 h-2 w-px bg-white/35" />
-              {fmt(hz)}
-              <span className="text-white/25">Hz</span>
-            </div>
-          );
-        })}
+        <div
+          className="absolute inset-x-1/2 top-0 h-full -translate-x-1/2"
+          style={{ width: spectrumWidth }}
+        >
+          {visibleLabels.map((hz, index) => {
+            const left = `${tFor(hz) * 100}%`;
+            const isFirst = index === 0;
+            const isLast = index === visibleLabels.length - 1;
+            return (
+              <div
+                key={hz}
+                className={`absolute top-0 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-white/45 ${isFirst ? "translate-x-0" : isLast ? "-translate-x-full" : "-translate-x-1/2"}`}
+                style={{ left, minWidth: isFirst || isLast ? undefined : 0 }}
+              >
+                <div className="mx-auto mb-1 h-2 w-px bg-white/35" />
+                {fmt(hz)}
+                <span className="text-white/25">Hz</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

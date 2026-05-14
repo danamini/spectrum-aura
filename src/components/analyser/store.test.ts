@@ -88,7 +88,7 @@ describe("analyser store utility functions", () => {
 
   it("enforces MIN_VIEW_AMPLITUDE floor of 0.5 on all amplitude settings", async () => {
     const { settingsStore, MIN_VIEW_AMPLITUDE } = await import("./store");
-    
+
     // Set all amplitudes below minimum
     settingsStore.set({
       rippleAmplitude: 0.1,
@@ -132,7 +132,7 @@ describe("analyser store utility functions", () => {
     expect(state.bloomStrength).toBe(1.0);
   });
 
-  it("exposes the new torus and geometry nebula defaults", async () => {
+  it("exposes the newer visual defaults", async () => {
     const { settingsStore } = await import("./store");
 
     const state = settingsStore.get();
@@ -145,6 +145,14 @@ describe("analyser store utility functions", () => {
     expect(state.geometrynebulaSpread).toBe(1.6);
     expect(state.geometrynebulaOrbitSpeed).toBe(1);
     expect(state.geometrynebulaSpinSpeed).toBe(1);
+    expect(state.motionTrails).toBe(false);
+    expect(state.trailDecay).toBe(0.92);
+    expect(state.ssao).toBe(false);
+    expect(state.ssaoRadius).toBe(8);
+    expect(state.radialBlur).toBe(false);
+    expect(state.radialKickAmount).toBe(0.32);
+    expect(state.sobelMode).toBe(false);
+    expect(state.sobelStrength).toBe(1.5);
   });
 
   it("keeps randomize scoped to post fx when view settings are disabled", async () => {
@@ -199,11 +207,11 @@ describe("analyser store utility functions", () => {
 
     settingsStore.applyPreset("Cinematic");
     const state = settingsStore.get();
-    
+
     // Cinematic preset should have vignette capped at 1.25
     expect(state.vignetteAmount).toBeLessThanOrEqual(1.25);
     expect(state.activePreset).toBe("Cinematic");
-    
+
     // All amplitude values should be above minimum
     expect(state.rippleAmplitude).toBeGreaterThanOrEqual(0.5);
     expect(state.datastreamAmplitude).toBeGreaterThanOrEqual(0.5);
@@ -212,15 +220,15 @@ describe("analyser store utility functions", () => {
   it("reset restores default settings", async () => {
     const { settingsStore } = await import("./store");
 
-    settingsStore.set({ 
-      view: "classic", 
+    settingsStore.set({
+      view: "classic",
       barCount: 50,
       vignetteAmount: 0.3,
     });
 
     settingsStore.reset();
     const state = settingsStore.get();
-    
+
     // Should be back to default view
     expect(state.view).toBe("combo");
     expect(state.vignetteAmount).toBe(1.05);
@@ -231,21 +239,20 @@ describe("analyser store utility functions", () => {
 
     // Customize settings
     settingsStore.set({ view: "classic", barCount: 100, vignetteAmount: 0.8 });
-    
+
     // Save to slot 1
     settingsStore.saveSlot(0, "My Custom Preset");
-    
+
     // Change settings
     settingsStore.set({ view: "ripple", barCount: 64 });
-    
+
     // Load from slot 1
     settingsStore.loadSlot(0);
     const state = settingsStore.get();
-    
+
     expect(state.view).toBe("classic");
     expect(state.barCount).toBe(100);
     // Vignette should be normalized even from loaded state
     expect(state.vignetteAmount).toBeLessThanOrEqual(1.25);
   });
 });
-

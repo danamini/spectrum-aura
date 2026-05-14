@@ -45,6 +45,40 @@ describe("settingsStore normalization", () => {
     expect(settingsStore.get().vignetteAmount).toBe(VIGNETTE_AMOUNT_MAX);
   });
 
+  it("clamps the new post-fx control ranges", async () => {
+    const { settingsStore } = await import("./store");
+
+    settingsStore.set({
+      trailDecay: 0.2,
+      trailInject: 10,
+      trailThreshold: -1,
+      ssaoRadius: 100,
+      ssaoDistance: 0,
+      ssaoIntensity: 3,
+      radialBase: -0.5,
+      radialKickAmount: 3,
+      radialZoom: 0,
+      sobelStrength: 10,
+      sobelThreshold: 0,
+      sobelFillMix: 2,
+    });
+
+    const state = settingsStore.get();
+
+    expect(state.trailDecay).toBe(0.75);
+    expect(state.trailInject).toBe(2.25);
+    expect(state.trailThreshold).toBe(0);
+    expect(state.ssaoRadius).toBe(14);
+    expect(state.ssaoDistance).toBe(0.01);
+    expect(state.ssaoIntensity).toBe(1);
+    expect(state.radialBase).toBe(0);
+    expect(state.radialKickAmount).toBe(2);
+    expect(state.radialZoom).toBe(0.05);
+    expect(state.sobelStrength).toBe(4);
+    expect(state.sobelThreshold).toBe(0.01);
+    expect(state.sobelFillMix).toBe(1);
+  });
+
   it("caps bloom strength unless extreme mode is enabled", async () => {
     const { settingsStore } = await import("./store");
 
