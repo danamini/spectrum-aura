@@ -9,13 +9,13 @@ describe("Analyser TDZ regression", () => {
       "utf8",
     );
 
-    const displayedViewDecl = source.indexOf(
-      "let displayedView: ViewMode = settingsRef.current.view;",
+    const displayedViewDecl = source.match(
+      /let\s+displayedView\s*:\s*ViewMode\s*=\s*settingsRef\.current\.view\s*;/,
     );
-    const resetKeyInit = source.indexOf("let lastComposerResetKey = `${displayedView}|");
+    const resetKeyInit = source.match(/let\s+lastComposerResetKey\s*=\s*`\$\{displayedView\}\|/);
 
-    expect(displayedViewDecl).toBeGreaterThanOrEqual(0);
-    expect(resetKeyInit).toBeGreaterThanOrEqual(0);
-    expect(displayedViewDecl).toBeLessThan(resetKeyInit);
+    expect(displayedViewDecl).not.toBeNull();
+    expect(resetKeyInit).not.toBeNull();
+    expect(displayedViewDecl?.index ?? -1).toBeLessThan(resetKeyInit?.index ?? -1);
   });
 });

@@ -134,8 +134,10 @@ npm run lint        # ESLint validation
 npm run format      # Prettier formatting
 npm run test:run    # Vitest (single run)
 npm run test        # Vitest (watch mode)
-npm run check       # All checks (lint + format + test + build)
+npm run check       # Project check script (lint + test:run)
 ```
+
+For a fuller local gate before pushing, run `npm run format` and `npm run build` in addition to `npm run check`.
 
 ### Testing conventions
 
