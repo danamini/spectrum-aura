@@ -3110,7 +3110,11 @@ export class Scene {
     const rightStick = this.readControllerStickAxes(right?.gamepad ?? null, 2);
 
     this.xrSceneYaw -= rightStick.x * dt * 1.7;
-    this.xrScenePitch = THREE.MathUtils.clamp(this.xrScenePitch + rightStick.y * dt * 0.95, -0.55, 0.55);
+    this.xrScenePitch = THREE.MathUtils.clamp(
+      this.xrScenePitch + rightStick.y * dt * 0.95,
+      -0.55,
+      0.55,
+    );
 
     this.xrSceneTargetOffset.x = THREE.MathUtils.clamp(
       this.xrSceneTargetOffset.x + leftStick.x * dt * 2.4,
@@ -3127,7 +3131,8 @@ export class Scene {
     this.xrSceneRoot.position.copy(this.xrSceneOffset);
     this.xrSceneRoot.rotation.x +=
       (this.xrScenePitch - this.xrSceneRoot.rotation.x) * Math.min(1, dt * 8);
-    this.xrSceneRoot.rotation.y += (this.xrSceneYaw - this.xrSceneRoot.rotation.y) * Math.min(1, dt * 8);
+    this.xrSceneRoot.rotation.y +=
+      (this.xrSceneYaw - this.xrSceneRoot.rotation.y) * Math.min(1, dt * 8);
   }
 
   attachWebXrControllers(renderer: THREE.WebGLRenderer) {
