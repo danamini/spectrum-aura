@@ -46,6 +46,10 @@ export class Scene {
   private xrSceneTargetOffset = new THREE.Vector3(0, 0, 0);
   private xrSceneYaw = 0;
   private xrScenePitch = 0;
+  private readonly xrThumbstickBaseAxis = 2;
+  private readonly xrControllerDeadzone = 0.14;
+  private readonly xrPositionInterpolationSpeed = 7;
+  private readonly xrRotationInterpolationSpeed = 8;
 
   bars!: THREE.InstancedMesh;
   private barCount = 0;
@@ -3073,11 +3077,10 @@ export class Scene {
 
   private readControllerStickAxes(gamepad: Gamepad | null, preferredBaseAxis: number) {
     if (!gamepad) return { x: 0, y: 0 };
-    const dead = 0.14;
     const axes = gamepad.axes ?? [];
     const applyDeadzone = (value: number | undefined) => {
       const v = Number(value ?? 0);
-      return Math.abs(v) > dead ? v : 0;
+      return Math.abs(v) > this.xrControllerDeadzone ? v : 0;
     };
     const preferredX = applyDeadzone(axes[preferredBaseAxis]);
     const preferredY = applyDeadzone(axes[preferredBaseAxis + 1]);
@@ -3107,8 +3110,14 @@ export class Scene {
 
     const left = this.resolveControllerInput("left");
     const right = this.resolveControllerInput("right");
-    const leftStick = this.readControllerStickAxes(left?.gamepad ?? null, 2);
-    const rightStick = this.readControllerStickAxes(right?.gamepad ?? null, 2);
+    const leftStick = this.readControllerStickAxes(
+      left?.gamepad ?? null,
+      this.xrThumbstickBaseAxis,
+    );
+    const rightStick = this.readControllerStickAxes(
+      right?.gamepad ?? null,
+      this.xrThumbstickBaseAxis,
+    );
 
     this.xrSceneYaw -= rightStick.x * dt * 1.7;
     this.xrScenePitch = THREE.MathUtils.clamp(
@@ -3128,19 +3137,17 @@ export class Scene {
       -2.8,
     );
 
-    const xrPositionInterpolationSpeed = 7;
-    const xrRotationInterpolationSpeed = 8;
     this.xrSceneOffset.lerp(
       this.xrSceneTargetOffset,
-      Math.min(1, dt * xrPositionInterpolationSpeed),
+      Math.min(1, dt * this.xrPositionInterpolationSpeed),
     );
     this.xrSceneRoot.position.copy(this.xrSceneOffset);
     this.xrSceneRoot.rotation.x +=
       (this.xrScenePitch - this.xrSceneRoot.rotation.x) *
-      Math.min(1, dt * xrRotationInterpolationSpeed);
+      Math.min(1, dt * this.xrRotationInterpolationSpeed);
     this.xrSceneRoot.rotation.y +=
       (this.xrSceneYaw - this.xrSceneRoot.rotation.y) *
-      Math.min(1, dt * xrRotationInterpolationSpeed);
+      Math.min(1, dt * this.xrRotationInterpolationSpeed);
   }
 
   attachWebXrControllers(renderer: THREE.WebGLRenderer) {

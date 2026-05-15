@@ -306,11 +306,11 @@ export function Analyser() {
     };
 
     const setRendererQualityForMode = (active: boolean) => {
+      const desktopPixelRatioLimit = settingsRef.current.performance ? 0.85 : 2;
+      const xrPixelRatioLimit = settingsRef.current.performance ? 0.6 : 0.8;
       const ratio = active
-        ? Math.min(window.devicePixelRatio, settingsRef.current.performance ? 0.6 : 0.8)
-        : settingsRef.current.performance
-          ? Math.min(window.devicePixelRatio, 0.85)
-          : Math.min(window.devicePixelRatio, 2);
+        ? Math.min(window.devicePixelRatio, xrPixelRatioLimit)
+        : Math.min(window.devicePixelRatio, desktopPixelRatioLimit);
       renderer.setPixelRatio(ratio);
       const w = container.clientWidth;
       const h = container.clientHeight;
