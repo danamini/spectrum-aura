@@ -222,6 +222,9 @@ npm run preview               # Preview production build locally
 4. **Shader errors**: Check browser console for THREE.WebGLProgram validation errors
 5. **Performance**: Use DevTools Performance tab, look for GPU bottleneck vs CPU
 
+Render-loop safety note:
+- In `Analyser.tsx`, initialize render-loop state variables before deriving values from them. A prior TDZ bug (`Cannot access 'displayedView' before initialization`) occurred when a composer reset key was built before `displayedView` was declared.
+
 ## Contributing
 
 - Keep changes scoped (one feature per PR)

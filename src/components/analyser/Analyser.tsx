@@ -265,6 +265,7 @@ export function Analyser() {
     const bassHistory: number[] = [];
     const midHistory: number[] = [];
     const highHistory: number[] = [];
+    let displayedView: ViewMode = settingsRef.current.view;
     const pushHistory = (history: number[], value: number, max = 52) => {
       history.push(value);
       if (history.length > max) history.shift();
@@ -308,7 +309,6 @@ export function Analyser() {
       return t * t * (3 - 2 * t);
     };
 
-    let displayedView: ViewMode = settingsRef.current.view;
     let viewTransition: { phase: "out" | "in"; elapsed: number } | null = null;
     container.style.touchAction = "none";
     const isInteractiveUiTarget = (target: EventTarget | null) => {
