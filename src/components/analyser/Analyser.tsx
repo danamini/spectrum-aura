@@ -307,7 +307,7 @@ export function Analyser() {
 
     const setRendererQualityForMode = (active: boolean) => {
       const ratio = active
-        ? Math.min(window.devicePixelRatio, settingsRef.current.performance ? 0.85 : 1.2)
+        ? Math.min(window.devicePixelRatio, settingsRef.current.performance ? 0.6 : 0.8)
         : settingsRef.current.performance
           ? Math.min(window.devicePixelRatio, 0.85)
           : Math.min(window.devicePixelRatio, 2);
@@ -350,15 +350,7 @@ export function Analyser() {
     void xrRuntime.probeAvailability();
 
     const onResize = () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      const ratio = settingsRef.current.performance
-        ? Math.min(window.devicePixelRatio, 0.85)
-        : Math.min(window.devicePixelRatio, 2);
-      renderer.setPixelRatio(ratio);
-      renderer.setSize(w, h);
-      scene.resize(w, h);
-      composer.resize(w, h);
+      setRendererQualityForMode(xrLoopActive);
     };
     window.addEventListener("resize", onResize);
 
@@ -528,7 +520,7 @@ export function Analyser() {
         classicFullscreen: s.classicFullscreen,
         peakColor: s.classicPeakColor,
         peakStyle: s.classicPeakStyle,
-        rippleRingCount: s.rippleRingCount,
+        rippleRingCount: xrRuntime.active ? Math.min(s.rippleRingCount, 72) : s.rippleRingCount,
         rippleColumns: s.rippleColumns,
         rippleMaxRadius: s.rippleMaxRadius,
         rippleSpeed: s.rippleSpeed,
@@ -552,7 +544,7 @@ export function Analyser() {
         monolithWireframe: s.monolithWireframe,
         mandalaUsePalette: s.mandalaUsePalette,
         mandalaAmplitude: s.mandalaAmplitude,
-        mandalaLineCount: s.mandalaLineCount,
+        mandalaLineCount: xrRuntime.active ? Math.min(s.mandalaLineCount, 24) : s.mandalaLineCount,
         mandalaLineWidth: s.mandalaLineWidth,
         terrainUsePalette: s.terrainUsePalette,
         terrainAmplitude: s.terrainAmplitude,
@@ -610,7 +602,7 @@ export function Analyser() {
         composer.resetTemporalEffects();
         lastComposerResetKey = composerResetKey;
       }
-      if (s.postFxEnabled && !xrRuntime.active) {
+      if (s.postFxEnabled) {
         const bpmPulse =
           bands.bpm > 0 && bands.bpmConfidence > 0.4
             ? Math.max(0, Math.sin(((t * (bands.bpm / 60)) % 1) * Math.PI))
@@ -631,7 +623,7 @@ export function Analyser() {
           centroid: bands.centroid,
           beat: bands.beat,
           pulse: bpmPulse,
-          performance: s.performance,
+          performance: s.performance || xrRuntime.active,
         });
         composer.render(dt);
       } else {

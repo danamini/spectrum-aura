@@ -372,7 +372,7 @@ export function ControlPanel() {
           WebXR active
         </div>
         <div className="mt-1 text-[11px] text-white/60">
-          Desktop panels are hidden in immersive mode.
+          XR overlay controls are available.
         </div>
         <div className="mt-3 flex items-center gap-2">
           <Bn
@@ -390,10 +390,10 @@ export function ControlPanel() {
     </div>
   ) : null;
 
-  if (xrOverlay) return xrOverlay;
-
   return (
-    <Sheet open={open} onOpenChange={setOpen} modal={false}>
+    <>
+      {xrOverlay}
+      <Sheet open={open} onOpenChange={setOpen} modal={false}>
       <SheetContent
         onInteractOutside={(e) => {
           const t = e.target as HTMLElement | null;
@@ -1897,6 +1897,7 @@ export function ControlPanel() {
           </div>
         </>
       )}
-    </Sheet>
+      </Sheet>
+    </>
   );
 }

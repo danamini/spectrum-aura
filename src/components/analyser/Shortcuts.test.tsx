@@ -109,4 +109,22 @@ describe("Shortcuts", () => {
 
     expect(mocks.settingsStore.set).toHaveBeenCalledWith({ slotCycleMode: true });
   });
+
+  it("shows XR-friendly shortcut buttons without keyboard legends when VR is active", async () => {
+    window.dispatchEvent(
+      new CustomEvent("spectrum-aura:webxr-state", {
+        detail: {
+          available: true,
+          active: true,
+          pending: false,
+          error: null,
+          backgroundHidden: false,
+        },
+      }),
+    );
+    await tick();
+
+    expect(container.querySelector("kbd")).toBeNull();
+    expect(container.textContent).toContain("Exit VR");
+  });
 });
