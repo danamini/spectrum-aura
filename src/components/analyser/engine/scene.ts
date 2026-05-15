@@ -3075,14 +3075,14 @@ export class Scene {
     if (!gamepad) return { x: 0, y: 0 };
     const dead = 0.14;
     const axes = gamepad.axes ?? [];
-    const filter = (value: number | undefined) => {
+    const applyDeadzone = (value: number | undefined) => {
       const v = Number(value ?? 0);
       return Math.abs(v) > dead ? v : 0;
     };
-    const preferredX = filter(axes[preferredBaseAxis]);
-    const preferredY = filter(axes[preferredBaseAxis + 1]);
-    const fallbackX = filter(axes[0]);
-    const fallbackY = filter(axes[1]);
+    const preferredX = applyDeadzone(axes[preferredBaseAxis]);
+    const preferredY = applyDeadzone(axes[preferredBaseAxis + 1]);
+    const fallbackX = applyDeadzone(axes[0]);
+    const fallbackY = applyDeadzone(axes[1]);
     const hasPreferredInput = preferredX !== 0 || preferredY !== 0;
     return {
       x: hasPreferredInput ? preferredX : fallbackX,
@@ -3128,19 +3128,19 @@ export class Scene {
       -2.8,
     );
 
-    const XR_POSITION_INTERPOLATION_SPEED = 7;
-    const XR_ROTATION_INTERPOLATION_SPEED = 8;
+    const xrPositionInterpolationSpeed = 7;
+    const xrRotationInterpolationSpeed = 8;
     this.xrSceneOffset.lerp(
       this.xrSceneTargetOffset,
-      Math.min(1, dt * XR_POSITION_INTERPOLATION_SPEED),
+      Math.min(1, dt * xrPositionInterpolationSpeed),
     );
     this.xrSceneRoot.position.copy(this.xrSceneOffset);
     this.xrSceneRoot.rotation.x +=
       (this.xrScenePitch - this.xrSceneRoot.rotation.x) *
-      Math.min(1, dt * XR_ROTATION_INTERPOLATION_SPEED);
+      Math.min(1, dt * xrRotationInterpolationSpeed);
     this.xrSceneRoot.rotation.y +=
       (this.xrSceneYaw - this.xrSceneRoot.rotation.y) *
-      Math.min(1, dt * XR_ROTATION_INTERPOLATION_SPEED);
+      Math.min(1, dt * xrRotationInterpolationSpeed);
   }
 
   attachWebXrControllers(renderer: THREE.WebGLRenderer) {
