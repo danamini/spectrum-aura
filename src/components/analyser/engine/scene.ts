@@ -3083,9 +3083,10 @@ export class Scene {
     const preferredY = filter(axes[preferredBaseAxis + 1]);
     const fallbackX = filter(axes[0]);
     const fallbackY = filter(axes[1]);
+    const hasPreferredInput = preferredX !== 0 || preferredY !== 0;
     return {
-      x: preferredX !== 0 || preferredY !== 0 ? preferredX : fallbackX,
-      y: preferredX !== 0 || preferredY !== 0 ? preferredY : fallbackY,
+      x: hasPreferredInput ? preferredX : fallbackX,
+      y: hasPreferredInput ? preferredY : fallbackY,
     };
   }
 
@@ -3127,12 +3128,19 @@ export class Scene {
       -2.8,
     );
 
-    this.xrSceneOffset.lerp(this.xrSceneTargetOffset, Math.min(1, dt * 7));
+    const XR_POSITION_INTERPOLATION_SPEED = 7;
+    const XR_ROTATION_INTERPOLATION_SPEED = 8;
+    this.xrSceneOffset.lerp(
+      this.xrSceneTargetOffset,
+      Math.min(1, dt * XR_POSITION_INTERPOLATION_SPEED),
+    );
     this.xrSceneRoot.position.copy(this.xrSceneOffset);
     this.xrSceneRoot.rotation.x +=
-      (this.xrScenePitch - this.xrSceneRoot.rotation.x) * Math.min(1, dt * 8);
+      (this.xrScenePitch - this.xrSceneRoot.rotation.x) *
+      Math.min(1, dt * XR_ROTATION_INTERPOLATION_SPEED);
     this.xrSceneRoot.rotation.y +=
-      (this.xrSceneYaw - this.xrSceneRoot.rotation.y) * Math.min(1, dt * 8);
+      (this.xrSceneYaw - this.xrSceneRoot.rotation.y) *
+      Math.min(1, dt * XR_ROTATION_INTERPOLATION_SPEED);
   }
 
   attachWebXrControllers(renderer: THREE.WebGLRenderer) {
