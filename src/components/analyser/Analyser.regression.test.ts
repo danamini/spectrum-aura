@@ -9,7 +9,9 @@ describe("Analyser TDZ regression", () => {
       "utf8",
     );
 
-    const displayedViewDecl = source.indexOf("let displayedView: ViewMode = settingsRef.current.view;");
+    const displayedViewDecl = source.indexOf(
+      "let displayedView: ViewMode = settingsRef.current.view;",
+    );
     const resetKeyInit = source.indexOf("let lastComposerResetKey = `${displayedView}|");
 
     expect(displayedViewDecl).toBeGreaterThanOrEqual(0);
