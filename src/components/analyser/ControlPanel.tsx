@@ -7,6 +7,14 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ChevronDown, Save, Shuffle, Trash2 } from "lucide-react";
 import {
+  WEBXR_BACKGROUND_EVENT,
+  WEBXR_STATE_EVENT,
+  probeWebXrSupport,
+  requestWebXrToggle,
+  setWebXrBackgroundHidden,
+  type WebXrState,
+} from "./engine/xr";
+import {
   BLOOM_STRENGTH_MAX_NORMAL,
   PALETTES,
   PRESETS,
@@ -198,6 +206,13 @@ export function ControlPanel() {
   const slots = useSlots();
   const [open, setOpen] = useState(false);
   const [flyoutVisible, setFlyoutVisible] = useState(false);
+  const [xrState, setXrState] = useState<WebXrState>({
+    available: false,
+    active: false,
+    pending: false,
+    error: null,
+    backgroundHidden: false,
+  });
   const [ui, setUi] = useState<UIState>(loadUI);
   const flyoutPanelRef = React.useRef<HTMLDivElement | null>(null);
   const updateUi = (patch: Partial<UIState>) => {
@@ -317,12 +332,65 @@ export function ControlPanel() {
   };
 
   React.useEffect(() => {
+    let alive = true;
+    void probeWebXrSupport().then((available) => {
+      if (!alive) return;
+      setXrState((prev) => ({ ...prev, available }));
+    });
+
+    const onWebXrState = (event: Event) => {
+      const detail = (event as CustomEvent<WebXrState>).detail;
+      if (!detail) return;
+      setXrState(detail);
+    };
+
+    window.addEventListener(WEBXR_STATE_EVENT, onWebXrState);
+    const onBackgroundEvent = (event: Event) => {
+      const hidden = Boolean((event as CustomEvent<boolean>).detail);
+      setXrState((prev) => ({ ...prev, backgroundHidden: hidden }));
+    };
+    window.addEventListener(WEBXR_BACKGROUND_EVENT, onBackgroundEvent);
+    return () => {
+      alive = false;
+      window.removeEventListener(WEBXR_STATE_EVENT, onWebXrState);
+      window.removeEventListener(WEBXR_BACKGROUND_EVENT, onBackgroundEvent);
+    };
+  }, []);
+
+  React.useEffect(() => {
     const onToggleSettingsPanel = () => {
       setOpen((v) => !v);
     };
     window.addEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
     return () => window.removeEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
   }, []);
+
+  const xrOverlay = xrState.active ? (
+    <div className="pointer-events-none fixed left-4 top-4 z-50 flex max-w-[280px] items-start">
+      <div className="pointer-events-auto rounded-md border border-emerald-400/30 bg-black/80 px-3 py-2 text-white shadow-[0_0_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-emerald-300/80">
+          WebXR active
+        </div>
+        <div className="mt-1 text-[11px] text-white/60">
+          Desktop panels are hidden in immersive mode.
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <Bn
+            variant={xrState.backgroundHidden ? "primary" : "outline"}
+            onClick={() => setWebXrBackgroundHidden(!xrState.backgroundHidden)}
+          >
+            {xrState.backgroundHidden ? "Background on" : "Background off"}
+          </Bn>
+          <Bn variant="primary" onClick={requestWebXrToggle} disabled={xrState.pending}>
+            Exit WebXR
+          </Bn>
+        </div>
+        {xrState.error && <div className="mt-2 text-[10px] text-rose-300/80">{xrState.error}</div>}
+      </div>
+    </div>
+  ) : null;
+
+  if (xrOverlay) return xrOverlay;
 
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
@@ -360,6 +428,47 @@ export function ControlPanel() {
                 2D
               </Bn>
             </div>
+            {xrState.available && (
+              <div className="mt-2 rounded-md border border-cyan-400/20 bg-cyan-400/[0.04] px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-[11px]">WebXR / Meta Quest</Label>
+                    <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-cyan-200/70 mt-0.5">
+                      Immersive VR available
+                    </div>
+                    <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-amber-200/75">
+                      XR support is alpha
+                    </div>
+                  </div>
+                  <Bn variant="primary" onClick={requestWebXrToggle} disabled={xrState.pending}>
+                    Enter VR
+                  </Bn>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <Label className="text-[11px]">Background</Label>
+                    <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
+                      {xrState.backgroundHidden ? "Off / transparent" : "On / opaque"}
+                    </div>
+                  </div>
+                  <Bn
+                    variant={xrState.backgroundHidden ? "primary" : "outline"}
+                    onClick={() => setWebXrBackgroundHidden(!xrState.backgroundHidden)}
+                    disabled={xrState.pending}
+                  >
+                    {xrState.backgroundHidden ? "Enable" : "Disable"}
+                  </Bn>
+                </div>
+                {xrState.error && (
+                  <div className="mt-2 text-[10px] text-rose-300/80">{xrState.error}</div>
+                )}
+              </div>
+            )}
+            {!xrState.available && (
+              <div className="mt-2 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
+                WebXR unavailable in this browser
+              </div>
+            )}
             <div className="flex items-center justify-between mt-2 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2.5">
               <div>
                 <Label className="text-[11px]">Wireframe</Label>

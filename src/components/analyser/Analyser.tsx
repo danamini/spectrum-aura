@@ -3,6 +3,12 @@ import * as THREE from "three";
 import { Scene } from "./engine/scene";
 import { Composer } from "./engine/composer";
 import { AudioEngine } from "./engine/audio";
+import {
+  WEBXR_BACKGROUND_EVENT,
+  WEBXR_REQUEST_EVENT,
+  WEBXR_STATE_EVENT,
+  WebXrRuntime,
+} from "./engine/xr";
 import { PALETTES, settingsStore, SLOT_COUNT, useSettings, type ViewMode } from "./store";
 import { Maximize2, Mic, Minimize2, MonitorSpeaker, X } from "lucide-react";
 
@@ -91,6 +97,7 @@ const STOP_AUDIO_EVENT = "spectrum-aura:stop-audio";
 export function Analyser() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<AudioEngine | null>(null);
+  const xrRuntimeRef = useRef<WebXrRuntime | null>(null);
   const settings = useSettings();
   const [audioStatus, setAudioStatus] = useState<"idle" | "running" | "error">("idle");
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -229,6 +236,7 @@ export function Analyser() {
 
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
+      alpha: true,
       powerPreference: "high-performance",
     });
     renderer.info.autoReset = false;
@@ -276,6 +284,70 @@ export function Analyser() {
     let lastLiveTempoCommitAt = 0;
     let radialKickEnv = 0;
     let lastComposerResetKey = `${displayedView}|${settingsRef.current.activePreset ?? ""}|${settingsRef.current.postFxEnabled ? 1 : 0}|${settingsRef.current.motionTrails ? 1 : 0}`;
+    let xrLoopActive = false;
+    let xrBackgroundHidden = false;
+
+    const dispatchWebXrState = (state: {
+      available: boolean;
+      active: boolean;
+      pending: boolean;
+      error: string | null;
+      backgroundHidden: boolean;
+    }) => {
+      window.dispatchEvent(new CustomEvent(WEBXR_STATE_EVENT, { detail: state }));
+    };
+
+    const applyBackgroundMode = () => {
+      if (xrLoopActive && xrBackgroundHidden) {
+        renderer.setClearColor(0x000000, 0);
+        return;
+      }
+      renderer.setClearColor(settingsRef.current.bgColor, 1);
+    };
+
+    const setRendererQualityForMode = (active: boolean) => {
+      const ratio = active
+        ? Math.min(window.devicePixelRatio, settingsRef.current.performance ? 0.85 : 1.2)
+        : settingsRef.current.performance
+          ? Math.min(window.devicePixelRatio, 0.85)
+          : Math.min(window.devicePixelRatio, 2);
+      renderer.setPixelRatio(ratio);
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      renderer.setSize(w, h);
+      scene.resize(w, h);
+      composer.resize(w, h);
+    };
+
+    const desktopLoop = () => {
+      loop(performance.now());
+    };
+
+    const syncAnimationLoop = (active: boolean) => {
+      xrLoopActive = active;
+      if (active) {
+        if (raf) {
+          cancelAnimationFrame(raf);
+          raf = 0;
+        }
+        renderer.setAnimationLoop((time, frame) => {
+          loop(typeof time === "number" ? time : performance.now(), frame ?? undefined);
+        });
+        return;
+      }
+      renderer.setAnimationLoop(null);
+      if (!raf) raf = requestAnimationFrame(desktopLoop);
+    };
+
+    const xrRuntime = new WebXrRuntime(renderer, scene, (state) => {
+      dispatchWebXrState(state);
+      setRendererQualityForMode(state.active);
+      if (state.active !== xrLoopActive) syncAnimationLoop(state.active);
+      if (!state.active) last = performance.now();
+      applyBackgroundMode();
+    });
+    xrRuntimeRef.current = xrRuntime;
+    void xrRuntime.probeAvailability();
 
     const onResize = () => {
       const w = container.clientWidth;
@@ -355,8 +427,26 @@ export function Analyser() {
     window.addEventListener("pointercancel", onPointerUp);
     dom.addEventListener("wheel", onWheel, { passive: false });
 
-    const loop = () => {
-      const now = performance.now();
+    const onWebXrRequest = () => {
+      void xrRuntime.toggle();
+    };
+    window.addEventListener(WEBXR_REQUEST_EVENT, onWebXrRequest);
+
+    const onWebXrBackground = (event: Event) => {
+      const hidden = Boolean((event as CustomEvent<boolean>).detail);
+      xrBackgroundHidden = hidden;
+      applyBackgroundMode();
+      dispatchWebXrState({
+        available: xrRuntime.available,
+        active: xrRuntime.active,
+        pending: xrRuntime.pending,
+        error: xrRuntime.error,
+        backgroundHidden: xrBackgroundHidden,
+      });
+    };
+    window.addEventListener(WEBXR_BACKGROUND_EVENT, onWebXrBackground);
+
+    const loop = (now: number, _frame?: XRFrame) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const fps = dt > 0 ? 1 / dt : 0;
@@ -430,6 +520,8 @@ export function Analyser() {
         cameraBeat: s.cameraBeat,
         cameraBeatAmount: s.cameraBeatAmount,
         cameraMouse: s.cameraMouse,
+        xrMode: xrRuntime.active,
+        xrBackgroundHidden,
         classicSpin: s.classicSpin,
         classicSpinSpeed: s.classicSpinSpeed,
         classicWireframe: s.classicWireframe,
@@ -518,7 +610,7 @@ export function Analyser() {
         composer.resetTemporalEffects();
         lastComposerResetKey = composerResetKey;
       }
-      if (s.postFxEnabled) {
+      if (s.postFxEnabled && !xrRuntime.active) {
         const bpmPulse =
           bands.bpm > 0 && bands.bpmConfidence > 0.4
             ? Math.max(0, Math.sin(((t * (bands.bpm / 60)) % 1) * Math.PI))
@@ -608,12 +700,24 @@ export function Analyser() {
         }
       }
 
-      raf = requestAnimationFrame(loop);
+      if (!xrRuntime.active) {
+        raf = requestAnimationFrame(desktopLoop);
+      }
     };
-    raf = requestAnimationFrame(loop);
+    raf = requestAnimationFrame(desktopLoop);
+    dispatchWebXrState({
+      available: xrRuntime.available,
+      active: xrRuntime.active,
+      pending: xrRuntime.pending,
+      error: xrRuntime.error,
+      backgroundHidden: xrBackgroundHidden,
+    });
 
     return () => {
       cancelAnimationFrame(raf);
+      renderer.setAnimationLoop(null);
+      window.removeEventListener(WEBXR_REQUEST_EVENT, onWebXrRequest);
+      window.removeEventListener(WEBXR_BACKGROUND_EVENT, onWebXrBackground);
       dom.style.opacity = "1";
       window.removeEventListener("resize", onResize);
       container.removeEventListener("pointerdown", onPointerDown);
@@ -622,6 +726,7 @@ export function Analyser() {
       window.removeEventListener("pointercancel", onPointerUp);
       dom.removeEventListener("wheel", onWheel);
       audio.stop();
+      xrRuntime.dispose();
       composer.dispose();
       scene.dispose();
       renderer.dispose();

@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 6789,
+    allowedHosts: [".trycloudflare.com"],
     watch: {
       awaitWriteFinish: {
         stabilityThreshold: 1000,

@@ -14,6 +14,13 @@ It is not designed to be used for any formal audio analysis, it's intended purel
 
 Depending on your hardware you may need to tune performance via the options in settings.
 
+## WebXR (Alpha)
+
+- WebXR support for Meta Quest is currently **alpha**.
+- Desktop mode remains the primary, fully supported experience.
+- If WebXR is unavailable in your browser, the app continues to work in desktop mode without XR.
+- Production testing URL: [https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)
+
 ## A Quick Summary
 
 - Browser-native real-time rendering with animated 3D scenes and post-processing.

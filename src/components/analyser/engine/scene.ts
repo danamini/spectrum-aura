@@ -35,6 +35,7 @@ export class Scene {
   torusGroup = new THREE.Group();
   soundwallGroup = new THREE.Group();
   geometrynebulaGroup = new THREE.Group();
+  private xrControllers: THREE.Object3D[] = [];
 
   bars!: THREE.InstancedMesh;
   private barCount = 0;
@@ -2204,6 +2205,8 @@ export class Scene {
       cameraBeat: boolean;
       cameraBeatAmount: number;
       cameraMouse: boolean;
+      xrMode: boolean;
+      xrBackgroundHidden: boolean;
       classicSpin: boolean;
       classicSpinSpeed: number;
       classicWireframe: boolean;
@@ -2288,8 +2291,19 @@ export class Scene {
     this.setView(opts.view);
 
     // Update background and fog colour.
-    (this.scene.background as THREE.Color).set(opts.bgColor);
-    (this.scene.fog as THREE.FogExp2).color.set(opts.bgColor);
+    const xrMode = Boolean(opts.xrMode);
+    const xrBackgroundHidden = xrMode && Boolean(opts.xrBackgroundHidden);
+    if (xrBackgroundHidden) {
+      this.scene.background = null;
+    } else {
+      if (!(this.scene.background instanceof THREE.Color)) {
+        this.scene.background = new THREE.Color(opts.bgColor);
+      }
+      (this.scene.background as THREE.Color).set(opts.bgColor);
+    }
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.set(opts.bgColor);
+    }
     // BPM phase — one full 0→1 cycle per beat
     const bpmConfident = audio.bpm > 0 && audio.bpmConfidence > 0.45;
     const bpmPhase = bpmConfident ? (time * (audio.bpm / 60)) % 1 : 0;
@@ -2347,6 +2361,8 @@ export class Scene {
         opts.peakColor,
         opts.peakStyle,
       );
+
+      if (xrMode) return;
 
       if (opts.classicFullscreen) {
         this.classicGroup.rotation.y += (0 - this.classicGroup.rotation.y) * Math.min(1, dt * 8);
@@ -2424,6 +2440,8 @@ export class Scene {
       }
       this.updateRipple(dt, time, audio, opts);
 
+      if (xrMode) return;
+
       // 2D side view lock (front-facing, no rotation)
       if (opts.rippleFullscreen) {
         const follow = Math.min(1, dt * 8);
@@ -2477,6 +2495,8 @@ export class Scene {
         datastreamAmplitude: opts.datastreamAmplitude,
         datastreamUsePalette: opts.datastreamUsePalette,
       });
+
+      if (xrMode) return;
       if (opts.datastreamFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2518,6 +2538,8 @@ export class Scene {
         nebulaUsePalette: opts.nebulaUsePalette,
         nebulaWireframe: opts.nebulaWireframe,
       });
+
+      if (xrMode) return;
       if (opts.nebulaFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2559,6 +2581,8 @@ export class Scene {
         monolithUsePalette: opts.monolithUsePalette,
         monolithWireframe: opts.monolithWireframe,
       });
+
+      if (xrMode) return;
       if (opts.monolithFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2597,6 +2621,8 @@ export class Scene {
         mandalaUsePalette: opts.mandalaUsePalette,
         mandalaLineWidth: opts.mandalaLineWidth,
       });
+
+      if (xrMode) return;
       if (opts.mandalaFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2637,6 +2663,8 @@ export class Scene {
         terrainUsePalette: opts.terrainUsePalette,
         terrainWireframe: opts.terrainWireframe,
       });
+
+      if (xrMode) return;
       if (opts.terrainFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2671,6 +2699,8 @@ export class Scene {
         obsidianAmplitude: opts.obsidianAmplitude,
         obsidianUsePalette: opts.obsidianUsePalette,
       });
+
+      if (xrMode) return;
       if (opts.obsidianFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2721,6 +2751,8 @@ export class Scene {
         torusOddUpright: opts.torusOddUpright,
         torusFullscreen: opts.torusFullscreen,
       });
+
+      if (xrMode) return;
       if (opts.torusFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2762,6 +2794,8 @@ export class Scene {
         soundwallColumns: opts.soundwallColumns,
         soundwallRows: opts.soundwallRows,
       });
+
+      if (xrMode) return;
       if (opts.soundwallFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2805,6 +2839,8 @@ export class Scene {
         geometrynebulaOrbitSpeed: opts.geometrynebulaOrbitSpeed,
         geometrynebulaSpinSpeed: opts.geometrynebulaSpinSpeed,
       });
+
+      if (xrMode) return;
       if (opts.geometrynebulaFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
@@ -2915,6 +2951,8 @@ export class Scene {
     this.particleMat.color.copy(this.paletteThree[2]).lerp(this.paletteThree[0], audio.centroid);
     this.particleMat.size = (0.04 + audio.high * 0.1) * opts.comboParticleSize;
 
+    if (xrMode) return;
+
     // 2D top-down lock for combo view
     if (opts.comboFullscreen) {
       const follow = Math.min(1, dt * 8);
@@ -2998,6 +3036,59 @@ export class Scene {
   }
   setMouseZoomDelta(d: number) {
     this.targetZoom = Math.max(5, Math.min(28, this.targetZoom + d * 0.01));
+  }
+
+  attachWebXrControllers(renderer: THREE.WebGLRenderer) {
+    this.detachWebXrControllers();
+
+    const createControllerVisual = (color: number) => {
+      const group = new THREE.Group();
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -1),
+      ]);
+      const lineMaterial = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      line.scale.z = 7;
+      group.add(line);
+
+      const tip = new THREE.Mesh(
+        new THREE.SphereGeometry(0.03, 12, 12),
+        new THREE.MeshBasicMaterial({ color }),
+      );
+      tip.position.z = -1;
+      group.add(tip);
+      return group;
+    };
+
+    this.xrControllers = [0, 1].map((index) => {
+      const controller = renderer.xr.getController(index);
+      controller.name = `webxr-controller-${index + 1}`;
+      controller.add(createControllerVisual(index === 0 ? 0x7fd9ff : 0xffd166));
+      this.scene.add(controller);
+      return controller;
+    });
+  }
+
+  detachWebXrControllers() {
+    for (const controller of this.xrControllers) {
+      this.scene.remove(controller);
+      controller.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const material = mesh.material;
+        if (Array.isArray(material)) {
+          for (const mat of material) mat.dispose();
+        } else if (material) {
+          material.dispose();
+        }
+      });
+    }
+    this.xrControllers = [];
   }
 
   buildRipple() {
@@ -3182,6 +3273,7 @@ export class Scene {
   }
 
   dispose() {
+    this.detachWebXrControllers();
     this.bars.geometry.dispose();
     (this.bars.material as THREE.Material).dispose();
     this.sphere.geometry.dispose();

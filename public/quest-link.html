@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quest Launch Page</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at 20% 10%, #1b2844 0%, #070b14 50%, #04060b 100%);
+        color: #d9e7ff;
+      }
+      .card {
+        width: min(720px, 92vw);
+        border: 1px solid rgba(144, 194, 255, 0.22);
+        border-radius: 16px;
+        background: rgba(9, 14, 24, 0.85);
+        box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+        padding: 20px;
+      }
+      h1 {
+        margin: 0 0 10px;
+        letter-spacing: 0.08em;
+        font-size: 1rem;
+        text-transform: uppercase;
+        color: #8fc4ff;
+      }
+      p {
+        margin: 0 0 14px;
+        opacity: 0.88;
+      }
+      a {
+        display: inline-block;
+        text-decoration: none;
+        border: 1px solid #88d0ff;
+        border-radius: 10px;
+        padding: 12px 16px;
+        color: #00111f;
+        background: linear-gradient(135deg, #8fd0ff, #9be1ff);
+        font-weight: 700;
+      }
+      code {
+        display: block;
+        margin-top: 12px;
+        font-size: 0.8rem;
+        color: #9ec7f8;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Quest WebXR Launch</h1>
+      <p>Tap below to open the production HTTPS app URL for Meta Quest testing.</p>
+      <a href="https://danamini.github.io/spectrum-aura/" rel="noopener">Open Spectrum Aura</a>
+      <code>https://danamini.github.io/spectrum-aura/</code>
+    </main>
+  </body>
+</html>
