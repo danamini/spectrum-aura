@@ -5,11 +5,7 @@ import { BPMDetector } from "./bpm-detector";
 function feedPulseTrain(detector: BPMDetector, intervalMs: number, totalMs: number) {
   for (let t = 0; t <= totalMs; t += 50) {
     const phase = (t % intervalMs) / intervalMs;
-    const energy = phase < 0.2
-      ? 0.25 + phase * 3.2
-      : phase < 0.4
-        ? 0.89 - (phase - 0.2) * 3
-        : 0.12;
+    const energy = phase < 0.2 ? 0.25 + phase * 3.2 : phase < 0.4 ? 0.89 - (phase - 0.2) * 3 : 0.12;
     detector.feed(energy, t);
   }
 }

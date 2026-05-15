@@ -139,6 +139,8 @@ npm run test                   # Watch mode
 
 ### Test Coverage
 
+- **Analyser regression tests**:
+  - `Analyser.regression.test.ts`: guards render-loop variable initialization order to prevent TDZ crashes during component startup.
 - **Store tests**:
   - `store.slots.test.ts`: slot bootstrap, localStorage hydration, legacy ripple migration, slot-cycle preservation
   - `store.normalization.test.ts`: amplitude floor, vignette bounds, bloom cap, preset clearing, reset baseline
@@ -222,9 +224,12 @@ npm run preview               # Preview production build locally
 4. **Shader errors**: Check browser console for THREE.WebGLProgram validation errors
 5. **Performance**: Use DevTools Performance tab, look for GPU bottleneck vs CPU
 
+Render-loop safety note:
+- In `Analyser.tsx`, initialize render-loop state variables before deriving values from them. A prior TDZ bug (`Cannot access 'displayedView' before initialization`) occurred when a composer reset key was built before `displayedView` was declared.
+
 ## Contributing
 
 - Keep changes scoped (one feature per PR)
 - Update relevant tests when adding features
 - Verify build passes: `npm run build`
-- All tests must pass: `npm run test -- --run`
+- All tests must pass: `npm run test:run`

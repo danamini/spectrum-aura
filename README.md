@@ -4,7 +4,7 @@ Spectrum Aura is a dynamic, real-time visual analyser that turns live sound into
 
 No installs for viewers. No backend. No upload flow. Open the page, feed it audio, and the scene responds instantly.
 
-Spectrum Aura is designed for use on desktop browsers, and can visualise audio from any Chromium based broswer or your devices microphone. It is not designed for mobile broswers but may work, but only using your phones microphone.
+Spectrum Aura is designed for use on desktop browsers, and can visualise audio from any Chromium based browser or your device microphone. It is not designed for mobile browsers but may work, but only using your phone microphone.
 
 It is not designed to be used for any formal audio analysis, it's intended purely for fun and to create an exciting visual treat, working best with music, like Spotify or YouTube in your browser.
 
@@ -134,8 +134,10 @@ npm run lint        # ESLint validation
 npm run format      # Prettier formatting
 npm run test:run    # Vitest (single run)
 npm run test        # Vitest (watch mode)
-npm run check       # All checks (lint + format + test + build)
+npm run check       # Project check script (lint + test:run)
 ```
+
+For a fuller local gate before pushing, run `npm run format` and `npm run build` in addition to `npm run check`.
 
 ### Testing conventions
 

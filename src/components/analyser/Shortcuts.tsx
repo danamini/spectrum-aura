@@ -27,7 +27,7 @@ export function Shortcuts() {
     soundwall: "soundwallFullscreen",
     geometrynebula: "geometrynebulaFullscreen",
   };
-  const is3DMode = !Boolean(settings[fullscreenByView[settings.view]]);
+  const is3DMode = !settings[fullscreenByView[settings.view]];
 
   const showFlash = (msg: string) => {
     setFlash(msg);
@@ -41,7 +41,10 @@ export function Shortcuts() {
     };
   }, []);
 
-  const doRandomize = () => { settingsStore.randomize(); showFlash("Randomized"); };
+  const doRandomize = () => {
+    settingsStore.randomize();
+    showFlash("Randomized");
+  };
   const doToggleView = () => {
     const order = [
       "combo",
@@ -99,8 +102,8 @@ export function Shortcuts() {
       geometrynebula: "geometrynebulaFullscreen",
     };
     const cur = current[fullKeyByView[current.view]]
-      ? (`${current.view}2d` as typeof order[number])
-      : (current.view as typeof order[number]);
+      ? (`${current.view}2d` as (typeof order)[number])
+      : (current.view as (typeof order)[number]);
     const next = order[(order.indexOf(cur) + 1) % order.length] ?? "combo";
     const is2d = next.endsWith("2d");
     const view = (is2d ? next.slice(0, -2) : next) as Settings["view"];
@@ -148,8 +151,10 @@ export function Shortcuts() {
   const doToggleHints = () => setVisible((v) => !v);
   const doSlot = (i: number) => {
     const slot = settingsStore.getSlots()[i];
-    if (slot) { settingsStore.loadSlot(i); showFlash(`Loaded ${slot.name}`); }
-    else showFlash(`Slot ${i + 1} empty`);
+    if (slot) {
+      settingsStore.loadSlot(i);
+      showFlash(`Loaded ${slot.name}`);
+    } else showFlash(`Slot ${i + 1} empty`);
   };
   const doSaveSlot = (i: number) => {
     settingsStore.saveSlot(i, `Slot ${i + 1}`);
@@ -170,7 +175,11 @@ export function Shortcuts() {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       const target = e.target instanceof HTMLElement ? e.target : null;
-      if (target?.closest("input, textarea, [contenteditable='true'], [role='textbox']") && k !== "s") return;
+      if (
+        target?.closest("input, textarea, [contenteditable='true'], [role='textbox']") &&
+        k !== "s"
+      )
+        return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const slotIdx = slotIndexFromEvent(e);
@@ -186,33 +195,27 @@ export function Shortcuts() {
         doRandomize();
         e.preventDefault();
         e.stopPropagation();
-      }
-      else if (k === "v") {
+      } else if (k === "v") {
         doToggleView();
         e.preventDefault();
         e.stopPropagation();
-      }
-      else if (k === "a") {
+      } else if (k === "a") {
         doToggleSlotCycle();
         e.preventDefault();
         e.stopPropagation();
-      }
-      else if (k === "f") {
+      } else if (k === "f") {
         doFullscreen();
         e.preventDefault();
         e.stopPropagation();
-      }
-      else if (k === "s") {
+      } else if (k === "s") {
         doToggleSettings();
         e.preventDefault();
         e.stopPropagation();
-      }
-      else if (k === "x") {
+      } else if (k === "x") {
         doStopAudio();
         e.preventDefault();
         e.stopPropagation();
-      }
-      else if (k === "g") {
+      } else if (k === "g") {
         doToggleHints();
         e.preventDefault();
         e.stopPropagation();
@@ -232,15 +235,64 @@ export function Shortcuts() {
     icon?: ReactNode;
   };
   const hints: Hint[] = [
-    { key: "R", label: "Randomize", onClick: () => { doRandomize(); } },
-    { key: "V", label: "Cycle Visual", onClick: () => { doToggleView(); } },
-    { key: "X", label: "Source", onClick: () => { doStopAudio(); } },
-    { key: "F", label: "Fullscreen", onClick: () => { doFullscreen(); } },
-    { key: "N", label: "Stats", onClick: () => { doToggleStats(); }, title: "Stats for nerds" },
-    { key: "G", label: "Hide hints", onClick: () => { doToggleHints(); } },
+    {
+      key: "R",
+      label: "Randomize",
+      onClick: () => {
+        doRandomize();
+      },
+    },
+    {
+      key: "V",
+      label: "Cycle Visual",
+      onClick: () => {
+        doToggleView();
+      },
+    },
+    {
+      key: "X",
+      label: "Source",
+      onClick: () => {
+        doStopAudio();
+      },
+    },
+    {
+      key: "F",
+      label: "Fullscreen",
+      onClick: () => {
+        doFullscreen();
+      },
+    },
+    {
+      key: "N",
+      label: "Stats",
+      onClick: () => {
+        doToggleStats();
+      },
+      title: "Stats for nerds",
+    },
+    {
+      key: "G",
+      label: "Hide hints",
+      onClick: () => {
+        doToggleHints();
+      },
+    },
   ];
-  const settingsHint: Hint = { key: "S", label: "Settings", onClick: () => { doToggleSettings(); } };
-  const cycleSavesHint: Hint = { key: "A", label: "Auto Cycle Saves", onClick: () => { doToggleSlotCycle(); } };
+  const settingsHint: Hint = {
+    key: "S",
+    label: "Settings",
+    onClick: () => {
+      doToggleSettings();
+    },
+  };
+  const cycleSavesHint: Hint = {
+    key: "A",
+    label: "Auto Cycle Saves",
+    onClick: () => {
+      doToggleSlotCycle();
+    },
+  };
   const slotHints: Hint[] = [1, 2, 3, 4, 5].map((n) => ({
     key: String(n),
     label: "",
@@ -283,14 +335,18 @@ export function Shortcuts() {
               </div>
             )}
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-white/5 bg-black/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70 hover:opacity-100 transition-opacity">
-            {hints.map((h) => <Btn key={h.key} h={h} />)}
-            <span className="mx-1 h-3 w-px bg-white/10" />
-            <Btn h={cycleSavesHint} />
-            <span className="ml-1 text-white/25 normal-case tracking-normal">Saves</span>
-            {slotHints.map((h) => <Btn key={h.key} h={h} />)}
-            <span className="ml-1 text-white/25 normal-case tracking-normal">⇧+1–5 save</span>
-            <span className="mx-1 h-3 w-px bg-white/10" />
-            <Btn h={settingsHint} />
+              {hints.map((h) => (
+                <Btn key={h.key} h={h} />
+              ))}
+              <span className="mx-1 h-3 w-px bg-white/10" />
+              <Btn h={cycleSavesHint} />
+              <span className="ml-1 text-white/25 normal-case tracking-normal">Saves</span>
+              {slotHints.map((h) => (
+                <Btn key={h.key} h={h} />
+              ))}
+              <span className="ml-1 text-white/25 normal-case tracking-normal">⇧+1–5 save</span>
+              <span className="mx-1 h-3 w-px bg-white/10" />
+              <Btn h={settingsHint} />
             </div>
           </div>
         </div>

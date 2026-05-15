@@ -39,7 +39,7 @@ export class AudioEngine {
     if (stream.getAudioTracks().length === 0) {
       stream.getTracks().forEach((t) => t.stop());
       throw new Error(
-        "No audio track was shared. In the Chrome dialog, choose a Tab and tick \"Share tab audio\".",
+        'No audio track was shared. In the Chrome dialog, choose a Tab and tick "Share tab audio".',
       );
     }
     this.attach(stream, options);
@@ -66,14 +66,18 @@ export class AudioEngine {
     this.bins = new Uint8Array(analyser.frequencyBinCount);
   }
 
-  setSmoothing(v: number) { if (this.analyser) this.analyser.smoothingTimeConstant = v; }
+  setSmoothing(v: number) {
+    if (this.analyser) this.analyser.smoothingTimeConstant = v;
+  }
   setFftSize(n: number) {
     if (this.analyser) {
       this.analyser.fftSize = n;
       this.bins = new Uint8Array(this.analyser.frequencyBinCount);
     }
   }
-  setGain(v: number) { if (this.gain) this.gain.gain.value = v; }
+  setGain(v: number) {
+    if (this.gain) this.gain.gain.value = v;
+  }
 
   read(beatThreshold: number): AudioBands {
     if (!this.analyser) {
@@ -83,8 +87,11 @@ export class AudioEngine {
     const n = this.bins.length;
     const bassEnd = Math.floor(n * 0.08);
     const midEnd = Math.floor(n * 0.35);
-    let bass = 0, mid = 0, high = 0;
-    let weighted = 0, total = 0;
+    let bass = 0,
+      mid = 0,
+      high = 0;
+    let weighted = 0,
+      total = 0;
     for (let i = 0; i < n; i++) {
       const v = this.bins[i] / 255;
       if (i < bassEnd) bass += v;
@@ -94,8 +101,8 @@ export class AudioEngine {
       total += v;
     }
     bass /= bassEnd || 1;
-    mid /= (midEnd - bassEnd) || 1;
-    high /= (n - midEnd) || 1;
+    mid /= midEnd - bassEnd || 1;
+    high /= n - midEnd || 1;
     const centroid = total > 0 ? weighted / total / n : 0;
 
     // beat detect
@@ -118,11 +125,25 @@ export class AudioEngine {
   }
 
   stop() {
-    try { this.stream?.getTracks().forEach((t) => t.stop()); } catch {}
-    try { this.ctx?.close(); } catch {}
-    this.ctx = null; this.analyser = null; this.source = null; this.gain = null; this.stream = null;
+    try {
+      this.stream?.getTracks().forEach((t) => t.stop());
+    } catch {
+      // Ignore teardown errors from stale/ended tracks.
+    }
+    try {
+      this.ctx?.close();
+    } catch {
+      // Ignore close errors if the context was already terminated.
+    }
+    this.ctx = null;
+    this.analyser = null;
+    this.source = null;
+    this.gain = null;
+    this.stream = null;
     this.bpmDetector.reset();
   }
 
-  isRunning() { return !!this.ctx; }
+  isRunning() {
+    return !!this.ctx;
+  }
 }

@@ -35,20 +35,20 @@ export type Settings = {
   cameraDriftAmount: number; // 0..2
   cameraBeat: boolean;
   cameraBeatAmount: number; // 0..3
-  cameraMouse: boolean;     // drag to orbit
+  cameraMouse: boolean; // drag to orbit
   classicSpin: boolean;
   classicSpinSpeed: number; // rad/sec
 
   // classic view
   classicPeakDecay: number; // units/sec
-  classicPeakHold: number;  // seconds peak stays before falling
+  classicPeakHold: number; // seconds peak stays before falling
   classicColorBands: boolean; // green/yellow/red banding
-  classicBlocky: boolean;    // segmented LED cells
-  classicSegments: number;   // number of LED segments per bar
-  classicGrid: boolean;      // background grid overlay
+  classicBlocky: boolean; // segmented LED cells
+  classicSegments: number; // number of LED segments per bar
+  classicGrid: boolean; // background grid overlay
   classicGridOpacity: number; // 0..1
   classicShowFreqLabels: boolean; // Hz tick labels under bars
-  classicPeakColor: string;       // hex color for peak bars
+  classicPeakColor: string; // hex color for peak bars
   classicPeakStyle: "bar" | "thin" | "glow" | "none";
   classicWireframe: boolean;
   classicFullscreen: boolean;
@@ -60,17 +60,17 @@ export type Settings = {
   terrainFullscreen: boolean;
 
   // ripple view
-  rippleRingCount: number;       // number of rings
+  rippleRingCount: number; // number of rings
   /** 1–5 side-by-side ripple stacks; each column uses a different slice of the spectrum (low → high). */
   rippleColumns: number;
-  rippleMaxRadius: number;       // outer radius
-  rippleSpeed: number;           // base wave phase speed
-  rippleAmplitude: number;       // wave height multiplier
-  rippleWaveCycles: number;      // base wave cycles across rings
-  rippleThickness: number;       // ring cross-section thickness
-  rippleRotationSpeed: number;   // group rotation
-  rippleOpacity: number;         // ring opacity
-  rippleWireframe: boolean;      // wireframe rings
+  rippleMaxRadius: number; // outer radius
+  rippleSpeed: number; // base wave phase speed
+  rippleAmplitude: number; // wave height multiplier
+  rippleWaveCycles: number; // base wave cycles across rings
+  rippleThickness: number; // ring cross-section thickness
+  rippleRotationSpeed: number; // group rotation
+  rippleOpacity: number; // ring opacity
+  rippleWireframe: boolean; // wireframe rings
 
   // datastream view
   datastreamUsePalette: boolean;
@@ -127,7 +127,7 @@ export type Settings = {
   soundwallUsePalette: boolean;
   soundwallAmplitude: number;
   soundwallColumns: number; // pillars per side
-  soundwallRows: number;    // history depth
+  soundwallRows: number; // history depth
 
   // floating geometry nebula view
   geometrynebulaFullscreen: boolean;
@@ -139,15 +139,15 @@ export type Settings = {
   geometrynebulaSpinSpeed: number;
 
   // 3D combo view
-  comboSphereSize: number;       // base sphere scale (1 = default)
-  comboSphereSpinSpeed: number;  // sphere rotation speed
-  comboSphereBassPunch: number;  // how much bass scales the sphere
-  comboBarRadius: number;        // ring radius for bars
-  comboBarHeightScale: number;   // bar height multiplier
-  comboParticleSize: number;     // base point size
-  comboLevelMeter: boolean;      // R/Y/G level-meter coloring on bars
+  comboSphereSize: number; // base sphere scale (1 = default)
+  comboSphereSpinSpeed: number; // sphere rotation speed
+  comboSphereBassPunch: number; // how much bass scales the sphere
+  comboBarRadius: number; // ring radius for bars
+  comboBarHeightScale: number; // bar height multiplier
+  comboParticleSize: number; // base point size
+  comboLevelMeter: boolean; // R/Y/G level-meter coloring on bars
   comboWireframe: boolean;
-  comboFullscreen: boolean;      // top-down 2D camera lock
+  comboFullscreen: boolean; // top-down 2D camera lock
 
   // post fx (toggle + params)
   postFxEnabled: boolean;
@@ -157,15 +157,45 @@ export type Settings = {
   bloomStrength: number;
   bloomRadius: number;
   bloomThreshold: number;
-  chroma: boolean; chromaAmount: number;
-  grain: boolean; grainAmount: number;
-  vignette: boolean; vignetteAmount: number;
-  dof: boolean; dofFocus: number; dofAperture: number; dofMaxBlur: number;
-  glitch: boolean; glitchWild: boolean;
-  godRays: boolean; godRaysAmount: number;
-  pixelate: boolean; pixelSize: number;
-  tiltShift: boolean; tiltAmount: number;
-  grading: boolean; exposure: number; contrast: number; saturation: number; hue: number;
+  chroma: boolean;
+  chromaAmount: number;
+  grain: boolean;
+  grainAmount: number;
+  vignette: boolean;
+  vignetteAmount: number;
+  dof: boolean;
+  dofFocus: number;
+  dofAperture: number;
+  dofMaxBlur: number;
+  glitch: boolean;
+  glitchWild: boolean;
+  godRays: boolean;
+  godRaysAmount: number;
+  motionTrails: boolean;
+  trailDecay: number;
+  trailInject: number;
+  trailThreshold: number;
+  ssao: boolean;
+  ssaoRadius: number;
+  ssaoDistance: number;
+  ssaoIntensity: number;
+  radialBlur: boolean;
+  radialBase: number;
+  radialKickAmount: number;
+  radialZoom: number;
+  pixelate: boolean;
+  pixelSize: number;
+  tiltShift: boolean;
+  tiltAmount: number;
+  grading: boolean;
+  exposure: number;
+  contrast: number;
+  saturation: number;
+  hue: number;
+  sobelMode: boolean;
+  sobelStrength: number;
+  sobelThreshold: number;
+  sobelFillMix: number;
 
   performance: boolean; // cap pixel ratio harder
 
@@ -312,15 +342,45 @@ export const DEFAULT_SETTINGS: Settings = {
   bloomStrength: 0.25,
   bloomRadius: 0.7,
   bloomThreshold: 0.15,
-  chroma: true, chromaAmount: 0.0025,
-  grain: true, grainAmount: 0.25,
-  vignette: true, vignetteAmount: 1.05,
-  dof: false, dofFocus: 8, dofAperture: 0.0006, dofMaxBlur: 0.01,
-  glitch: false, glitchWild: false,
-  godRays: true, godRaysAmount: 0.55,
-  pixelate: false, pixelSize: 4,
-  tiltShift: false, tiltAmount: 1.2,
-  grading: true, exposure: 1.05, contrast: 1.1, saturation: 1.15, hue: 0,
+  chroma: true,
+  chromaAmount: 0.0025,
+  grain: true,
+  grainAmount: 0.25,
+  vignette: true,
+  vignetteAmount: 1.05,
+  dof: false,
+  dofFocus: 8,
+  dofAperture: 0.0006,
+  dofMaxBlur: 0.01,
+  glitch: false,
+  glitchWild: false,
+  godRays: true,
+  godRaysAmount: 0.55,
+  motionTrails: false,
+  trailDecay: 0.92,
+  trailInject: 1.15,
+  trailThreshold: 0.1,
+  ssao: false,
+  ssaoRadius: 8,
+  ssaoDistance: 0.08,
+  ssaoIntensity: 0.35,
+  radialBlur: false,
+  radialBase: 0.02,
+  radialKickAmount: 0.32,
+  radialZoom: 0.35,
+  pixelate: false,
+  pixelSize: 4,
+  tiltShift: false,
+  tiltAmount: 1.2,
+  grading: true,
+  exposure: 1.05,
+  contrast: 1.1,
+  saturation: 1.15,
+  hue: 0,
+  sobelMode: false,
+  sobelStrength: 1.5,
+  sobelThreshold: 0.15,
+  sobelFillMix: 0.08,
 
   performance: false,
   bgColor: "#05060a",
@@ -335,26 +395,81 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const PRESETS: Record<string, Partial<Settings>> = {
   Cyberpunk: {
-    paletteIndex: 0, bloom: true, bloomExtreme: true, bloomStrength: 1.5, chroma: true, chromaAmount: 0.004,
-    grain: true, vignette: true, godRays: true, godRaysAmount: 0.7, glitch: false,
-    grading: true, saturation: 1.4, contrast: 1.2, hue: -0.05, pixelate: false, dof: false,
+    paletteIndex: 0,
+    bloom: true,
+    bloomExtreme: true,
+    bloomStrength: 1.5,
+    chroma: true,
+    chromaAmount: 0.004,
+    grain: true,
+    vignette: true,
+    godRays: true,
+    godRaysAmount: 0.7,
+    glitch: false,
+    grading: true,
+    saturation: 1.4,
+    contrast: 1.2,
+    hue: -0.05,
+    pixelate: false,
+    dof: false,
   },
   Cinematic: {
-    paletteIndex: 1, bloom: true, bloomExtreme: true, bloomStrength: 0.8, chroma: true, chromaAmount: 0.0015,
-    grain: true, grainAmount: 0.15, vignette: true, vignetteAmount: 1.25, dof: true,
-    glitch: false, godRays: true, godRaysAmount: 0.4, grading: true, contrast: 1.15,
-    saturation: 0.95, pixelate: false,
+    paletteIndex: 1,
+    bloom: true,
+    bloomExtreme: true,
+    bloomStrength: 0.8,
+    chroma: true,
+    chromaAmount: 0.0015,
+    grain: true,
+    grainAmount: 0.15,
+    vignette: true,
+    vignetteAmount: 1.25,
+    dof: true,
+    glitch: false,
+    godRays: true,
+    godRaysAmount: 0.4,
+    grading: true,
+    contrast: 1.15,
+    saturation: 0.95,
+    pixelate: false,
   },
   "Liquid Chrome": {
-    paletteIndex: 1, bloom: true, bloomExtreme: true, bloomStrength: 1.3, chroma: true, chromaAmount: 0.002,
-    grain: false, vignette: true, godRays: false, glitch: false, grading: true,
-    saturation: 0.6, contrast: 1.25, exposure: 1.15, pixelate: false, dof: false,
+    paletteIndex: 1,
+    bloom: true,
+    bloomExtreme: true,
+    bloomStrength: 1.3,
+    chroma: true,
+    chromaAmount: 0.002,
+    grain: false,
+    vignette: true,
+    godRays: false,
+    glitch: false,
+    grading: true,
+    saturation: 0.6,
+    contrast: 1.25,
+    exposure: 1.15,
+    pixelate: false,
+    dof: false,
   },
   "Glitch Storm": {
-    paletteIndex: 2, bloom: true, bloomExtreme: true, bloomStrength: 1.4, chroma: true, chromaAmount: 0.006,
-    grain: true, grainAmount: 0.5, vignette: true, glitch: true, glitchWild: false,
-    godRays: true, godRaysAmount: 0.9, grading: true, saturation: 1.5, hue: 0.1,
-    pixelate: false, dof: false,
+    paletteIndex: 2,
+    bloom: true,
+    bloomExtreme: true,
+    bloomStrength: 1.4,
+    chroma: true,
+    chromaAmount: 0.006,
+    grain: true,
+    grainAmount: 0.5,
+    vignette: true,
+    glitch: true,
+    glitchWild: false,
+    godRays: true,
+    godRaysAmount: 0.9,
+    grading: true,
+    saturation: 1.5,
+    hue: 0.1,
+    pixelate: false,
+    dof: false,
   },
 };
 
@@ -379,7 +494,13 @@ const RANDOM_BG_COLORS = [
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace("#", "").trim();
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
   const v = Number.parseInt(full, 16);
   return {
     r: (v >> 16) & 255,
@@ -457,12 +578,35 @@ function normalizeAmplitudeFloor(settings: Settings): Settings {
 function normalizeVignetteAmount(settings: Settings): Settings {
   return {
     ...settings,
-    vignetteAmount: Math.max(VIGNETTE_AMOUNT_MIN, Math.min(VIGNETTE_AMOUNT_MAX, settings.vignetteAmount)),
+    vignetteAmount: Math.max(
+      VIGNETTE_AMOUNT_MIN,
+      Math.min(VIGNETTE_AMOUNT_MAX, settings.vignetteAmount),
+    ),
+  };
+}
+
+function normalizePostFxRanges(settings: Settings): Settings {
+  return {
+    ...settings,
+    trailDecay: Math.max(0.75, Math.min(0.99, settings.trailDecay)),
+    trailInject: Math.max(0.5, Math.min(2.25, settings.trailInject)),
+    trailThreshold: Math.max(0, Math.min(1, settings.trailThreshold)),
+    ssaoRadius: Math.max(2, Math.min(14, settings.ssaoRadius)),
+    ssaoDistance: Math.max(0.01, Math.min(0.2, settings.ssaoDistance)),
+    ssaoIntensity: Math.max(0, Math.min(1, settings.ssaoIntensity)),
+    radialBase: Math.max(0, Math.min(1, settings.radialBase)),
+    radialKickAmount: Math.max(0, Math.min(2, settings.radialKickAmount)),
+    radialZoom: Math.max(0.05, Math.min(1.2, settings.radialZoom)),
+    sobelStrength: Math.max(0.25, Math.min(4, settings.sobelStrength)),
+    sobelThreshold: Math.max(0.01, Math.min(1, settings.sobelThreshold)),
+    sobelFillMix: Math.max(0, Math.min(1, settings.sobelFillMix)),
   };
 }
 
 function normalizeSettings(settings: Settings): Settings {
-  return normalizeVignetteAmount(normalizeAmplitudeFloor(normalizeBloomForExtreme(settings)));
+  return normalizePostFxRanges(
+    normalizeVignetteAmount(normalizeAmplitudeFloor(normalizeBloomForExtreme(settings))),
+  );
 }
 
 const STORAGE_KEY = "analyser-settings-v1";
@@ -652,9 +796,8 @@ function normalizeSlot(seed: SlotSeed): SavedSlot {
 }
 
 let state: Settings = { ...DEFAULT_SETTINGS };
-let slots: SavedSlot[] = Array.from(
-  { length: SLOT_COUNT },
-  (_, i) => normalizeSlot(DEPLOYMENT_DEFAULT_SLOTS[i] ?? null),
+const slots: SavedSlot[] = Array.from({ length: SLOT_COUNT }, (_, i) =>
+  normalizeSlot(DEPLOYMENT_DEFAULT_SLOTS[i] ?? null),
 );
 /** Shallow copy so `useSyncExternalStore` sees a new snapshot when slots change (in-place `slots[]` edits keep the same array ref). */
 let slotsSnapshot: SavedSlot[] = [];
@@ -675,7 +818,9 @@ if (typeof window !== "undefined") {
         }
       }
     }
-  } catch {}
+  } catch {
+    // ignore malformed saved slot state
+  }
 }
 refreshSlotsSnapshot();
 
@@ -690,12 +835,18 @@ if (typeof window !== "undefined") {
       }
       state = normalizeSettings(merged);
     }
-  } catch {}
+  } catch {
+    // ignore malformed saved settings
+  }
 }
 
 function emit() {
   if (typeof window !== "undefined") {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // ignore storage write failures
+    }
   }
   listeners.forEach((l) => l());
 }
@@ -712,11 +863,14 @@ export const settingsStore = {
     });
     emit();
   },
-  reset: () => { state = normalizeSettings({ ...DEFAULT_SETTINGS }); emit(); },
+  reset: () => {
+    state = normalizeSettings({ ...DEFAULT_SETTINGS });
+    emit();
+  },
   randomize: () => {
     const r = (min: number, max: number) => min + Math.random() * (max - min);
     const b = (p = 0.5) => Math.random() < p;
-    const pick = <T,>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)]!;
+    const pick = <T>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)]!;
     const keepRippleColumns = state.rippleColumns;
     const includeViewSettings = state.randomizeViewSettings;
     const paletteIndex = Math.floor(Math.random() * PALETTES.length);
@@ -725,9 +879,7 @@ export const settingsStore = {
     const bgLum = relativeLuminance(bgColor);
     // Reduce extreme-bloom probability on brighter backgrounds.
     const useExtremeBloom = bgLum < 0.12 && b(0.07);
-    const bloomStrength = useExtremeBloom
-      ? r(0.45, 1.05)
-      : r(0.07, 0.2);
+    const bloomStrength = useExtremeBloom ? r(0.45, 1.05) : r(0.07, 0.2);
     const bloomThreshold = bgLum < 0.1 ? r(0.12, 0.3) : r(0.22, 0.42);
     const bloomRadius = bgLum < 0.1 ? r(0.25, 0.9) : r(0.2, 0.65);
     const exposure = bgLum < 0.12 ? r(0.85, 1.15) : r(0.75, 1.02);
@@ -737,16 +889,45 @@ export const settingsStore = {
       bloomStrength,
       bloomRadius,
       bloomThreshold,
-      chroma: b(0.85), chromaAmount: r(0.0005, 0.008),
-      grain: b(0.7), grainAmount: r(0.05, 0.6),
-      vignette: b(0.85), vignetteAmount: r(0.7, VIGNETTE_AMOUNT_MAX),
-      dof: b(0.2), dofFocus: r(4, 14), dofAperture: r(0.0001, 0.002), dofMaxBlur: r(0.002, 0.02),
-      glitch: b(0.2), glitchWild: b(0.2),
-      godRays: b(0.7), godRaysAmount: r(0.2, 1.2),
-      pixelate: b(0.1), pixelSize: Math.round(r(2, 12)),
-      tiltShift: b(0.25), tiltAmount: r(0.5, 2.5),
-      grading: true, exposure, contrast: r(0.95, 1.35),
-      saturation: r(0.6, 1.6), hue: r(-0.2, 0.2),
+      chroma: b(0.85),
+      chromaAmount: r(0.0005, 0.008),
+      grain: b(0.7),
+      grainAmount: r(0.05, 0.6),
+      vignette: b(0.85),
+      vignetteAmount: r(0.7, VIGNETTE_AMOUNT_MAX),
+      dof: b(0.2),
+      dofFocus: r(4, 14),
+      dofAperture: r(0.0001, 0.002),
+      dofMaxBlur: r(0.002, 0.02),
+      glitch: b(0.2),
+      glitchWild: b(0.2),
+      godRays: b(0.7),
+      godRaysAmount: r(0.2, 1.2),
+      motionTrails: b(0.25),
+      trailDecay: r(0.86, 0.96),
+      trailInject: r(0.9, 1.5),
+      trailThreshold: r(0.04, 0.3),
+      ssao: b(0.35),
+      ssaoRadius: r(4, 10),
+      ssaoDistance: r(0.04, 0.12),
+      ssaoIntensity: r(0.15, 0.65),
+      radialBlur: b(0.4),
+      radialBase: r(0, 0.12),
+      radialKickAmount: r(0.12, 0.7),
+      radialZoom: r(0.18, 0.55),
+      pixelate: b(0.1),
+      pixelSize: Math.round(r(2, 12)),
+      tiltShift: b(0.25),
+      tiltAmount: r(0.5, 2.5),
+      grading: true,
+      exposure,
+      contrast: r(0.95, 1.35),
+      saturation: r(0.6, 1.6),
+      hue: r(-0.2, 0.2),
+      sobelMode: b(0.12),
+      sobelStrength: r(0.9, 2.2),
+      sobelThreshold: r(0.08, 0.25),
+      sobelFillMix: r(0.03, 0.18),
     };
 
     const viewPatch: Partial<Settings> = includeViewSettings
@@ -841,7 +1022,13 @@ export const settingsStore = {
           torusSize: r(0.5, 1.8),
           torusParticleSize: r(0.01, 0.16),
           torusColorMode: pick(["shared", "individual"] as const),
-          torusRotationMode: pick(["flat", "odd-upright", "alternating-x", "alternating-z", "fan"] as const),
+          torusRotationMode: pick([
+            "flat",
+            "odd-upright",
+            "alternating-x",
+            "alternating-z",
+            "fan",
+          ] as const),
           torusOddUpright: b(0.5),
 
           // sound-wall
@@ -889,7 +1076,10 @@ export const settingsStore = {
     const raw = slot.settings as Partial<Settings> & { rippleWaveLayers?: number };
     let merged = { ...DEFAULT_SETTINGS, ...raw } as Settings;
     if (raw.rippleWaveLayers != null && raw.rippleColumns === undefined) {
-      merged = { ...merged, rippleColumns: Math.max(1, Math.min(50, Math.round(raw.rippleWaveLayers))) };
+      merged = {
+        ...merged,
+        rippleColumns: Math.max(1, Math.min(50, Math.round(raw.rippleWaveLayers))),
+      };
     }
     state = normalizeSettings({
       ...merged,
@@ -905,13 +1095,27 @@ export const settingsStore = {
     persistSlots();
     slotListeners.forEach((l) => l());
   },
-  subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
-  subscribeSlots: (l: () => void) => { slotListeners.add(l); return () => { slotListeners.delete(l); }; },
+  subscribe: (l: () => void) => {
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  },
+  subscribeSlots: (l: () => void) => {
+    slotListeners.add(l);
+    return () => {
+      slotListeners.delete(l);
+    };
+  },
 };
 
 function persistSlots() {
   if (typeof window !== "undefined") {
-    try { localStorage.setItem(SLOTS_KEY, JSON.stringify(slots)); } catch {}
+    try {
+      localStorage.setItem(SLOTS_KEY, JSON.stringify(slots));
+    } catch {
+      // ignore storage write failures
+    }
   }
 }
 
@@ -924,9 +1128,5 @@ export function useSlots(): SavedSlot[] {
 }
 
 export function useSettings(): Settings {
-  return useSyncExternalStore(
-    settingsStore.subscribe,
-    settingsStore.get,
-    settingsStore.get,
-  );
+  return useSyncExternalStore(settingsStore.subscribe, settingsStore.get, settingsStore.get);
 }

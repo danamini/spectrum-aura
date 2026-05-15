@@ -18,13 +18,7 @@ const mocks = vi.hoisted(() => {
     slotCycleMode: false,
   };
 
-  const slots: Slot[] = [
-    { name: "Slot 1", settings: { view: "combo" } },
-    null,
-    null,
-    null,
-    null,
-  ];
+  const slots: Slot[] = [{ name: "Slot 1", settings: { view: "combo" } }, null, null, null, null];
 
   return {
     state,

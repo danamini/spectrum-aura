@@ -24,8 +24,8 @@ export type ViewMode =
 export class Scene {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
-  group = new THREE.Group();          // combo group
-  classicGroup = new THREE.Group();   // classic group
+  group = new THREE.Group(); // combo group
+  classicGroup = new THREE.Group(); // classic group
   dataStreamGroup = new THREE.Group();
   nebulaGroup = new THREE.Group();
   monolithGroup = new THREE.Group();
@@ -153,7 +153,8 @@ export class Scene {
   private torusSize = 1;
   private torusOddUpright = false;
   private torusColorMode: "shared" | "individual" = "individual";
-  private torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan" = "odd-upright";
+  private torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan" =
+    "odd-upright";
 
   // sound wall view
   private soundwallPillars?: THREE.InstancedMesh;
@@ -319,7 +320,9 @@ export class Scene {
       const arr = this.bars.instanceColor.array as Float32Array;
       for (let i = 0; i < this.barCount; i++) {
         const c = this.colorAt(i / this.barCount);
-        arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b;
+        arr[i * 3] = c.r;
+        arr[i * 3 + 1] = c.g;
+        arr[i * 3 + 2] = c.b;
       }
       this.bars.instanceColor.needsUpdate = true;
     }
@@ -328,7 +331,9 @@ export class Scene {
       const arr = this.classicBars.instanceColor.array as Float32Array;
       for (let i = 0; i < this.classicCount; i++) {
         const c = this.colorAt(i / this.classicCount);
-        arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b;
+        arr[i * 3] = c.r;
+        arr[i * 3 + 1] = c.g;
+        arr[i * 3 + 2] = c.b;
       }
       this.classicBars.instanceColor.needsUpdate = true;
     }
@@ -484,7 +489,9 @@ export class Scene {
     for (let i = 0; i < count; i++) {
       const t = i / count;
       const c = this.colorAt(t);
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
     }
     mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
     this.bars = mesh;
@@ -509,31 +516,32 @@ export class Scene {
       const fragHead =
         "uniform float uBands;\nuniform vec3 uColorLow;\nuniform vec3 uColorMid;\nuniform vec3 uColorHigh;\n" +
         "uniform float uMidStop;\nuniform float uHighStop;\nvarying float vLocalY;\n";
-      shader.fragmentShader = fragHead + shader.fragmentShader
-        .replace(
-          "#include <color_fragment>",
-          `#include <color_fragment>
+      shader.fragmentShader =
+        fragHead +
+        shader.fragmentShader
+          .replace(
+            "#include <color_fragment>",
+            `#include <color_fragment>
            if (uBands > 0.5) {
              vec3 bandCol = uColorLow;
              bandCol = mix(bandCol, uColorMid, smoothstep(uMidStop - 0.05, uMidStop + 0.05, vLocalY));
              bandCol = mix(bandCol, uColorHigh, smoothstep(uHighStop - 0.05, uHighStop + 0.05, vLocalY));
              diffuseColor.rgb = bandCol;
            }`,
-        )
-        .replace(
-          "#include <emissivemap_fragment>",
-          `#include <emissivemap_fragment>
+          )
+          .replace(
+            "#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
            if (uBands > 0.5) {
              vec3 bandCol = uColorLow;
              bandCol = mix(bandCol, uColorMid, smoothstep(uMidStop - 0.05, uMidStop + 0.05, vLocalY));
              bandCol = mix(bandCol, uColorHigh, smoothstep(uHighStop - 0.05, uHighStop + 0.05, vLocalY));
              totalEmissiveRadiance = bandCol * 0.9;
            }`,
-        );
+          );
     };
     mat.needsUpdate = true;
   }
-
 
   buildSphere() {
     const geo = new THREE.IcosahedronGeometry(1.6, 24);
@@ -646,7 +654,9 @@ export class Scene {
     const colors = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const c = this.colorAt(i / count);
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
     }
     bars.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
 
@@ -662,7 +672,9 @@ export class Scene {
     peaks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const peakColors = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      peakColors[i * 3] = 1; peakColors[i * 3 + 1] = 1; peakColors[i * 3 + 2] = 1;
+      peakColors[i * 3] = 1;
+      peakColors[i * 3 + 1] = 1;
+      peakColors[i * 3 + 2] = 1;
     }
     peaks.instanceColor = new THREE.InstancedBufferAttribute(peakColors, 3);
 
@@ -694,10 +706,12 @@ export class Scene {
         "uniform vec3 uColorLow;\nuniform vec3 uColorMid;\nuniform vec3 uColorHigh;\n" +
         "uniform float uMidStop;\nuniform float uHighStop;\n" +
         "varying float vLocalY;\n";
-      shader.fragmentShader = fragHead + shader.fragmentShader
-        .replace(
-          "#include <color_fragment>",
-          `#include <color_fragment>
+      shader.fragmentShader =
+        fragHead +
+        shader.fragmentShader
+          .replace(
+            "#include <color_fragment>",
+            `#include <color_fragment>
            if (uBlocky > 0.5) {
              float seg = vLocalY * uSegments;
              float cell = fract(seg);
@@ -709,17 +723,17 @@ export class Scene {
              bandCol = mix(bandCol, uColorHigh, smoothstep(uHighStop - 0.05, uHighStop + 0.05, vLocalY));
              diffuseColor.rgb = bandCol;
            }`,
-        )
-        .replace(
-          "#include <emissivemap_fragment>",
-          `#include <emissivemap_fragment>
+          )
+          .replace(
+            "#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
            if (uBands > 0.5) {
              vec3 bandCol = uColorLow;
              bandCol = mix(bandCol, uColorMid, smoothstep(uMidStop - 0.05, uMidStop + 0.05, vLocalY));
              bandCol = mix(bandCol, uColorHigh, smoothstep(uHighStop - 0.05, uHighStop + 0.05, vLocalY));
              totalEmissiveRadiance = bandCol * 0.9;
            }`,
-        );
+          );
     };
     mat.needsUpdate = true;
   }
@@ -746,9 +760,19 @@ export class Scene {
     const col = this.tmpColor.set(peakColor);
     peakMat.color.copy(col);
     peakMat.emissive.copy(col);
-    if (peakStyle === "glow") { peakMat.emissiveIntensity = 3.5; peakMat.opacity = 1; peakMat.transparent = false; }
-    else if (peakStyle === "thin") { peakMat.emissiveIntensity = 1.0; peakMat.opacity = 0.85; peakMat.transparent = true; }
-    else { peakMat.emissiveIntensity = 1.4; peakMat.opacity = 1; peakMat.transparent = false; }
+    if (peakStyle === "glow") {
+      peakMat.emissiveIntensity = 3.5;
+      peakMat.opacity = 1;
+      peakMat.transparent = false;
+    } else if (peakStyle === "thin") {
+      peakMat.emissiveIntensity = 1.0;
+      peakMat.opacity = 0.85;
+      peakMat.transparent = true;
+    } else {
+      peakMat.emissiveIntensity = 1.4;
+      peakMat.opacity = 1;
+      peakMat.transparent = false;
+    }
     this.classicPeaks.visible = peakStyle !== "none";
 
     const bins = audio.bins;
@@ -873,7 +897,7 @@ export class Scene {
     mat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader.replace(
         "varying vec3 vPointColor;",
-        "varying vec3 vPointColor;\nattribute vec3 color;"
+        "varying vec3 vPointColor;\nattribute vec3 color;",
       );
     };
     mat.needsUpdate = true;
@@ -890,7 +914,13 @@ export class Scene {
     audio: AudioBands,
     opts: { datastreamAmplitude: number; datastreamUsePalette: boolean },
   ) {
-    if (!this.dataStreamPoints || !this.dataStreamPositions || !this.dataStreamBasePos || !this.dataStreamMat) return;
+    if (
+      !this.dataStreamPoints ||
+      !this.dataStreamPositions ||
+      !this.dataStreamBasePos ||
+      !this.dataStreamMat
+    )
+      return;
     const bins = audio.bins;
     const activeBinCount = Math.max(1, Math.floor(bins.length * 0.7));
     const arr = this.dataStreamPositions;
@@ -913,7 +943,10 @@ export class Scene {
       arr[i * 3 + 2] = base[i * 3 + 2] + (v - 0.5) * 1.4 * high * amp;
       if (colArr) {
         if (opts.datastreamUsePalette) {
-          const c = this.colorAtInto(freqT, this.tmpColor).lerp(this.white, 0.02 + v * 0.08 + bass * 0.03);
+          const c = this.colorAtInto(freqT, this.tmpColor).lerp(
+            this.white,
+            0.02 + v * 0.08 + bass * 0.03,
+          );
           colArr[i * 3] = c.r;
           colArr[i * 3 + 1] = c.g;
           colArr[i * 3 + 2] = c.b;
@@ -925,8 +958,10 @@ export class Scene {
         }
       }
     }
-    (this.dataStreamPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    if (colArr) (this.dataStreamPoints.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    (this.dataStreamPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate =
+      true;
+    if (colArr)
+      (this.dataStreamPoints.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
   }
 
   buildNebula(detail: number = this.nebulaDetail) {
@@ -1067,7 +1102,14 @@ export class Scene {
     mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
     this.monolith = mesh;
     this.monolithGroup.add(mesh);
-    this.monolithSpot = new THREE.SpotLight(this.paletteThree[0].clone(), 2.8, 50, Math.PI / 7, 0.35, 1.2);
+    this.monolithSpot = new THREE.SpotLight(
+      this.paletteThree[0].clone(),
+      2.8,
+      50,
+      Math.PI / 7,
+      0.35,
+      1.2,
+    );
     this.monolithSpot.position.set(0, 15, 0);
     this.monolithSpot.target.position.set(0, 0, 0);
     this.monolithGroup.add(this.monolithSpot, this.monolithSpot.target);
@@ -1077,7 +1119,12 @@ export class Scene {
     dt: number,
     audio: AudioBands,
     time: number,
-    opts: { monolithAmplitude: number; monolithBrightness: number; monolithUsePalette: boolean; monolithWireframe: boolean },
+    opts: {
+      monolithAmplitude: number;
+      monolithBrightness: number;
+      monolithUsePalette: boolean;
+      monolithWireframe: boolean;
+    },
   ) {
     const amp = Math.max(0.05, opts.monolithAmplitude);
     const brightness = Math.max(0.2, Math.min(3, opts.monolithBrightness));
@@ -1109,8 +1156,10 @@ export class Scene {
           if (opts.monolithUsePalette) {
             const signal = Math.pow(bin / 255, 1.1);
             const paletteT = Math.min(1, Math.max(0, freqT * 0.8 + signal * 0.35));
-            const c = this.colorAtInto(paletteT, this.tmpColor)
-              .lerp(this.white, Math.min(1, 0.16 + signal * 0.38 + (brightness - 1) * 0.24));
+            const c = this.colorAtInto(paletteT, this.tmpColor).lerp(
+              this.white,
+              Math.min(1, 0.16 + signal * 0.38 + (brightness - 1) * 0.24),
+            );
             colors[i * 3] = c.r;
             colors[i * 3 + 1] = c.g;
             colors[i * 3 + 2] = c.b;
@@ -1121,11 +1170,7 @@ export class Scene {
           }
         }
 
-        this.dummy.position.set(
-          (x - (size - 1) / 2) * spacing,
-          0,
-          (z - (size - 1) / 2) * spacing,
-        );
+        this.dummy.position.set((x - (size - 1) / 2) * spacing, 0, (z - (size - 1) / 2) * spacing);
         this.dummy.scale.set(1, next, 1);
         this.dummy.rotation.set(0, 0, 0);
         this.dummy.updateMatrix();
@@ -1140,8 +1185,10 @@ export class Scene {
     const tz = (peakZ - (size - 1) / 2) * spacing;
     this.monolithSpot.position.x += (tx - this.monolithSpot.position.x) * Math.min(1, dt * 4);
     this.monolithSpot.position.z += (tz - this.monolithSpot.position.z) * Math.min(1, dt * 4);
-    this.monolithSpot.target.position.x += (tx - this.monolithSpot.target.position.x) * Math.min(1, dt * 5);
-    this.monolithSpot.target.position.z += (tz - this.monolithSpot.target.position.z) * Math.min(1, dt * 5);
+    this.monolithSpot.target.position.x +=
+      (tx - this.monolithSpot.target.position.x) * Math.min(1, dt * 5);
+    this.monolithSpot.target.position.z +=
+      (tz - this.monolithSpot.target.position.z) * Math.min(1, dt * 5);
 
     const mat = this.monolith.material as THREE.MeshStandardMaterial;
     mat.color.setRGB(1, 1, 1);
@@ -1155,10 +1202,14 @@ export class Scene {
       mat.metalness = 0.45;
       mat.roughness = 0.4;
     }
-    mat.emissiveIntensity = (opts.monolithUsePalette ? 1.3 + audio.high * 1.1 : 0.5 + audio.high * 1.2) * brightness;
-    this.monolithSpot.intensity = (opts.monolithUsePalette ? 5.4 + audio.bass * 7.2 : 3.2 + audio.bass * 5.6) * brightness;
+    mat.emissiveIntensity =
+      (opts.monolithUsePalette ? 1.3 + audio.high * 1.1 : 0.5 + audio.high * 1.2) * brightness;
+    this.monolithSpot.intensity =
+      (opts.monolithUsePalette ? 5.4 + audio.bass * 7.2 : 3.2 + audio.bass * 5.6) * brightness;
     if (opts.monolithUsePalette) {
-      this.monolithSpot.color.copy(this.colorAtInto(peakFreqT, this.tmpColor)).lerp(this.white, 0.32);
+      this.monolithSpot.color
+        .copy(this.colorAtInto(peakFreqT, this.tmpColor))
+        .lerp(this.white, 0.32);
     } else {
       this.monolithSpot.color.set("#ffffff");
     }
@@ -1236,7 +1287,7 @@ export class Scene {
           Math.sin(angle) * radius,
         );
       }
-      const sampled = r.curve.getPoints((r.positions.length / 3) - 1);
+      const sampled = r.curve.getPoints(r.positions.length / 3 - 1);
       for (let s = 0; s < sampled.length; s++) {
         const pt = sampled[s]!;
         r.positions[s * 3] = pt.x;
@@ -1249,7 +1300,9 @@ export class Scene {
       // LineMaterial width is in screen-space px, so scale slider to a visibly thick range.
       mat.linewidth = Math.max(2, opts.mandalaLineWidth * 6);
       if (opts.mandalaUsePalette) {
-        mat.color.copy(this.colorAtInto(((i / R) + time * 0.03) % 1, this.tmpColor)).lerp(this.white, Math.min(0.06, audio.high * 0.06));
+        mat.color
+          .copy(this.colorAtInto((i / R + time * 0.03) % 1, this.tmpColor))
+          .lerp(this.white, Math.min(0.06, audio.high * 0.06));
       } else {
         mat.color.set("#d8e7ff");
       }
@@ -1339,7 +1392,9 @@ export class Scene {
             colArr[i * 3 + 1] = col.g * rowFade;
             colArr[i * 3 + 2] = col.b * rowFade;
           } else {
-            const col = this.tmpColor.copy(this.terrainColorA).lerp(this.terrainColorB, heightNorm * 0.45);
+            const col = this.tmpColor
+              .copy(this.terrainColorA)
+              .lerp(this.terrainColorB, heightNorm * 0.45);
             colArr[i * 3] = col.r * rowFade;
             colArr[i * 3 + 1] = col.g * rowFade;
             colArr[i * 3 + 2] = col.b * rowFade;
@@ -1388,9 +1443,15 @@ export class Scene {
       // Create a small shard face geometry from these 3 verts
       const geo = new THREE.BufferGeometry();
       const verts = new Float32Array(9);
-      verts[0] = va.x; verts[1] = va.y; verts[2] = va.z;
-      verts[3] = vb.x; verts[4] = vb.y; verts[5] = vb.z;
-      verts[6] = vc.x; verts[7] = vc.y; verts[8] = vc.z;
+      verts[0] = va.x;
+      verts[1] = va.y;
+      verts[2] = va.z;
+      verts[3] = vb.x;
+      verts[4] = vb.y;
+      verts[5] = vb.z;
+      verts[6] = vc.x;
+      verts[7] = vc.y;
+      verts[8] = vc.z;
       geo.setAttribute("position", new THREE.BufferAttribute(verts, 3));
       geo.computeVertexNormals();
       const mat = new THREE.MeshStandardMaterial({
@@ -1404,7 +1465,11 @@ export class Scene {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
       this.obsidianGroup.add(mesh);
-      const axis = center.clone().normalize().cross(new THREE.Vector3(0, 1, 0.3)).normalize();
+      const axis = center
+        .clone()
+        .normalize()
+        .cross(new THREE.Vector3(0, 1, 0.3))
+        .normalize();
       if (axis.lengthSq() < 0.0001) axis.set(0, 1, 0);
       this.obsidianShards.push({
         mesh,
@@ -1458,8 +1523,11 @@ export class Scene {
     const peakFlare = audio.beat ? 1 : 0;
     if (this.obsidianCore) {
       const targetIntensity = (1.5 + bass * 8 + peakFlare * 12) * amp;
-      this.obsidianCore.intensity += (targetIntensity - this.obsidianCore.intensity) * Math.min(1, dt * 10);
-      this.obsidianCore.color.copy(opts.obsidianUsePalette ? this.paletteThree[1] : this.tmpColor.set(0xffffff));
+      this.obsidianCore.intensity +=
+        (targetIntensity - this.obsidianCore.intensity) * Math.min(1, dt * 10);
+      this.obsidianCore.color.copy(
+        opts.obsidianUsePalette ? this.paletteThree[1] : this.tmpColor.set(0xffffff),
+      );
     }
 
     for (let i = 0; i < n; i++) {
@@ -1545,28 +1613,31 @@ export class Scene {
     const count = this.torusParticleCount;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
-    const angles = new Float32Array(count);     // major angle (around ring)
-    const minors = new Float32Array(count);     // minor angle (inside tube)
+    const angles = new Float32Array(count); // major angle (around ring)
+    const minors = new Float32Array(count); // minor angle (inside tube)
     for (let i = 0; i < count; i++) {
       angles[i] = Math.random() * Math.PI * 2;
       minors[i] = Math.random() * Math.PI * 2;
       const r = 0.5 + Math.random() * 0.5; // radius within tube (0-1 normalized)
       const major = angles[i]!;
       const minor = minors[i]!;
-      const R = 4.5, tube = 1.1 * r;
-      positions[i * 3]     = (R + tube * Math.cos(minor)) * Math.cos(major);
+      const R = 4.5,
+        tube = 1.1 * r;
+      positions[i * 3] = (R + tube * Math.cos(minor)) * Math.cos(major);
       positions[i * 3 + 1] = tube * Math.sin(minor);
       positions[i * 3 + 2] = (R + tube * Math.cos(minor)) * Math.sin(major);
       const freqT = i / count;
       const c = this.colorAt(freqT);
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
     }
     this.torusParticleAngles = angles;
-    this.torusParticleMinor  = minors;
+    this.torusParticleMinor = minors;
     this.torusParticleColors = colors;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute("color",    new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     const mat = new THREE.PointsMaterial({
       size: 0.06,
       vertexColors: true,
@@ -1578,7 +1649,14 @@ export class Scene {
     this.torusParticleGeo = geo;
     this.torusParticleMat = mat;
     this.torusParticles = new THREE.Points(geo, mat);
-    this.syncTorusLayout(this.torusCount, this.torusOddUpright, this.torusSpacing, this.torusSize, this.torusRotationMode, this.torusColorMode);
+    this.syncTorusLayout(
+      this.torusCount,
+      this.torusOddUpright,
+      this.torusSpacing,
+      this.torusSize,
+      this.torusRotationMode,
+      this.torusColorMode,
+    );
   }
 
   private syncTorusLayout(
@@ -1661,10 +1739,16 @@ export class Scene {
       torusFullscreen: boolean;
     },
   ) {
-    if (!this.torusMesh || !this.torusParticles || !this.torusParticleAngles || !this.torusParticleMinor) return;
+    if (
+      !this.torusMesh ||
+      !this.torusParticles ||
+      !this.torusParticleAngles ||
+      !this.torusParticleMinor
+    )
+      return;
     const amp = Math.max(0.05, opts.torusAmplitude);
     const bass = Math.max(0, Math.min(1, audio.bass));
-    const mid  = Math.max(0, Math.min(1, audio.mid));
+    const mid = Math.max(0, Math.min(1, audio.mid));
     const high = Math.max(0, Math.min(1, audio.high));
     const bins = audio.bins;
 
@@ -1693,9 +1777,7 @@ export class Scene {
     }
 
     // BPM-locked speed: higher BPM = faster orbit
-    const bpmFactor = audio.bpm > 0 && audio.bpmConfidence > 0.35
-      ? audio.bpm / 128
-      : 1;
+    const bpmFactor = audio.bpm > 0 && audio.bpmConfidence > 0.35 ? audio.bpm / 128 : 1;
     const orbitSpeed = (0.25 + bass * 0.4) * bpmFactor * opts.torusSpeed * amp;
 
     // Tube radius pulse with frequency spectrum
@@ -1709,7 +1791,9 @@ export class Scene {
     if (this.torusMat) {
       this.torusMat.opacity = 0.12 + bass * 0.1;
       if (opts.torusUsePalette) {
-        (this.torusMat as THREE.MeshPhysicalMaterial).color.copy(this.paletteThree[1]).lerp(this.paletteThree[2], mid);
+        (this.torusMat as THREE.MeshPhysicalMaterial).color
+          .copy(this.paletteThree[1])
+          .lerp(this.paletteThree[2], mid);
       }
     }
 
@@ -1741,16 +1825,23 @@ export class Scene {
 
       if (colArr) {
         if (opts.torusUsePalette) {
-          const c = this.colorAtInto(freqT, this.tmpColor).lerp(this.white, 0.05 + binVal * 0.15 + bass * 0.04);
-          colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
+          const c = this.colorAtInto(freqT, this.tmpColor).lerp(
+            this.white,
+            0.05 + binVal * 0.15 + bass * 0.04,
+          );
+          colArr[i * 3] = c.r;
+          colArr[i * 3 + 1] = c.g;
+          colArr[i * 3 + 2] = c.b;
         }
       }
     }
     pos.needsUpdate = true;
-    if (colArr) (this.torusParticleGeo!.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    if (colArr)
+      (this.torusParticleGeo!.attributes.color as THREE.BufferAttribute).needsUpdate = true;
 
     if (this.torusParticleMat) {
-      const particleSize = Math.max(0.005, opts.torusParticleSize) * (0.8 + bass * 0.5) * Math.max(0.5, amp);
+      const particleSize =
+        Math.max(0.005, opts.torusParticleSize) * (0.8 + bass * 0.5) * Math.max(0.5, amp);
       this.torusParticleMat.size = particleSize;
       for (const cell of this.torusCells) {
         cell.particleMat.size = particleSize;
@@ -1820,7 +1911,12 @@ export class Scene {
     dt: number,
     audio: AudioBands,
     _time: number,
-    opts: { soundwallAmplitude: number; soundwallUsePalette: boolean; soundwallColumns: number; soundwallRows: number },
+    opts: {
+      soundwallAmplitude: number;
+      soundwallUsePalette: boolean;
+      soundwallColumns: number;
+      soundwallRows: number;
+    },
   ) {
     const C = Math.max(4, Math.round(opts.soundwallColumns));
     const R = Math.max(2, Math.round(opts.soundwallRows));
@@ -1830,7 +1926,7 @@ export class Scene {
     if (!this.soundwallPillars || !this.soundwallHistory || !this.soundwallMat) return;
     const amp = Math.max(0.05, opts.soundwallAmplitude);
     const bass = Math.max(0, Math.min(1, audio.bass));
-    const mid  = Math.max(0, Math.min(1, audio.mid));
+    const mid = Math.max(0, Math.min(1, audio.mid));
     const bins = audio.bins;
     const activeBins = Math.max(1, Math.floor(bins.length * 0.7));
 
@@ -1846,7 +1942,8 @@ export class Scene {
     // Strobe light: flash on bass transients
     if (this.soundwallStrobeLight) {
       const targetIntensity = audio.beat ? (3 + bass * 18) * amp : 0;
-      this.soundwallStrobeLight.intensity += (targetIntensity - this.soundwallStrobeLight.intensity) * Math.min(1, dt * 20);
+      this.soundwallStrobeLight.intensity +=
+        (targetIntensity - this.soundwallStrobeLight.intensity) * Math.min(1, dt * 20);
       if (opts.soundwallUsePalette) {
         this.soundwallStrobeLight.color.copy(this.paletteThree[0]).lerp(this.paletteThree[1], bass);
       } else {
@@ -1855,7 +1952,7 @@ export class Scene {
     }
 
     const d = this.dummy;
-    const xGap = 1.1;   // spacing between columns
+    const xGap = 1.1; // spacing between columns
     const zSpacing = 1.5; // depth spacing between rows
     const sideOffset = 2.8; // corridor half-width
 
@@ -1950,7 +2047,11 @@ export class Scene {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(bx, by, bz);
       this.geometrynebulaGroup.add(mesh);
-      const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      const axis = new THREE.Vector3(
+        Math.random() - 0.5,
+        Math.random() - 0.5,
+        Math.random() - 0.5,
+      ).normalize();
       this.geoNebulaMeshes.push({
         mesh,
         freqBin: i,
@@ -2005,7 +2106,7 @@ export class Scene {
     if (this.geoNebulaMeshes.length === 0) return;
     const amp = Math.max(0.05, opts.geometrynebulaAmplitude);
     const bass = Math.max(0, Math.min(1, audio.bass));
-    const mid  = Math.max(0, Math.min(1, audio.mid));
+    const mid = Math.max(0, Math.min(1, audio.mid));
     const high = Math.max(0, Math.min(1, audio.high));
     const bins = audio.bins;
     const N = this.geoNebulaMeshes.length;
@@ -2020,7 +2121,8 @@ export class Scene {
     // Core light
     if (this.geoNebulaCoreLight) {
       const targetIntensity = (2.4 + bass * 14 + mid * 6) * amp * orbitSpeed;
-      this.geoNebulaCoreLight.intensity += (targetIntensity - this.geoNebulaCoreLight.intensity) * Math.min(1, dt * 6);
+      this.geoNebulaCoreLight.intensity +=
+        (targetIntensity - this.geoNebulaCoreLight.intensity) * Math.min(1, dt * 6);
       if (opts.geometrynebulaUsePalette) {
         this.geoNebulaCoreLight.color.copy(this.paletteThree[1]).lerp(this.paletteThree[0], bass);
       }
@@ -2035,14 +2137,20 @@ export class Scene {
       // Scale pulse to assigned frequency
       const targetScale = s.baseScale * (1 + binVal * 2.1 * amp + bass * 0.35);
       const curScale = s.mesh.scale.x;
-      s.mesh.scale.setScalar(curScale + (targetScale - curScale) * Math.min(1, dt * (9 + orbitSpeed * 4)));
+      s.mesh.scale.setScalar(
+        curScale + (targetScale - curScale) * Math.min(1, dt * (9 + orbitSpeed * 4)),
+      );
 
       // Position — orbit gently around base position
       const orbitAmt = (0.45 + high * 1.1) * amp * orbitSpeed;
       const wobble = 0.18 + binVal * 0.4;
-      const px = s.basePos.x + Math.sin(time * (0.7 + orbitSpeed * 0.25) + i * 0.5) * orbitAmt * wobble;
-      const py = s.basePos.y + Math.cos(time * (0.55 + orbitSpeed * 0.18) + i * 0.4) * orbitAmt * 0.7 * wobble;
-      const pz = s.basePos.z + Math.cos(time * (0.6 + orbitSpeed * 0.22) + i * 0.6) * orbitAmt * wobble;
+      const px =
+        s.basePos.x + Math.sin(time * (0.7 + orbitSpeed * 0.25) + i * 0.5) * orbitAmt * wobble;
+      const py =
+        s.basePos.y +
+        Math.cos(time * (0.55 + orbitSpeed * 0.18) + i * 0.4) * orbitAmt * 0.7 * wobble;
+      const pz =
+        s.basePos.z + Math.cos(time * (0.6 + orbitSpeed * 0.22) + i * 0.6) * orbitAmt * wobble;
       s.mesh.position.set(px, py, pz);
 
       // Rotation per shape
@@ -2077,100 +2185,105 @@ export class Scene {
     this.postFxBoost.glitch = 0;
   }
 
-  update(dt: number, time: number, audio: AudioBands, opts: {
-    sphereDisp: number;
-    orbitSpeed: number;
-    peakDecay: number;
-    peakHold: number;
-    colorBands: boolean;
-    blocky: boolean;
-    segments: number;
-    grid: boolean;
-    gridOpacity: number;
-    cameraDrift: boolean;
-    cameraDriftAmount: number;
-    cameraBeat: boolean;
-    cameraBeatAmount: number;
-    cameraMouse: boolean;
-    classicSpin: boolean;
-    classicSpinSpeed: number;
-    classicWireframe: boolean;
-    classicFullscreen: boolean;
-    peakColor: string;
-    peakStyle: "bar" | "thin" | "glow" | "none";
-    rippleRingCount: number;
-    rippleColumns: number;
-    rippleMaxRadius: number;
-    rippleSpeed: number;
-    rippleAmplitude: number;
-    rippleWaveCycles: number;
-    rippleThickness: number;
-    rippleRotationSpeed: number;
-    rippleOpacity: number;
-    rippleWireframe: boolean;
-    datastreamUsePalette: boolean;
-    datastreamAmplitude: number;
-    datastreamItemCount: number;
-    nebulaUsePalette: boolean;
-    nebulaAmplitude: number;
-    nebulaDetail: number;
-    nebulaWireframe: boolean;
-    monolithUsePalette: boolean;
-    monolithAmplitude: number;
-    monolithBrightness: number;
-    monolithGridSize: number;
-    monolithWireframe: boolean;
-    mandalaUsePalette: boolean;
-    mandalaAmplitude: number;
-    mandalaLineCount: number;
-    mandalaLineWidth: number;
-    terrainUsePalette: boolean;
-    terrainAmplitude: number;
-    terrainColumns: number;
-    terrainWireframe: boolean;
-    comboSphereSize: number;
-    comboSphereSpinSpeed: number;
-    comboSphereBassPunch: number;
-    comboBarRadius: number;
-    comboBarHeightScale: number;
-    comboParticleSize: number;
-    comboLevelMeter: boolean;
-    comboWireframe: boolean;
-    comboFullscreen: boolean;
-    rippleFullscreen: boolean;
-    datastreamFullscreen: boolean;
-    nebulaFullscreen: boolean;
-    monolithFullscreen: boolean;
-    mandalaFullscreen: boolean;
-    terrainFullscreen: boolean;
-    obsidianFullscreen: boolean;
-    obsidianUsePalette: boolean;
-    obsidianAmplitude: number;
-    obsidianShardDetail: number;
-    torusFullscreen: boolean;
-    torusUsePalette: boolean;
-    torusAmplitude: number;
-    torusParticleCount: number;
-    torusSpeed: number;
-    torusCount: number;
-    torusSpacing: number;
-    torusSize: number;
-    torusParticleSize: number;
-    torusColorMode: "shared" | "individual";
-    torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
-    torusOddUpright: boolean;
-    soundwallFullscreen: boolean;
-    soundwallUsePalette: boolean;
-    soundwallAmplitude: number;
-    soundwallColumns: number;
-    soundwallRows: number;
-    geometrynebulaFullscreen: boolean;
-    geometrynebulaUsePalette: boolean;
-    geometrynebulaAmplitude: number;
-    geometrynebulaCount: number;
-    bgColor: string;
-    view: ViewMode;
-  }) {
+  update(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: {
+      sphereDisp: number;
+      orbitSpeed: number;
+      peakDecay: number;
+      peakHold: number;
+      colorBands: boolean;
+      blocky: boolean;
+      segments: number;
+      grid: boolean;
+      gridOpacity: number;
+      cameraDrift: boolean;
+      cameraDriftAmount: number;
+      cameraBeat: boolean;
+      cameraBeatAmount: number;
+      cameraMouse: boolean;
+      classicSpin: boolean;
+      classicSpinSpeed: number;
+      classicWireframe: boolean;
+      classicFullscreen: boolean;
+      peakColor: string;
+      peakStyle: "bar" | "thin" | "glow" | "none";
+      rippleRingCount: number;
+      rippleColumns: number;
+      rippleMaxRadius: number;
+      rippleSpeed: number;
+      rippleAmplitude: number;
+      rippleWaveCycles: number;
+      rippleThickness: number;
+      rippleRotationSpeed: number;
+      rippleOpacity: number;
+      rippleWireframe: boolean;
+      datastreamUsePalette: boolean;
+      datastreamAmplitude: number;
+      datastreamItemCount: number;
+      nebulaUsePalette: boolean;
+      nebulaAmplitude: number;
+      nebulaDetail: number;
+      nebulaWireframe: boolean;
+      monolithUsePalette: boolean;
+      monolithAmplitude: number;
+      monolithBrightness: number;
+      monolithGridSize: number;
+      monolithWireframe: boolean;
+      mandalaUsePalette: boolean;
+      mandalaAmplitude: number;
+      mandalaLineCount: number;
+      mandalaLineWidth: number;
+      terrainUsePalette: boolean;
+      terrainAmplitude: number;
+      terrainColumns: number;
+      terrainWireframe: boolean;
+      comboSphereSize: number;
+      comboSphereSpinSpeed: number;
+      comboSphereBassPunch: number;
+      comboBarRadius: number;
+      comboBarHeightScale: number;
+      comboParticleSize: number;
+      comboLevelMeter: boolean;
+      comboWireframe: boolean;
+      comboFullscreen: boolean;
+      rippleFullscreen: boolean;
+      datastreamFullscreen: boolean;
+      nebulaFullscreen: boolean;
+      monolithFullscreen: boolean;
+      mandalaFullscreen: boolean;
+      terrainFullscreen: boolean;
+      obsidianFullscreen: boolean;
+      obsidianUsePalette: boolean;
+      obsidianAmplitude: number;
+      obsidianShardDetail: number;
+      torusFullscreen: boolean;
+      torusUsePalette: boolean;
+      torusAmplitude: number;
+      torusParticleCount: number;
+      torusSpeed: number;
+      torusCount: number;
+      torusSpacing: number;
+      torusSize: number;
+      torusParticleSize: number;
+      torusColorMode: "shared" | "individual";
+      torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
+      torusOddUpright: boolean;
+      soundwallFullscreen: boolean;
+      soundwallUsePalette: boolean;
+      soundwallAmplitude: number;
+      soundwallColumns: number;
+      soundwallRows: number;
+      geometrynebulaFullscreen: boolean;
+      geometrynebulaUsePalette: boolean;
+      geometrynebulaAmplitude: number;
+      geometrynebulaCount: number;
+      bgColor: string;
+      view: ViewMode;
+    },
+  ) {
     // Keep scene visibility + branch view in lockstep with React settings every frame.
     this.setView(opts.view);
 
@@ -2207,9 +2320,15 @@ export class Scene {
     const applyCameraDrift = (scale = 1) => {
       if (drift <= 0) return;
       const a = driftPos * scale * 1.35;
-      this.camera.position.x += Math.sin(time * 0.27) * a + Math.cos(time * 0.16) * a * 0.7 + Math.sin(time * 0.43) * a * 0.35;
+      this.camera.position.x +=
+        Math.sin(time * 0.27) * a +
+        Math.cos(time * 0.16) * a * 0.7 +
+        Math.sin(time * 0.43) * a * 0.35;
       this.camera.position.y += Math.sin(time * 0.24) * a * 0.85 + Math.sin(time * 0.38) * a * 0.45;
-      this.camera.position.z += Math.cos(time * 0.22) * a * 1.05 + Math.sin(time * 0.2) * a * 0.65 + Math.cos(time * 0.31) * a * 0.3;
+      this.camera.position.z +=
+        Math.cos(time * 0.22) * a * 1.05 +
+        Math.sin(time * 0.2) * a * 0.65 +
+        Math.cos(time * 0.31) * a * 0.3;
     };
 
     if (opts.view === "classic") {
@@ -2217,7 +2336,17 @@ export class Scene {
       if (this.classicGridMat) this.classicGridMat.opacity = opts.gridOpacity;
       this.classicBarMat.wireframe = opts.classicWireframe;
       (this.classicPeaks.material as THREE.MeshStandardMaterial).wireframe = opts.classicWireframe;
-      this.updateClassic(dt, audio, opts.peakDecay, opts.peakHold, opts.colorBands, opts.blocky, opts.segments, opts.peakColor, opts.peakStyle);
+      this.updateClassic(
+        dt,
+        audio,
+        opts.peakDecay,
+        opts.peakHold,
+        opts.colorBands,
+        opts.blocky,
+        opts.segments,
+        opts.peakColor,
+        opts.peakStyle,
+      );
 
       if (opts.classicFullscreen) {
         this.classicGroup.rotation.y += (0 - this.classicGroup.rotation.y) * Math.min(1, dt * 8);
@@ -2246,7 +2375,9 @@ export class Scene {
         this.classicGroup.rotation.y += (0 - this.classicGroup.rotation.y) * Math.min(1, dt * 2);
       }
 
-      let camX = 0, camY = 3, camZ = 11;
+      let camX = 0,
+        camY = 3,
+        camZ = 11;
       if (opts.cameraMouse) {
         // orbit around classic group via mouse
         const r = this.mouseZoom + 0;
@@ -2366,7 +2497,11 @@ export class Scene {
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.8 + 0.08);
         const rad = 12;
-        this.camera.position.set(Math.sin(this.orbitAngle) * rad, 4.5, Math.cos(this.orbitAngle) * rad);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * rad,
+          4.5,
+          Math.cos(this.orbitAngle) * rad,
+        );
       }
       applyCameraDrift(2.5);
       this.camera.lookAt(0, 0, 0);
@@ -2402,7 +2537,11 @@ export class Scene {
         );
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.7 + 0.05);
-        this.camera.position.set(Math.sin(this.orbitAngle) * 8.5, Math.sin(time * 0.4) * 0.7, Math.cos(this.orbitAngle) * 8.5);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 8.5,
+          Math.sin(time * 0.4) * 0.7,
+          Math.cos(this.orbitAngle) * 8.5,
+        );
       }
       applyCameraDrift(2.2);
       this.camera.lookAt(0, 0, 0);
@@ -2439,7 +2578,11 @@ export class Scene {
         );
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.5 + 0.045);
-        this.camera.position.set(Math.sin(this.orbitAngle) * 24, 12, Math.cos(this.orbitAngle) * 24);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 24,
+          12,
+          Math.cos(this.orbitAngle) * 24,
+        );
       }
       applyCameraDrift(3.2);
       this.camera.lookAt(0, 0, 0);
@@ -2473,7 +2616,11 @@ export class Scene {
         );
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.85 + 0.12);
-        this.camera.position.set(Math.sin(this.orbitAngle) * 10.5, Math.sin(time * 0.5) * 1.2, Math.cos(this.orbitAngle) * 10.5);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 10.5,
+          Math.sin(time * 0.5) * 1.2,
+          Math.cos(this.orbitAngle) * 10.5,
+        );
       }
       applyCameraDrift(2.4);
       this.camera.lookAt(0, 0, 0);
@@ -2518,7 +2665,8 @@ export class Scene {
 
     if (opts.view === "obsidian") {
       // Rebuild if detail changed
-      if (opts.obsidianShardDetail !== this.obsidianDetail) this.buildObsidian(opts.obsidianShardDetail);
+      if (opts.obsidianShardDetail !== this.obsidianDetail)
+        this.buildObsidian(opts.obsidianShardDetail);
       this.updateObsidian(dt, time, audio, {
         obsidianAmplitude: opts.obsidianAmplitude,
         obsidianUsePalette: opts.obsidianUsePalette,
@@ -2543,7 +2691,11 @@ export class Scene {
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.6 + 0.05);
         const rad = 9 + audio.bass * 1.5;
-        this.camera.position.set(Math.sin(this.orbitAngle) * rad, 2 + Math.sin(time * 0.4) * 1.2, Math.cos(this.orbitAngle) * rad);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * rad,
+          2 + Math.sin(time * 0.4) * 1.2,
+          Math.cos(this.orbitAngle) * rad,
+        );
       }
       const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
       applyCameraDrift(4.2);
@@ -2588,7 +2740,11 @@ export class Scene {
         );
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.4 + 0.04);
-        this.camera.position.set(Math.sin(this.orbitAngle) * 12, Math.sin(time * 0.3) * 2.5 + 0.5, Math.cos(this.orbitAngle) * 12);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 12,
+          Math.sin(time * 0.3) * 2.5 + 0.5,
+          Math.cos(this.orbitAngle) * 12,
+        );
       }
       const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
       applyCameraDrift(4.5);
@@ -2668,7 +2824,11 @@ export class Scene {
         );
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.65 + 0.05);
-        this.camera.position.set(Math.sin(this.orbitAngle) * 11, Math.sin(time * 0.35) * 1.8 + 1, Math.cos(this.orbitAngle) * 11);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 11,
+          Math.sin(time * 0.35) * 1.8 + 1,
+          Math.cos(this.orbitAngle) * 11,
+        );
       }
       const bk = this.kick * (opts.cameraBeat ? opts.cameraBeatAmount : 0);
       applyCameraDrift(2.7);
@@ -2678,7 +2838,6 @@ export class Scene {
       this.camera.lookAt(0, 0, 0);
       return;
     }
-
 
     this.postFxBoost.bloom = 1;
     this.postFxBoost.glitch = 0;
@@ -2696,18 +2855,22 @@ export class Scene {
         const v = bins[idx] / 255;
         const angle = (i / this.barCount) * Math.PI * 2;
         // BPM Syncing: Apply subtle rotation to the bar ring based on BPM phase
-        const bpmRotation = audio.bpm > 0 && audio.bpmConfidence > 0.3 ? (bpmPhase * Math.PI * 2 * 0.3) : 0;
+        const bpmRotation =
+          audio.bpm > 0 && audio.bpmConfidence > 0.3 ? bpmPhase * Math.PI * 2 * 0.3 : 0;
         const rotatedAngle = angle + bpmRotation;
         const h = 0.2 + Math.pow(v, 1.4) * 6 * hScale;
-        this.dummy.position.set(Math.cos(rotatedAngle) * radius, 0, Math.sin(rotatedAngle) * radius);
+        this.dummy.position.set(
+          Math.cos(rotatedAngle) * radius,
+          0,
+          Math.sin(rotatedAngle) * radius,
+        );
         this.dummy.scale.set(1, h, 1);
         this.dummy.rotation.y = -rotatedAngle;
         this.dummy.updateMatrix();
         this.bars.setMatrixAt(i, this.dummy.matrix);
       }
       this.bars.instanceMatrix.needsUpdate = true;
-      (this.bars.material as THREE.MeshStandardMaterial).emissiveIntensity =
-        0.3 + audio.bass * 1.4;
+      (this.bars.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.3 + audio.bass * 1.4;
     }
 
     // sphere
@@ -2715,11 +2878,12 @@ export class Scene {
     this.sphereMat.uniforms.uBass.value = audio.bass;
     this.sphereMat.uniforms.uMid.value = audio.mid;
     this.sphereMat.uniforms.uDisp.value = opts.sphereDisp;
-    
+
     // BPM Syncing: Apply to sphere rotation
     // Sync sphere spin speed to BPM (faster when BPM is detected and confident)
-    const bpmSpinBoost = audio.bpm > 0 && audio.bpmConfidence > 0.3 ? (1 + audio.bpmConfidence * 0.4) : 1;
-    
+    const bpmSpinBoost =
+      audio.bpm > 0 && audio.bpmConfidence > 0.3 ? 1 + audio.bpmConfidence * 0.4 : 1;
+
     const s = opts.comboSphereSize * (1 + audio.bass * opts.comboSphereBassPunch);
     this.sphere.scale.setScalar(s);
     this.sphere.rotation.y += dt * opts.comboSphereSpinSpeed * bpmSpinBoost;
@@ -2732,7 +2896,8 @@ export class Scene {
     const positions = this.particleGeo.attributes.position as THREE.BufferAttribute;
     const seeds = this.particleSeeds;
     // BPM-synced energy pulse: particles are more active on BPM beats
-    const bpmEnergyMod = 1 + Math.max(0, Math.sin(bpmPhase * Math.PI * 2)) * (audio.bpmConfidence || 0) * 0.6;
+    const bpmEnergyMod =
+      1 + Math.max(0, Math.sin(bpmPhase * Math.PI * 2)) * (audio.bpmConfidence || 0) * 0.6;
     const energy = (0.6 + audio.high * 1.4 + audio.mid * 0.6) * bpmEnergyMod;
     for (let i = 0; i < this.particleCount; i++) {
       const r0 = seeds[i * 3];
@@ -2835,8 +3000,6 @@ export class Scene {
     this.targetZoom = Math.max(5, Math.min(28, this.targetZoom + d * 0.01));
   }
 
-
-
   buildRipple() {
     for (const col of this.rippleColumnData) {
       this.rippleGroup.remove(col.root);
@@ -2846,7 +3009,9 @@ export class Scene {
     this.rippleGeo?.dispose();
 
     // Annular tube unit ring (inner=0, outer=1, height=0 → square cross section auto)
-    const inner = 0.0, outer = 1.0, half = 0.5;
+    const inner = 0.0,
+      outer = 1.0,
+      half = 0.5;
     const points = [
       new THREE.Vector2(inner, -half),
       new THREE.Vector2(outer, -half),
@@ -2897,7 +3062,7 @@ export class Scene {
     if (n === 0 || colCount <= 0) return 0;
     const end = Math.max(2, Math.floor(n * 0.95));
     const w = end / colCount;
-    let a = Math.floor(col * w);
+    const a = Math.floor(col * w);
     let b = Math.floor((col + 1) * w);
     if (b <= a) b = a + 1;
     let sum = 0;
@@ -2906,12 +3071,17 @@ export class Scene {
   }
 
   /** Ring-index sample within one column's frequency slice. */
-  private rippleRingSpectrumInSlice(bins: Uint8Array, t: number, col: number, colCount: number): number {
+  private rippleRingSpectrumInSlice(
+    bins: Uint8Array,
+    t: number,
+    col: number,
+    colCount: number,
+  ): number {
     const n = bins.length;
     if (n === 0) return 0;
     const end = Math.max(2, Math.floor(n * 0.95));
     const w = end / colCount;
-    let a = Math.floor(col * w);
+    const a = Math.floor(col * w);
     let b = Math.floor((col + 1) * w);
     if (b <= a) b = a + 1;
     const span = b - a;
@@ -2920,18 +3090,23 @@ export class Scene {
     return bins[a + rel]! / 255;
   }
 
-  private updateRipple(dt: number, _time: number, audio: AudioBands, opts: {
-    rippleColumns: number;
-    rippleMaxRadius: number;
-    rippleSpeed: number;
-    rippleAmplitude: number;
-    rippleWaveCycles: number;
-    rippleThickness: number;
-    rippleRotationSpeed: number;
-    rippleOpacity: number;
-    rippleWireframe: boolean;
-    rippleFullscreen: boolean;
-  }) {
+  private updateRipple(
+    dt: number,
+    _time: number,
+    audio: AudioBands,
+    opts: {
+      rippleColumns: number;
+      rippleMaxRadius: number;
+      rippleSpeed: number;
+      rippleAmplitude: number;
+      rippleWaveCycles: number;
+      rippleThickness: number;
+      rippleRotationSpeed: number;
+      rippleOpacity: number;
+      rippleWireframe: boolean;
+      rippleFullscreen: boolean;
+    },
+  ) {
     const N = this.rippleCount;
     const bins = audio.bins;
     const C = Math.max(1, Math.min(50, Math.round(opts.rippleColumns) || 1));
@@ -2949,7 +3124,10 @@ export class Scene {
     this.rippleGroup.scale.set(step, yScale, step);
 
     const baseThickness = 0.08;
-    const amplitude = (maxRadius * 0.32 * (baseThickness / 0.08)) / yScale * (0.8 + audio.bass * 1.3) * Math.max(0.05, opts.rippleAmplitude);
+    const amplitude =
+      ((maxRadius * 0.32 * (baseThickness / 0.08)) / yScale) *
+      (0.8 + audio.bass * 1.3) *
+      Math.max(0.05, opts.rippleAmplitude);
     const waveCycles = opts.rippleWaveCycles + audio.mid * 1.0;
 
     const colA = this.paletteThree[0];
@@ -2967,7 +3145,8 @@ export class Scene {
         const t = N === 1 ? 0.5 : i / (N - 1);
         const ringSpectrum = this.rippleRingSpectrumInSlice(bins, t, c, C);
         const wavePhase = t * waveCycles * Math.PI * 2 - this.ripplePhases[c] * Math.PI * 2;
-        const yWave = Math.sin(wavePhase) * amplitude * (0.58 + sliceV * 0.85 + ringSpectrum * 0.55);
+        const yWave =
+          Math.sin(wavePhase) * amplitude * (0.58 + sliceV * 0.85 + ringSpectrum * 0.55);
         mesh.position.y = yWave;
 
         if (t < 0.5) _c.copy(colA).lerp(colB, t * 2);
@@ -2985,7 +3164,13 @@ export class Scene {
       }
     }
 
-    this.rippleGroup.rotation.y += dt * (opts.rippleFullscreen ? 0 : opts.rippleRotationSpeed + audio.high * 0.4 + (audio.bpm > 0 ? audio.bpmConfidence * 0.8 : 0));
+    this.rippleGroup.rotation.y +=
+      dt *
+      (opts.rippleFullscreen
+        ? 0
+        : opts.rippleRotationSpeed +
+          audio.high * 0.4 +
+          (audio.bpm > 0 ? audio.bpmConfidence * 0.8 : 0));
   }
 
   resize(w: number, h: number) {
@@ -3033,15 +3218,33 @@ export class Scene {
       s.mat.dispose();
     }
     this.obsidianShards = [];
-    if (this.obsidianFloor) { this.obsidianFloor.geometry.dispose(); (this.obsidianFloor.material as THREE.Material).dispose(); }
+    if (this.obsidianFloor) {
+      this.obsidianFloor.geometry.dispose();
+      (this.obsidianFloor.material as THREE.Material).dispose();
+    }
     // torus
-    if (this.torusMesh) { this.torusMesh.geometry.dispose(); this.torusMat?.dispose(); }
-    if (this.torusParticles) { this.torusParticleGeo?.dispose(); this.torusParticleMat?.dispose(); }
+    if (this.torusMesh) {
+      this.torusMesh.geometry.dispose();
+      this.torusMat?.dispose();
+    }
+    if (this.torusParticles) {
+      this.torusParticleGeo?.dispose();
+      this.torusParticleMat?.dispose();
+    }
     // sound wall
-    if (this.soundwallPillars) { this.soundwallPillars.geometry.dispose(); this.soundwallMat?.dispose(); }
+    if (this.soundwallPillars) {
+      this.soundwallPillars.geometry.dispose();
+      this.soundwallMat?.dispose();
+    }
     // geometry nebula
-    for (const s of this.geoNebulaMeshes) { s.mesh.geometry.dispose(); s.mat.dispose(); }
+    for (const s of this.geoNebulaMeshes) {
+      s.mesh.geometry.dispose();
+      s.mat.dispose();
+    }
     this.geoNebulaMeshes = [];
-    if (this.geoNebulaFloor) { this.geoNebulaFloor.geometry.dispose(); (this.geoNebulaFloor.material as THREE.Material).dispose(); }
+    if (this.geoNebulaFloor) {
+      this.geoNebulaFloor.geometry.dispose();
+      (this.geoNebulaFloor.material as THREE.Material).dispose();
+    }
   }
 }

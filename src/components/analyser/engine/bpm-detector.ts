@@ -1,6 +1,6 @@
 /**
  * BPM Detection using a sliding window of bass energy analysis.
- * 
+ *
  * Algorithm:
  * 1. Maintains a history of bass energy values with timestamps
  * 2. Looks for energy peaks (local maxima) within the window
@@ -90,11 +90,11 @@ export class BPMDetector {
     if (this.energyHistory.length < 5) return 0;
 
     const peaks = this.findPeaks();
-    
+
     // More peaks = more confident
     if (peaks.length < 2) return 0;
     if (peaks.length < 3) return 0.3; // At least has a beat
-    
+
     // Calculate intervals
     const intervals: number[] = [];
     for (let i = 1; i < peaks.length; i++) {
@@ -105,7 +105,8 @@ export class BPMDetector {
 
     // Calculate consistency of intervals
     const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const variance = intervals.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / intervals.length;
+    const variance =
+      intervals.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / intervals.length;
     const stdDev = Math.sqrt(variance);
     const cv = mean > 0 ? stdDev / mean : 1;
 
@@ -116,7 +117,7 @@ export class BPMDetector {
     // cv > 0.4  → confidence ~0 (inconsistent)
     let confidence = 1 - cv * 3;
     confidence = Math.max(0, Math.min(1, confidence));
-    
+
     // Bonus: more peaks = higher confidence
     const peakBonus = Math.min(0.2, (peaks.length - 3) * 0.05);
     confidence = Math.min(1, confidence + peakBonus);
@@ -137,7 +138,7 @@ export class BPMDetector {
 
     const peaks: typeof this.energyHistory = [];
     const history = this.energyHistory;
-    
+
     if (this.useSlopeDetection) {
       // Slope-based detection: find where derivative changes from positive to negative
       // This is more robust to smooth audio than threshold-based detection
@@ -172,7 +173,8 @@ export class BPMDetector {
         const next = history[i + 1];
 
         if (curr.energy > threshold && curr.energy >= prev.energy && curr.energy >= next.energy) {
-          const timeSinceLast = peaks.length === 0 ? Infinity : curr.time - peaks[peaks.length - 1].time;
+          const timeSinceLast =
+            peaks.length === 0 ? Infinity : curr.time - peaks[peaks.length - 1].time;
           if (timeSinceLast >= this.minPeakIntervalMs) {
             peaks.push(curr);
           }
