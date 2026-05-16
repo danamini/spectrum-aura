@@ -4,6 +4,9 @@ import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { sphereVertexShader, sphereFragmentShader } from "./shaders";
 import type { AudioBands } from "./audio";
+import { settingsStore } from "../store";
+
+const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
 
 export type Palette = [string, string, string];
 
@@ -25,6 +28,7 @@ export class Scene {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
   xrSceneRoot = new THREE.Group();
+  xrHudGroup = new THREE.Group();
   group = new THREE.Group(); // combo group
   classicGroup = new THREE.Group(); // classic group
   dataStreamGroup = new THREE.Group();
@@ -40,12 +44,27 @@ export class Scene {
     controller: THREE.Object3D;
     handedness: XRHandedness | "";
     gamepad: Gamepad | null;
+    squeezePressed: boolean;
   }> = [];
   private xrSessionActive = false;
   private xrSceneOffset = new THREE.Vector3(0, 0, 0);
   private xrSceneTargetOffset = new THREE.Vector3(0, 0, 0);
   private xrSceneYaw = 0;
   private xrScenePitch = 0;
+  private xrExitHoldSeconds = 0;
+  private xrExitTriggered = false;
+  private xrHudCanvas?: HTMLCanvasElement;
+  private xrHudContext?: CanvasRenderingContext2D | null;
+  private xrHudTexture?: THREE.CanvasTexture;
+  private xrHudPanel?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private xrHudPage: "controls" | "status" = "controls";
+  private xrHudNeedsRedraw = true;
+  private xrHudLastDrawAt = 0;
+  private xrHudViewLabel = "combo";
+  private xrHudBackgroundNote = "Quest Browser passthrough unsupported in immersive-vr";
+  private xrHudTempo = 0;
+  private xrHudTempoConfidence = 0;
+  private xrHudBands = { bass: 0, mid: 0, high: 0 };
   private readonly xrThumbstickBaseAxis = 2;
   private readonly xrControllerDeadzone = 0.14;
   private readonly xrPositionInterpolationSpeed = 7;
@@ -226,6 +245,8 @@ export class Scene {
     this.xrSceneRoot.add(this.soundwallGroup);
     this.xrSceneRoot.add(this.geometrynebulaGroup);
     this.scene.add(this.xrSceneRoot);
+    this.buildXrHud();
+    this.scene.add(this.xrHudGroup);
     this.classicGroup.visible = false;
     this.rippleGroup.visible = false;
     this.dataStreamGroup.visible = false;
@@ -2322,6 +2343,19 @@ export class Scene {
     // BPM phase — one full 0→1 cycle per beat
     const bpmConfident = audio.bpm > 0 && audio.bpmConfidence > 0.45;
     const bpmPhase = bpmConfident ? (time * (audio.bpm / 60)) % 1 : 0;
+    this.xrHudViewLabel = opts.view;
+    this.xrHudTempo = Math.round(audio.bpm);
+    this.xrHudTempoConfidence = audio.bpmConfidence;
+    this.xrHudBands = { bass: audio.bass, mid: audio.mid, high: audio.high };
+    this.xrHudBackgroundNote = xrBackgroundHidden
+      ? "Transparent clear requested; Quest passthrough unsupported"
+      : "Quest Browser passthrough unsupported in immersive-vr";
+    if (
+      this.xrSessionActive &&
+      (this.xrHudNeedsRedraw || performance.now() - this.xrHudLastDrawAt > 160)
+    ) {
+      this.redrawXrHud();
+    }
 
     // shared kick / beat state
     // When BPM is locked: fire on the clock edge (phase wraps 1→0).
@@ -3065,6 +3099,10 @@ export class Scene {
       this.xrScenePitch = 0;
       this.xrSceneRoot.position.copy(this.xrSceneOffset);
       this.xrSceneRoot.rotation.set(0, 0, 0);
+      this.xrHudNeedsRedraw = true;
+      this.xrHudGroup.visible = true;
+      this.xrExitHoldSeconds = 0;
+      this.xrExitTriggered = false;
       return;
     }
     this.xrSceneTargetOffset.set(0, 0, 0);
@@ -3073,6 +3111,9 @@ export class Scene {
     this.xrScenePitch = 0;
     this.xrSceneRoot.position.set(0, 0, 0);
     this.xrSceneRoot.rotation.set(0, 0, 0);
+    this.xrHudGroup.visible = false;
+    this.xrExitHoldSeconds = 0;
+    this.xrExitTriggered = false;
   }
 
   private readControllerStickAxes(gamepad: Gamepad | null, preferredBaseAxis: number) {
@@ -3102,12 +3143,154 @@ export class Scene {
     return this.xrControllerInputs[0] ?? null;
   }
 
+  private buildXrHud() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1024;
+    canvas.height = 512;
+    const context = canvas.getContext("2d");
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const geometry = new THREE.PlaneGeometry(1.08, 0.54);
+    const panel = new THREE.Mesh(geometry, material);
+    panel.renderOrder = 1000;
+
+    this.xrHudCanvas = canvas;
+    this.xrHudContext = context;
+    this.xrHudTexture = texture;
+    this.xrHudPanel = panel;
+    this.xrHudGroup.add(panel);
+    this.xrHudGroup.visible = false;
+    this.redrawXrHud();
+  }
+
+  private updateXrHudTransform() {
+    const cameraPosition = new THREE.Vector3();
+    const cameraQuaternion = new THREE.Quaternion();
+    const forward = new THREE.Vector3(0, 0, -1);
+    const right = new THREE.Vector3(1, 0, 0);
+    const up = new THREE.Vector3(0, 1, 0);
+
+    this.camera.getWorldPosition(cameraPosition);
+    this.camera.getWorldQuaternion(cameraQuaternion);
+
+    forward.applyQuaternion(cameraQuaternion);
+    right.applyQuaternion(cameraQuaternion);
+    up.applyQuaternion(cameraQuaternion);
+
+    this.xrHudGroup.position
+      .copy(cameraPosition)
+      .add(forward.multiplyScalar(1.15))
+      .add(right.multiplyScalar(-0.36))
+      .add(up.multiplyScalar(0.2));
+    this.xrHudGroup.quaternion.copy(cameraQuaternion);
+  }
+
+  private toggleXrHudPage() {
+    this.xrHudPage = this.xrHudPage === "controls" ? "status" : "controls";
+    this.xrHudNeedsRedraw = true;
+  }
+
+  private cycleXrView() {
+    const views: ViewMode[] = [
+      "combo",
+      "classic",
+      "ripple",
+      "datastream",
+      "nebula",
+      "monolith",
+      "mandala",
+      "terrain",
+      "obsidian",
+      "torus",
+      "soundwall",
+      "geometrynebula",
+    ];
+    const current = settingsStore.get().view;
+    const index = views.indexOf(current);
+    const next = views[(index + 1) % views.length] ?? "combo";
+    settingsStore.set({ view: next });
+  }
+
+  private redrawXrHud() {
+    if (!this.xrHudCanvas || !this.xrHudContext || !this.xrHudTexture) return;
+    const ctx = this.xrHudContext;
+    const { width, height } = this.xrHudCanvas;
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.fillStyle = "rgba(5, 8, 14, 0.84)";
+    ctx.strokeStyle = "rgba(143, 196, 255, 0.3)";
+    ctx.lineWidth = 4;
+    const radius = 28;
+    ctx.beginPath();
+    ctx.moveTo(radius, 16);
+    ctx.lineTo(width - radius, 16);
+    ctx.quadraticCurveTo(width - 16, 16, width - 16, radius);
+    ctx.lineTo(width - 16, height - radius);
+    ctx.quadraticCurveTo(width - 16, height - 16, width - radius, height - 16);
+    ctx.lineTo(radius, height - 16);
+    ctx.quadraticCurveTo(16, height - 16, 16, height - radius);
+    ctx.lineTo(16, radius);
+    ctx.quadraticCurveTo(16, 16, radius, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(143, 208, 255, 0.92)";
+    ctx.font = '700 34px Menlo, Monaco, "Courier New", monospace';
+    ctx.fillText("XR HUD", 46, 68);
+
+    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    ctx.font = '600 24px Menlo, Monaco, "Courier New", monospace';
+    const lines =
+      this.xrHudPage === "controls"
+        ? [
+            "Left trigger: switch HUD page",
+            "Right trigger: next visual",
+            "Hold both grips: exit VR",
+            "Quest Browser hides DOM menus in immersive-vr",
+            "Use this HUD instead of desktop shortcuts",
+          ]
+        : [
+            `View: ${this.xrHudViewLabel}`,
+            `BPM: ${this.xrHudTempo || "--"} (${Math.round(this.xrHudTempoConfidence * 100)}%)`,
+            `Bass / Mid / High: ${this.xrHudBands.bass.toFixed(2)} / ${this.xrHudBands.mid.toFixed(2)} / ${this.xrHudBands.high.toFixed(2)}`,
+            this.xrHudBackgroundNote,
+            "HTML settings/stats panels are desktop-only for now",
+          ];
+
+    lines.forEach((line, index) => {
+      ctx.fillText(line, 46, 132 + index * 54);
+    });
+
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = '500 20px Menlo, Monaco, "Courier New", monospace';
+    ctx.fillText(this.xrHudPage === "controls" ? "Page 1 / 2" : "Page 2 / 2", 46, height - 44);
+
+    this.xrHudTexture.needsUpdate = true;
+    this.xrHudNeedsRedraw = false;
+    this.xrHudLastDrawAt = performance.now();
+  }
+
   private updateXrSceneTransform(dt: number) {
     if (!this.xrSessionActive) {
       this.xrSceneRoot.position.set(0, 0, 0);
       this.xrSceneRoot.rotation.set(0, 0, 0);
+      this.xrHudGroup.visible = false;
+      this.xrExitHoldSeconds = 0;
+      this.xrExitTriggered = false;
       return;
     }
+
+    this.xrHudGroup.visible = true;
+    this.updateXrHudTransform();
 
     const left = this.resolveControllerInput("left");
     const right = this.resolveControllerInput("right");
@@ -3149,6 +3332,18 @@ export class Scene {
     this.xrSceneRoot.rotation.y +=
       (this.xrSceneYaw - this.xrSceneRoot.rotation.y) *
       Math.min(1, dt * this.xrRotationInterpolationSpeed);
+
+    const squeezeCount = this.xrControllerInputs.filter((input) => input.squeezePressed).length;
+    if (squeezeCount >= 2) {
+      this.xrExitHoldSeconds += dt;
+      if (this.xrExitHoldSeconds >= 0.9 && !this.xrExitTriggered) {
+        this.xrExitTriggered = true;
+        window.dispatchEvent(new Event(WEBXR_REQUEST_EVENT));
+      }
+    } else {
+      this.xrExitHoldSeconds = 0;
+      this.xrExitTriggered = false;
+    }
   }
 
   attachWebXrControllers(renderer: THREE.WebGLRenderer) {
@@ -3186,15 +3381,31 @@ export class Scene {
         controller: controller as THREE.Object3D,
         handedness: "" as XRHandedness | "",
         gamepad: null as Gamepad | null,
+        squeezePressed: false,
       };
       controller.addEventListener("connected", (event) => {
         const source = (event as unknown as { data?: XRInputSource }).data;
         input.handedness = source?.handedness ?? "";
         input.gamepad = source?.gamepad ?? null;
       });
+      controller.addEventListener("selectstart", () => {
+        const hand = input.handedness || (index === 0 ? "right" : "left");
+        if (hand === "right") {
+          this.cycleXrView();
+        } else {
+          this.toggleXrHudPage();
+        }
+      });
+      controller.addEventListener("squeezestart", () => {
+        input.squeezePressed = true;
+      });
+      controller.addEventListener("squeezeend", () => {
+        input.squeezePressed = false;
+      });
       controller.addEventListener("disconnected", () => {
         input.handedness = "";
         input.gamepad = null;
+        input.squeezePressed = false;
       });
       this.scene.add(controller);
       return input;
@@ -3217,6 +3428,8 @@ export class Scene {
       });
     }
     this.xrControllerInputs = [];
+    this.xrExitHoldSeconds = 0;
+    this.xrExitTriggered = false;
   }
 
   buildRipple() {
@@ -3402,6 +3615,11 @@ export class Scene {
 
   dispose() {
     this.detachWebXrControllers();
+    if (this.xrHudPanel) {
+      this.xrHudPanel.geometry.dispose();
+      this.xrHudPanel.material.dispose();
+    }
+    this.xrHudTexture?.dispose();
     this.bars.geometry.dispose();
     (this.bars.material as THREE.Material).dispose();
     this.sphere.geometry.dispose();

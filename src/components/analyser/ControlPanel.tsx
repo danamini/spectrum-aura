@@ -377,17 +377,16 @@ export function ControlPanel() {
         <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-emerald-300/80">
           WebXR active
         </div>
-        <div className="mt-1 text-[11px] text-white/60">XR overlay controls are available.</div>
+        <div className="mt-1 text-[11px] text-white/60">
+          Quest Browser hides desktop overlays in immersive VR. Use the in-headset XR HUD.
+        </div>
         <div className="mt-3 flex items-center gap-2">
-          <Bn
-            variant={xrState.backgroundHidden ? "primary" : "outline"}
-            onClick={() => setWebXrBackgroundHidden(!xrState.backgroundHidden)}
-          >
-            {xrState.backgroundHidden ? "Background on" : "Background off"}
-          </Bn>
           <Bn variant="primary" onClick={requestWebXrToggle} disabled={xrState.pending}>
             Exit WebXR
           </Bn>
+        </div>
+        <div className="mt-2 text-[10px] text-white/55">
+          Left trigger switches HUD page. Right trigger changes view. Hold both grips to exit.
         </div>
         {xrState.error && <div className="mt-2 text-[10px] text-rose-300/80">{xrState.error}</div>}
       </div>
@@ -448,20 +447,9 @@ export function ControlPanel() {
                       Enter VR
                     </Bn>
                   </div>
-                  <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
-                    <div>
-                      <Label className="text-[11px]">Background</Label>
-                      <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
-                        {xrState.backgroundHidden ? "Off / transparent" : "On / opaque"}
-                      </div>
-                    </div>
-                    <Bn
-                      variant={xrState.backgroundHidden ? "primary" : "outline"}
-                      onClick={() => setWebXrBackgroundHidden(!xrState.backgroundHidden)}
-                      disabled={xrState.pending}
-                    >
-                      {xrState.backgroundHidden ? "Enable" : "Disable"}
-                    </Bn>
+                  <div className="mt-2 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-[10px] text-white/55">
+                    Passthrough is not supported by Quest Browser in immersive-vr, so transparent
+                    background has no visible effect here.
                   </div>
                   {xrState.error && (
                     <div className="mt-2 text-[10px] text-rose-300/80">{xrState.error}</div>

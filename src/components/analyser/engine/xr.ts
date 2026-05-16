@@ -5,8 +5,6 @@ import { Scene } from "./scene";
 export const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
 export const WEBXR_STATE_EVENT = "spectrum-aura:webxr-state";
 export const WEBXR_BACKGROUND_EVENT = "spectrum-aura:webxr-background";
-const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
-const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 
 export type WebXrState = {
   available: boolean;
@@ -40,11 +38,8 @@ export class WebXrRuntime {
   active = false;
   pending = false;
   error: string | null = null;
-  private exitHoldSeconds = 0;
-  private readonly exitHoldThresholdSeconds = 0.9;
 
   private session: XRSession | null = null;
-  private pressedButtons = new Set<string>();
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -112,81 +107,12 @@ export class WebXrRuntime {
     try {
       await session.end();
     } finally {
-      this.exitHoldSeconds = 0;
       this.pending = false;
       this.emitState();
     }
   }
 
-  tick(dt: number) {
-    const session = this.session;
-    if (!session || !this.active) {
-      this.exitHoldSeconds = 0;
-      this.pressedButtons.clear();
-      return;
-    }
-
-    let squeezeCount = 0;
-    for (const source of session.inputSources) {
-      const buttons = source.gamepad?.buttons;
-      if (!buttons || buttons.length < 2) continue;
-      const hand = source.handedness || "unknown";
-      const squeeze = buttons[1];
-      if (!squeeze) continue;
-      if (squeeze.pressed || squeeze.value > 0.82) squeezeCount += 1;
-
-      // Quest primary face buttons (typically index 4 = A/X, index 5 = B/Y)
-      const primary = buttons[4];
-      const secondary = buttons[5];
-
-      this.handleEdgeButton(
-        `${hand}:4`,
-        Boolean(primary && (primary.pressed || primary.value > 0.82)),
-        () => {
-          if (hand === "right") {
-            window.dispatchEvent(new Event(TOGGLE_SETTINGS_PANEL_EVENT));
-          } else {
-            window.dispatchEvent(new CustomEvent(WEBXR_BACKGROUND_EVENT, { detail: true }));
-          }
-        },
-      );
-
-      this.handleEdgeButton(
-        `${hand}:5`,
-        Boolean(secondary && (secondary.pressed || secondary.value > 0.82)),
-        () => {
-          if (hand === "right") {
-            window.dispatchEvent(new Event(TOGGLE_STATS_PANEL_EVENT));
-          } else {
-            window.dispatchEvent(new CustomEvent(WEBXR_BACKGROUND_EVENT, { detail: false }));
-          }
-        },
-      );
-    }
-
-    if (squeezeCount >= 2) {
-      this.exitHoldSeconds += dt;
-      if (this.exitHoldSeconds >= this.exitHoldThresholdSeconds && !this.pending) {
-        this.exitHoldSeconds = 0;
-        void this.stop();
-      }
-      return;
-    }
-
-    this.exitHoldSeconds = 0;
-  }
-
-  private handleEdgeButton(key: string, pressed: boolean, onPress: () => void) {
-    const wasPressed = this.pressedButtons.has(key);
-    if (pressed && !wasPressed) {
-      this.pressedButtons.add(key);
-      onPress();
-      return;
-    }
-    if (!pressed && wasPressed) {
-      this.pressedButtons.delete(key);
-    }
-  }
+  tick(_dt: number) {}
 
   dispose() {
     this.scene.detachWebXrControllers();
@@ -205,8 +131,6 @@ export class WebXrRuntime {
     this.active = false;
     this.pending = false;
     this.error = null;
-    this.exitHoldSeconds = 0;
-    this.pressedButtons.clear();
     this.renderer.xr.enabled = false;
     this.scene.detachWebXrControllers();
     this.emitState();
