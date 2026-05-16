@@ -342,6 +342,12 @@ export function ControlPanel() {
       const detail = (event as CustomEvent<WebXrState>).detail;
       if (!detail) return;
       setXrState(detail);
+      if (detail.active) {
+        setOpen(true);
+      }
+      if (!detail.active) {
+        setOpen(false);
+      }
     };
 
     window.addEventListener(WEBXR_STATE_EVENT, onWebXrState);

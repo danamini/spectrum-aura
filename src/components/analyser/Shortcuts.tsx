@@ -348,8 +348,15 @@ export function Shortcuts() {
         </div>
       )}
       {visible ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-3 z-[100] flex justify-center">
+        <div
+          className={`pointer-events-none fixed inset-x-0 z-[100] flex justify-center ${xrActive ? "top-3" : "bottom-3"}`}
+        >
           <div className="flex flex-col items-center gap-1">
+            {xrActive && (
+              <div className="rounded-full border border-emerald-300/25 bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-200/75 backdrop-blur">
+                XR: right A settings · right B stats · hold both grips exit
+              </div>
+            )}
             {is3DMode && !xrActive && (
               <div className="rounded-full border border-white/5 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70">
                 3D: drag mouse to move camera

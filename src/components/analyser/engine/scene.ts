@@ -3097,8 +3097,9 @@ export class Scene {
     const explicit = this.xrControllerInputs.find((input) => input.handedness === handedness);
     if (explicit) return explicit;
     if (this.xrControllerInputs.length === 1) return this.xrControllerInputs[0] ?? null;
-    if (handedness === "left") return this.xrControllerInputs[0] ?? null;
-    return this.xrControllerInputs[1] ?? null;
+    // Quest Browser may omit handedness temporarily; on affected builds index 0 tends to be right.
+    if (handedness === "left") return this.xrControllerInputs[1] ?? null;
+    return this.xrControllerInputs[0] ?? null;
   }
 
   private updateXrSceneTransform(dt: number) {
@@ -3119,7 +3120,7 @@ export class Scene {
       this.xrThumbstickBaseAxis,
     );
 
-    this.xrSceneYaw -= rightStick.x * dt * 1.7;
+    this.xrSceneYaw += rightStick.x * dt * 1.7;
     this.xrScenePitch = THREE.MathUtils.clamp(
       this.xrScenePitch + rightStick.y * dt * 0.95,
       -0.55,
@@ -3127,12 +3128,12 @@ export class Scene {
     );
 
     this.xrSceneTargetOffset.x = THREE.MathUtils.clamp(
-      this.xrSceneTargetOffset.x + leftStick.x * dt * 2.4,
+      this.xrSceneTargetOffset.x - leftStick.x * dt * 2.4,
       -12,
       12,
     );
     this.xrSceneTargetOffset.z = THREE.MathUtils.clamp(
-      this.xrSceneTargetOffset.z + leftStick.y * dt * 5.6,
+      this.xrSceneTargetOffset.z - leftStick.y * dt * 5.6,
       -26,
       -2.8,
     );
