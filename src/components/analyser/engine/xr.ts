@@ -38,6 +38,8 @@ export class WebXrRuntime {
   active = false;
   pending = false;
   error: string | null = null;
+  private exitHoldSeconds = 0;
+  private readonly exitHoldThresholdSeconds = 0.9;
 
   private session: XRSession | null = null;
 
@@ -107,9 +109,38 @@ export class WebXrRuntime {
     try {
       await session.end();
     } finally {
+      this.exitHoldSeconds = 0;
       this.pending = false;
       this.emitState();
     }
+  }
+
+  tick(dt: number) {
+    const session = this.session;
+    if (!session || !this.active) {
+      this.exitHoldSeconds = 0;
+      return;
+    }
+
+    let squeezeCount = 0;
+    for (const source of session.inputSources) {
+      const buttons = source.gamepad?.buttons;
+      if (!buttons || buttons.length < 2) continue;
+      const squeeze = buttons[1];
+      if (!squeeze) continue;
+      if (squeeze.pressed || squeeze.value > 0.82) squeezeCount += 1;
+    }
+
+    if (squeezeCount >= 2) {
+      this.exitHoldSeconds += dt;
+      if (this.exitHoldSeconds >= this.exitHoldThresholdSeconds && !this.pending) {
+        this.exitHoldSeconds = 0;
+        void this.stop();
+      }
+      return;
+    }
+
+    this.exitHoldSeconds = 0;
   }
 
   dispose() {
@@ -129,6 +160,7 @@ export class WebXrRuntime {
     this.active = false;
     this.pending = false;
     this.error = null;
+    this.exitHoldSeconds = 0;
     this.renderer.xr.enabled = false;
     this.scene.detachWebXrControllers();
     this.emitState();

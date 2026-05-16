@@ -441,6 +441,7 @@ export function Analyser() {
     const loop = (now: number, _frame?: XRFrame) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+      xrRuntime.tick(dt);
       const fps = dt > 0 ? 1 / dt : 0;
       smoothedFps = smoothedFps * 0.9 + fps * 0.1;
       const t = (now - start) / 1000;
@@ -602,7 +603,7 @@ export function Analyser() {
         composer.resetTemporalEffects();
         lastComposerResetKey = composerResetKey;
       }
-      if (s.postFxEnabled) {
+      if (s.postFxEnabled && !xrRuntime.active) {
         const bpmPulse =
           bands.bpm > 0 && bands.bpmConfidence > 0.4
             ? Math.max(0, Math.sin(((t * (bands.bpm / 60)) % 1) * Math.PI))
