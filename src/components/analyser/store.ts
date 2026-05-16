@@ -251,7 +251,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mandalaFullscreen: false,
   terrainFullscreen: false,
   rippleRingCount: 40,
-  rippleColumns: 5,
+  rippleColumns: 20,
   rippleMaxRadius: 6,
   rippleSpeed: 1,
   rippleAmplitude: 1,
