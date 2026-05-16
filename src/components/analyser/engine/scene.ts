@@ -24,6 +24,7 @@ export type ViewMode =
 export class Scene {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
+  xrSceneRoot = new THREE.Group();
   group = new THREE.Group(); // combo group
   classicGroup = new THREE.Group(); // classic group
   dataStreamGroup = new THREE.Group();
@@ -35,7 +36,20 @@ export class Scene {
   torusGroup = new THREE.Group();
   soundwallGroup = new THREE.Group();
   geometrynebulaGroup = new THREE.Group();
-  private xrControllers: THREE.Object3D[] = [];
+  private xrControllerInputs: Array<{
+    controller: THREE.Object3D;
+    handedness: XRHandedness | "";
+    gamepad: Gamepad | null;
+  }> = [];
+  private xrSessionActive = false;
+  private xrSceneOffset = new THREE.Vector3(0, 0, 0);
+  private xrSceneTargetOffset = new THREE.Vector3(0, 0, 0);
+  private xrSceneYaw = 0;
+  private xrScenePitch = 0;
+  private readonly xrThumbstickBaseAxis = 2;
+  private readonly xrControllerDeadzone = 0.14;
+  private readonly xrPositionInterpolationSpeed = 7;
+  private readonly xrRotationInterpolationSpeed = 8;
 
   bars!: THREE.InstancedMesh;
   private barCount = 0;
@@ -199,18 +213,19 @@ export class Scene {
     this.camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 200);
     this.camera.position.set(0, 3, 12);
 
-    this.scene.add(this.group);
-    this.scene.add(this.classicGroup);
-    this.scene.add(this.rippleGroup);
-    this.scene.add(this.dataStreamGroup);
-    this.scene.add(this.nebulaGroup);
-    this.scene.add(this.monolithGroup);
-    this.scene.add(this.mandalaGroup);
-    this.scene.add(this.terrainGroup);
-    this.scene.add(this.obsidianGroup);
-    this.scene.add(this.torusGroup);
-    this.scene.add(this.soundwallGroup);
-    this.scene.add(this.geometrynebulaGroup);
+    this.xrSceneRoot.add(this.group);
+    this.xrSceneRoot.add(this.classicGroup);
+    this.xrSceneRoot.add(this.rippleGroup);
+    this.xrSceneRoot.add(this.dataStreamGroup);
+    this.xrSceneRoot.add(this.nebulaGroup);
+    this.xrSceneRoot.add(this.monolithGroup);
+    this.xrSceneRoot.add(this.mandalaGroup);
+    this.xrSceneRoot.add(this.terrainGroup);
+    this.xrSceneRoot.add(this.obsidianGroup);
+    this.xrSceneRoot.add(this.torusGroup);
+    this.xrSceneRoot.add(this.soundwallGroup);
+    this.xrSceneRoot.add(this.geometrynebulaGroup);
+    this.scene.add(this.xrSceneRoot);
     this.classicGroup.visible = false;
     this.rippleGroup.visible = false;
     this.dataStreamGroup.visible = false;
@@ -2326,6 +2341,8 @@ export class Scene {
     this.mouseYaw += (this.targetYaw - this.mouseYaw) * Math.min(1, dt * 12);
     this.mousePitch += (this.targetPitch - this.mousePitch) * Math.min(1, dt * 12);
     this.mouseZoom += (this.targetZoom - this.mouseZoom) * Math.min(1, dt * 8);
+    this.setXrMode(xrMode);
+    this.updateXrSceneTransform(dt);
 
     const driftAmt = Math.max(0, Number(opts.cameraDriftAmount) || 0);
     const drift = opts.cameraDrift && driftAmt > 1e-4 ? driftAmt : 0;
@@ -3038,6 +3055,101 @@ export class Scene {
     this.targetZoom = Math.max(5, Math.min(28, this.targetZoom + d * 0.01));
   }
 
+  private setXrMode(active: boolean) {
+    if (this.xrSessionActive === active) return;
+    this.xrSessionActive = active;
+    if (active) {
+      this.xrSceneTargetOffset.set(0, 0, -8);
+      this.xrSceneOffset.copy(this.xrSceneTargetOffset);
+      this.xrSceneYaw = 0;
+      this.xrScenePitch = 0;
+      this.xrSceneRoot.position.copy(this.xrSceneOffset);
+      this.xrSceneRoot.rotation.set(0, 0, 0);
+      return;
+    }
+    this.xrSceneTargetOffset.set(0, 0, 0);
+    this.xrSceneOffset.set(0, 0, 0);
+    this.xrSceneYaw = 0;
+    this.xrScenePitch = 0;
+    this.xrSceneRoot.position.set(0, 0, 0);
+    this.xrSceneRoot.rotation.set(0, 0, 0);
+  }
+
+  private readControllerStickAxes(gamepad: Gamepad | null, preferredBaseAxis: number) {
+    if (!gamepad) return { x: 0, y: 0 };
+    const axes = gamepad.axes ?? [];
+    const applyDeadzone = (value: number | undefined) => {
+      const v = Number(value ?? 0);
+      return Math.abs(v) > this.xrControllerDeadzone ? v : 0;
+    };
+    const preferredX = applyDeadzone(axes[preferredBaseAxis]);
+    const preferredY = applyDeadzone(axes[preferredBaseAxis + 1]);
+    const fallbackX = applyDeadzone(axes[0]);
+    const fallbackY = applyDeadzone(axes[1]);
+    const hasPreferredInput = preferredX !== 0 || preferredY !== 0;
+    return {
+      x: hasPreferredInput ? preferredX : fallbackX,
+      y: hasPreferredInput ? preferredY : fallbackY,
+    };
+  }
+
+  private resolveControllerInput(handedness: XRHandedness) {
+    const explicit = this.xrControllerInputs.find((input) => input.handedness === handedness);
+    if (explicit) return explicit;
+    if (this.xrControllerInputs.length === 1) return this.xrControllerInputs[0] ?? null;
+    if (handedness === "left") return this.xrControllerInputs[0] ?? null;
+    return this.xrControllerInputs[1] ?? null;
+  }
+
+  private updateXrSceneTransform(dt: number) {
+    if (!this.xrSessionActive) {
+      this.xrSceneRoot.position.set(0, 0, 0);
+      this.xrSceneRoot.rotation.set(0, 0, 0);
+      return;
+    }
+
+    const left = this.resolveControllerInput("left");
+    const right = this.resolveControllerInput("right");
+    const leftStick = this.readControllerStickAxes(
+      left?.gamepad ?? null,
+      this.xrThumbstickBaseAxis,
+    );
+    const rightStick = this.readControllerStickAxes(
+      right?.gamepad ?? null,
+      this.xrThumbstickBaseAxis,
+    );
+
+    this.xrSceneYaw -= rightStick.x * dt * 1.7;
+    this.xrScenePitch = THREE.MathUtils.clamp(
+      this.xrScenePitch + rightStick.y * dt * 0.95,
+      -0.55,
+      0.55,
+    );
+
+    this.xrSceneTargetOffset.x = THREE.MathUtils.clamp(
+      this.xrSceneTargetOffset.x + leftStick.x * dt * 2.4,
+      -12,
+      12,
+    );
+    this.xrSceneTargetOffset.z = THREE.MathUtils.clamp(
+      this.xrSceneTargetOffset.z + leftStick.y * dt * 5.6,
+      -26,
+      -2.8,
+    );
+
+    this.xrSceneOffset.lerp(
+      this.xrSceneTargetOffset,
+      Math.min(1, dt * this.xrPositionInterpolationSpeed),
+    );
+    this.xrSceneRoot.position.copy(this.xrSceneOffset);
+    this.xrSceneRoot.rotation.x +=
+      (this.xrScenePitch - this.xrSceneRoot.rotation.x) *
+      Math.min(1, dt * this.xrRotationInterpolationSpeed);
+    this.xrSceneRoot.rotation.y +=
+      (this.xrSceneYaw - this.xrSceneRoot.rotation.y) *
+      Math.min(1, dt * this.xrRotationInterpolationSpeed);
+  }
+
   attachWebXrControllers(renderer: THREE.WebGLRenderer) {
     this.detachWebXrControllers();
 
@@ -3065,17 +3177,32 @@ export class Scene {
       return group;
     };
 
-    this.xrControllers = [0, 1].map((index) => {
+    this.xrControllerInputs = [0, 1].map((index) => {
       const controller = renderer.xr.getController(index);
       controller.name = `webxr-controller-${index + 1}`;
       controller.add(createControllerVisual(index === 0 ? 0x7fd9ff : 0xffd166));
+      const input = {
+        controller: controller as THREE.Object3D,
+        handedness: "" as XRHandedness | "",
+        gamepad: null as Gamepad | null,
+      };
+      controller.addEventListener("connected", (event) => {
+        const source = (event as unknown as { data?: XRInputSource }).data;
+        input.handedness = source?.handedness ?? "";
+        input.gamepad = source?.gamepad ?? null;
+      });
+      controller.addEventListener("disconnected", () => {
+        input.handedness = "";
+        input.gamepad = null;
+      });
       this.scene.add(controller);
-      return controller;
+      return input;
     });
   }
 
   detachWebXrControllers() {
-    for (const controller of this.xrControllers) {
+    for (const input of this.xrControllerInputs) {
+      const controller = input.controller;
       this.scene.remove(controller);
       controller.traverse((object) => {
         const mesh = object as THREE.Mesh;
@@ -3088,7 +3215,7 @@ export class Scene {
         }
       });
     }
-    this.xrControllers = [];
+    this.xrControllerInputs = [];
   }
 
   buildRipple() {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { settingsStore, useSettings, useSlots, type Settings } from "./store";
+import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "./engine/xr";
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
@@ -10,6 +11,7 @@ export function Shortcuts() {
   const slots = useSlots();
   const settings = useSettings();
   const [visible, setVisible] = useState(true);
+  const [xrActive, setXrActive] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
 
@@ -39,6 +41,16 @@ export function Shortcuts() {
     return () => {
       if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const onWebXrState = (event: Event) => {
+      const detail = (event as CustomEvent<WebXrState>).detail;
+      if (!detail) return;
+      setXrActive(Boolean(detail.active));
+    };
+    window.addEventListener(WEBXR_STATE_EVENT, onWebXrState);
+    return () => window.removeEventListener(WEBXR_STATE_EVENT, onWebXrState);
   }, []);
 
   const doRandomize = () => {
@@ -279,6 +291,13 @@ export function Shortcuts() {
       },
     },
   ];
+  const xrHint: Hint = {
+    key: "VR",
+    label: "Exit VR",
+    onClick: () => {
+      requestWebXrToggle();
+    },
+  };
   const settingsHint: Hint = {
     key: "S",
     label: "Settings",
@@ -300,20 +319,22 @@ export function Shortcuts() {
       if (ev.shiftKey) doSaveSlot(n - 1);
       else doSlot(n - 1);
     },
-    title: `Click to load · Shift+click or Shift+${n} to save`,
+    title: xrActive ? "Click to load" : `Click to load · Shift+click or Shift+${n} to save`,
   }));
 
   const Btn = ({ h }: { h: Hint }) => (
     <button
       type="button"
       onClick={h.onClick}
-      title={h.title ?? `Press ${h.key}`}
+      title={h.title ?? (xrActive ? h.label : `Press ${h.key}`)}
       data-settings-shortcut={h.key === "S" ? "true" : undefined}
       className="pointer-events-auto flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition-colors hover:bg-white/10 hover:text-white/90"
     >
-      <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/70 group-hover:border-white/40">
-        {h.key}
-      </kbd>
+      {!xrActive && (
+        <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/70 group-hover:border-white/40">
+          {h.key}
+        </kbd>
+      )}
       {h.icon ? <span className="text-white/75">{h.icon}</span> : null}
       {h.label ? <span>{h.label}</span> : null}
     </button>
@@ -329,12 +350,13 @@ export function Shortcuts() {
       {visible ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-3 z-[100] flex justify-center">
           <div className="flex flex-col items-center gap-1">
-            {is3DMode && (
+            {is3DMode && !xrActive && (
               <div className="rounded-full border border-white/5 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70">
                 3D: drag mouse to move camera
               </div>
             )}
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-white/5 bg-black/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70 hover:opacity-100 transition-opacity">
+              {xrActive && <Btn h={xrHint} />}
               {hints.map((h) => (
                 <Btn key={h.key} h={h} />
               ))}
@@ -344,7 +366,9 @@ export function Shortcuts() {
               {slotHints.map((h) => (
                 <Btn key={h.key} h={h} />
               ))}
-              <span className="ml-1 text-white/25 normal-case tracking-normal">⇧+1–5 save</span>
+              {!xrActive && (
+                <span className="ml-1 text-white/25 normal-case tracking-normal">⇧+1–5 save</span>
+              )}
               <span className="mx-1 h-3 w-px bg-white/10" />
               <Btn h={settingsHint} />
             </div>
@@ -354,7 +378,7 @@ export function Shortcuts() {
         <button
           type="button"
           onClick={doToggleHints}
-          title="Show shortcuts (G)"
+          title={xrActive ? "Show shortcuts" : "Show shortcuts (G)"}
           className="pointer-events-auto fixed inset-x-0 bottom-1 z-[100] mx-auto block w-fit rounded-full border border-white/5 bg-black/30 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.3em] text-white/30 backdrop-blur hover:text-white/70"
         >
           shortcuts

@@ -71,10 +71,16 @@ export class WebXrRuntime {
     this.emitState();
 
     try {
-      const session = await navigator.xr.requestSession("immersive-vr", {
+      const sessionInit: XRSessionInit & { domOverlay?: { root: Element } } = {
         requiredFeatures: ["local-floor"],
-        optionalFeatures: ["bounded-floor"],
-      });
+        optionalFeatures: ["bounded-floor", "hand-tracking"],
+      };
+      if (typeof document !== "undefined") {
+        sessionInit.optionalFeatures = [...(sessionInit.optionalFeatures ?? []), "dom-overlay"];
+        sessionInit.domOverlay = { root: document.body };
+      }
+
+      const session = await navigator.xr.requestSession("immersive-vr", sessionInit);
       this.session = session;
       session.addEventListener("end", this.handleSessionEnd);
       this.renderer.xr.enabled = true;
