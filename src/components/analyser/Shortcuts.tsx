@@ -76,7 +76,7 @@ export function Shortcuts() {
   const is3DMode = fullscreenKey ? !settings[fullscreenKey] : true;
   const visualLabel = currentVisual?.label ?? settings.view;
   const visualCount = VISUALS.length;
-  const visualCountLabel = `${visualCount} view${visualCount === 1 ? "" : "s"}`;
+  const visualCountLabel = `${visualCount} visual${visualCount === 1 ? "" : "s"}`;
 
   const showFlash = (msg: string) => {
     setFlash(msg);

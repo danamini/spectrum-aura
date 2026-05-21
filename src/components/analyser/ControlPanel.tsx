@@ -1235,6 +1235,57 @@ export function ControlPanel() {
                         </div>
                       </>
                     )}
+                    {s.view === "reztube" && (
+                      <>
+                        <S
+                          label="Amplitude"
+                          value={s.reztubeAmplitude}
+                          min={0.1}
+                          max={4}
+                          step={0.05}
+                          onChange={(v) => set({ reztubeAmplitude: v })}
+                        />
+                        <S
+                          label="Fly speed"
+                          value={s.reztubeSpeed}
+                          min={0.1}
+                          max={6}
+                          step={0.1}
+                          onChange={(v) => set({ reztubeSpeed: v })}
+                        />
+                        <S
+                          label="Twist"
+                          value={s.reztubeTwist}
+                          min={0}
+                          max={4}
+                          step={0.05}
+                          onChange={(v) => set({ reztubeTwist: v })}
+                        />
+                        <S
+                          label="Tube radius"
+                          value={s.reztubeRadius}
+                          min={2}
+                          max={10}
+                          step={0.1}
+                          onChange={(v) => set({ reztubeRadius: v })}
+                        />
+                        <S
+                          label="Sides"
+                          value={s.reztubeSegments}
+                          min={3}
+                          max={12}
+                          step={1}
+                          onChange={(v) => set({ reztubeSegments: Math.round(v) })}
+                        />
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[11px]">Use selected palette</Label>
+                          <Sw
+                            checked={s.reztubeUsePalette}
+                            onCheckedChange={(v) => set({ reztubeUsePalette: v })}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -1822,6 +1873,20 @@ export function ControlPanel() {
                         max={2}
                         step={0.05}
                         onChange={(v) => set({ godRaysAmount: v })}
+                      />
+                    </ToggleRow>
+                    <ToggleRow
+                      label="Lens flare"
+                      enabled={s.lensFlare}
+                      onToggle={(v) => set({ lensFlare: v })}
+                    >
+                      <S
+                        label="Amount"
+                        value={s.lensFlareAmount}
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        onChange={(v) => set({ lensFlareAmount: v })}
                       />
                     </ToggleRow>
                     <ToggleRow

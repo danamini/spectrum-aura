@@ -202,6 +202,67 @@ export const RadialBlurShader = {
   `,
 };
 
+export const LensFlareShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    amount: { value: 0.6 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float amount;
+    varying vec2 vUv;
+
+    float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+    void main() {
+      vec4 base = texture2D(tDiffuse, vUv);
+      vec2 center = vec2(0.5);
+
+      // --- Anamorphic horizontal streak ---
+      // Each pixel accumulates bleed from bright horizontal neighbours,
+      // creating a cinema-style streak through bright sources.
+      vec3 streak = vec3(0.0);
+      const int SW = 32;
+      for (int i = 0; i < SW; i++) {
+        float t = (float(i) / float(SW - 1)) * 2.0 - 1.0; // -1..1
+        vec2 uv = vec2(clamp(vUv.x + t * 0.62, 0.0, 1.0), vUv.y);
+        vec3 s = texture2D(tDiffuse, uv).rgb;
+        float l = luma(s);
+        // Threshold: only the upper brightness range bleeds
+        float bright = max(0.0, l - 0.28) * 1.39;
+        float falloff = exp(-abs(t) * 3.2);
+        streak += vec3(0.18, 0.52, 1.0) * bright * falloff * 0.38;
+      }
+
+      // --- Lens ghost reflections ---
+      // Bright sources produce coloured ghost blobs reflected through screen centre.
+      vec2 toCenter = center - vUv;
+      vec3 ghosts = vec3(0.0);
+
+      // Ghost 1 – warm orange, 1.5× past centre
+      vec2 g1 = clamp(center + toCenter * 1.5, 0.0, 1.0);
+      vec3 gc1 = texture2D(tDiffuse, g1).rgb;
+      float gb1 = max(0.0, luma(gc1) - 0.25) * 1.33;
+      ghosts += vec3(1.0, 0.62, 0.18) * gb1 * 0.55;
+
+      // Ghost 2 – cyan, 2.3× past centre
+      vec2 g2 = clamp(center + toCenter * 2.3, 0.0, 1.0);
+      vec3 gc2 = texture2D(tDiffuse, g2).rgb;
+      float gb2 = max(0.0, luma(gc2) - 0.25) * 1.33;
+      ghosts += vec3(0.2, 0.88, 1.0) * gb2 * 0.30;
+
+      // Ghost 3 – purple, 0.45× (between source and centre)
+      vec2 g3 = clamp(center + toCenter * 0.45, 0.0, 1.0);
+      vec3 gc3 = texture2D(tDiffuse, g3).rgb;
+      float gb3 = max(0.0, luma(gc3) - 0.25) * 1.33;
+      ghosts += vec3(0.78, 0.28, 1.0) * gb3 * 0.38;
+
+      gl_FragColor = vec4(base.rgb + (streak + ghosts) * amount, base.a);
+    }
+  `,
+};
+
 export const BlueprintSobelShader = {
   uniforms: {
     tDiffuse: { value: null },

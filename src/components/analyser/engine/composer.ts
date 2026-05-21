@@ -17,6 +17,7 @@ import {
   GodRaysShader,
   ColorGradeShader,
   RadialBlurShader,
+  LensFlareShader,
 } from "./shaders";
 import { BLOOM_STRENGTH_MAX_NORMAL, type Settings } from "../store";
 import { MotionTrailPass } from "./MotionTrailPass";
@@ -44,6 +45,7 @@ export class Composer {
   bokeh: BokehPass;
   glitch: GlitchPass;
   godRays: ShaderPass;
+  lensFlare: ShaderPass;
   pixelate: ShaderPass;
   tiltShift: ShaderPass;
   radialBlur: ShaderPass;
@@ -85,6 +87,9 @@ export class Composer {
 
     this.godRays = new ShaderPass(GodRaysShader);
     this.composer.addPass(this.godRays);
+
+    this.lensFlare = new ShaderPass(LensFlareShader);
+    this.composer.addPass(this.lensFlare);
 
     this.bokeh = new BokehPass(scene, camera, { focus: 8, aperture: 0.0006, maxblur: 0.01 });
     this.composer.addPass(this.bokeh);
@@ -189,6 +194,9 @@ export class Composer {
 
     this.godRays.enabled = s.godRays;
     this.godRays.uniforms.amount.value = s.godRaysAmount;
+
+    this.lensFlare.enabled = s.lensFlare;
+    this.lensFlare.uniforms.amount.value = s.lensFlareAmount;
 
     this.pixelate.enabled = s.pixelate;
     this.pixelate.uniforms.pixelSize.value = s.pixelSize;

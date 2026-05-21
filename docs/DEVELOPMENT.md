@@ -58,7 +58,7 @@ docs/
 - **12 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
-- **Post-processing**: Bloom, chromatic aberration, glitch, god rays, etc. via Composer
+- **Post-processing**: Bloom, chromatic aberration, glitch, god rays, lens flare, etc. via Composer
 
 **Each View Has**:
 - `buildXXX(size)`: Initialize geometry/materials
@@ -75,6 +75,7 @@ Recent controls:
 - `postFxEnabled`: Master switch that bypasses the post-processing pipeline at render time.
 - Global Wireframe control in the View panel: writes to the active view-specific wireframe setting.
 - `randomizeViewSettings`: Keeps randomize constrained to post FX by default; when enabled it also touches view-specific geometry and palette controls.
+- `lensFlare` / `lensFlareAmount`: Anamorphic horizontal streak + coloured lens-ghost reflections layered after god rays in the composer chain. Enabled 45% of the time by randomize.
 - `monolithBrightness`: Dedicated lighting/visibility control for Monolith independent of amplitude.
 
 **Key Settings Limits**:
@@ -164,7 +165,7 @@ npm run test                   # Watch mode
 - **Store tests**:
   - `store.slots.test.ts`: slot bootstrap, localStorage hydration, legacy ripple migration, slot-cycle preservation
   - `store.normalization.test.ts`: amplitude floor, vignette bounds, bloom cap, preset clearing, reset baseline
-  - `store.randomize.test.ts`: randomize scope toggle behavior and new torus/geometry-nebula defaults
+  - `store.randomize.test.ts`: randomize scope toggle behavior, new torus/geometry-nebula defaults, and lensFlare postFx coverage
 - **Shortcut tests**:
   - `Shortcuts.test.tsx`: grouped rail labels, visual cluster status, randomize/post-FX toggles, save transport behavior, settings toggle behavior
 - **Engine tests**:

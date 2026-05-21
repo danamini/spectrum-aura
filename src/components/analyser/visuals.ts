@@ -103,6 +103,14 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "geometrynebulaGroup",
     order: 120,
   },
+  {
+    id: "reztube",
+    label: "Rez Tube",
+    settingsLabel: "Rez Tube settings",
+    fullscreenKey: "reztubeFullscreen",
+    sceneGroupKey: "reztubeGroup",
+    order: 130,
+  },
 ] as const;
 
 type BuiltinVisual = (typeof BUILTIN_VISUALS)[number];

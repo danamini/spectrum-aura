@@ -200,6 +200,20 @@ export class Scene {
   private geoNebulaCount = 60;
   private geoNebulaSpread = 1.6;
 
+  // rez tube view
+  reztubeGroup = new THREE.Group();
+  private reztubeLine?: THREE.LineSegments;
+  private reztubeMat?: THREE.LineBasicMaterial;
+  private reztubeCoreLight?: THREE.PointLight;
+  private reztubeScroll = 0;
+  private reztubePrevSegs = 0;
+  private reztubeFlash = 0;
+  private reztubeRingX?: Float32Array;
+  private reztubeRingY?: Float32Array;
+  private reztubeRingZ?: Float32Array;
+  private readonly TUBE_RINGS = 60;
+  private readonly RING_SPACING = 2.5;
+
   postFxBoost = { bloom: 1, glitch: 0 };
 
   view: ViewMode = "combo";
@@ -231,6 +245,7 @@ export class Scene {
     this.xrSceneRoot.add(this.torusGroup);
     this.xrSceneRoot.add(this.soundwallGroup);
     this.xrSceneRoot.add(this.geometrynebulaGroup);
+    this.xrSceneRoot.add(this.reztubeGroup);
     this.scene.add(this.xrSceneRoot);
     this.buildXrHud();
     this.scene.add(this.xrHudGroup);
@@ -245,6 +260,7 @@ export class Scene {
     this.torusGroup.visible = false;
     this.soundwallGroup.visible = false;
     this.geometrynebulaGroup.visible = false;
+    this.reztubeGroup.visible = false;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.25);
     const dir = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -272,6 +288,7 @@ export class Scene {
     this.buildTorus();
     this.buildSoundwall();
     this.buildGeoNebula();
+    this.buildReztube();
 
     // Ensure every view material/light starts with the active palette.
     this.setPalette(this.palette);
@@ -2209,6 +2226,261 @@ export class Scene {
     this.postFxBoost.glitch = 0;
   }
 
+  // ─── Rez Tube ─────────────────────────────────────────────────────────────
+
+  buildReztube(segs: number = 4) {
+    if (this.reztubeLine) {
+      this.reztubeGroup.remove(this.reztubeLine);
+      this.reztubeLine.geometry.dispose();
+      this.reztubeMat?.dispose();
+    }
+    if (this.reztubeCoreLight) {
+      this.reztubeGroup.remove(this.reztubeCoreLight);
+    }
+    const RINGS = this.TUBE_RINGS;
+    const SEGS = Math.max(3, Math.min(12, Math.round(segs)));
+    this.reztubePrevSegs = SEGS;
+
+    // Ring lines + side connector lines in a single LineSegments.
+    // Ring part:  RINGS * SEGS line segments (the cross-section polygon for each ring)
+    // Side part:  RINGS * SEGS line segments (connecting vertex s of ring r to ring r+1)
+    const ringVertCount = RINGS * SEGS * 2;
+    const sideVertCount = RINGS * SEGS * 2;
+    const totalVerts = ringVertCount + sideVertCount;
+
+    const positions = new Float32Array(totalVerts * 3);
+    const colors = new Float32Array(totalVerts * 3);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage),
+    );
+    geo.setAttribute(
+      "color",
+      new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage),
+    );
+    // Prevent frustum culling — we manage Z ourselves
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1000);
+
+    this.reztubeMat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 1.0,
+    });
+    this.reztubeLine = new THREE.LineSegments(geo, this.reztubeMat);
+    this.reztubeLine.frustumCulled = false;
+    this.reztubeGroup.add(this.reztubeLine);
+
+    // Pre-allocate per-ring vertex scratch buffers
+    this.reztubeRingX = new Float32Array(RINGS * SEGS);
+    this.reztubeRingY = new Float32Array(RINGS * SEGS);
+    this.reztubeRingZ = new Float32Array(RINGS);
+
+    const light = new THREE.PointLight(0x00ffee, 2, 22);
+    light.position.set(0, 0, -3);
+    this.reztubeCoreLight = light;
+    this.reztubeGroup.add(light);
+
+    this.reztubeScroll = 0;
+    this.reztubeFlash = 0;
+  }
+
+  private updateReztube(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: {
+      reztubeAmplitude: number;
+      reztubeUsePalette: boolean;
+      reztubeSpeed: number;
+      reztubeTwist: number;
+      reztubeRadius: number;
+      reztubeSegments: number;
+    },
+  ) {
+    const segs = Math.max(3, Math.min(12, Math.round(opts.reztubeSegments)));
+    if (segs !== this.reztubePrevSegs) this.buildReztube(segs);
+    if (
+      !this.reztubeLine ||
+      !this.reztubeMat ||
+      !this.reztubeRingX ||
+      !this.reztubeRingY ||
+      !this.reztubeRingZ
+    )
+      return;
+
+    const RINGS = this.TUBE_RINGS;
+    const SEGS = this.reztubePrevSegs;
+    const SPACING = this.RING_SPACING;
+    const TOTAL_DEPTH = RINGS * SPACING;
+    const amp = Math.max(0.1, opts.reztubeAmplitude);
+
+    // Beat flash — decays each frame
+    if (audio.beat) this.reztubeFlash = 1.0;
+    this.reztubeFlash *= Math.exp(-dt * 7.0);
+
+    // Advance scroll in world-units; bass pumps the speed
+    const bassBoost = 1.0 + audio.bass * 1.4;
+    this.reztubeScroll =
+      (this.reztubeScroll + dt * opts.reztubeSpeed * 8 * bassBoost) % TOTAL_DEPTH;
+
+    const geo = this.reztubeLine.geometry;
+    const posAttr = geo.attributes.position as THREE.BufferAttribute;
+    const colAttr = geo.attributes.color as THREE.BufferAttribute;
+    const pos = posAttr.array as Float32Array;
+    const col = colAttr.array as Float32Array;
+
+    const bins = audio.bins;
+    const sideVertStart = RINGS * SEGS * 2;
+    const ringX = this.reztubeRingX;
+    const ringY = this.reztubeRingY;
+    const ringZ = this.reztubeRingZ;
+
+    // ── Pass 1: compute all ring positions + write ring outline segments ───
+    for (let r = 0; r < RINGS; r++) {
+      // Each ring cycles from far (z = -TOTAL_DEPTH) to near (z ≈ 0) as scroll increases.
+      const z = ((r * SPACING + this.reztubeScroll) % TOTAL_DEPTH) - TOTAL_DEPTH;
+      ringZ[r] = z;
+
+      // proximity 0 = far, 1 = near camera
+      const proximity = (z + TOTAL_DEPTH) / TOTAL_DEPTH;
+
+      // Frequency bin: map ring index → spectrum (so ring 0 = bass, ring N-1 = mid-high)
+      const spectralT = r / RINGS;
+      const binIdx = Math.min(bins.length - 1, Math.floor(spectralT * bins.length * 0.65));
+      const binVal = Math.max(0, Math.min(1, (bins[binIdx] ?? 0) / 255));
+
+      // Radius pulses with the bin's energy + bass at close range
+      const radiusMod = 1.0 + binVal * 0.7 * amp + audio.bass * 0.35 * amp * Math.pow(proximity, 2);
+      const ringRadius = opts.reztubeRadius * radiusMod;
+
+      // Per-ring twist accumulates with distance (helix effect from Rez)
+      const twistAngle = opts.reztubeTwist * (proximity * Math.PI * 2.5 + time * 0.45);
+
+      // Color: position in spectrum + audio brightness
+      let cr: number, cg: number, cb: number;
+      if (opts.reztubeUsePalette) {
+        this.colorAtInto(spectralT, this.tmpColor);
+        const bright = Math.min(
+          2.0,
+          (0.35 + binVal * 0.6 + this.reztubeFlash * 0.4) * (0.4 + proximity * 1.2),
+        );
+        cr = this.tmpColor.r * bright;
+        cg = this.tmpColor.g * bright;
+        cb = this.tmpColor.b * bright;
+      } else {
+        // Neon grid: hue sweeps from cyan (far) → magenta (near) + time drift
+        const hue = (spectralT * 0.65 + time * 0.04) % 1.0;
+        const lum = Math.min(
+          0.92,
+          0.35 + binVal * 0.35 + this.reztubeFlash * 0.25 + proximity * 0.22,
+        );
+        this.tmpColor.setHSL(hue, 1.0, lum);
+        cr = this.tmpColor.r;
+        cg = this.tmpColor.g;
+        cb = this.tmpColor.b;
+      }
+
+      for (let s = 0; s < SEGS; s++) {
+        const angle = (s / SEGS) * Math.PI * 2 + twistAngle;
+        const vx = Math.cos(angle) * ringRadius;
+        const vy = Math.sin(angle) * ringRadius;
+        ringX[r * SEGS + s] = vx;
+        ringY[r * SEGS + s] = vy;
+
+        const sNext = (s + 1) % SEGS;
+        const angleNext = (sNext / SEGS) * Math.PI * 2 + twistAngle;
+        const vnx = Math.cos(angleNext) * ringRadius;
+        const vny = Math.sin(angleNext) * ringRadius;
+
+        // Two vertices: from corner s to corner s+1 (ring outline)
+        const vi = (r * SEGS + s) * 2;
+        const pi = vi * 3;
+        pos[pi] = vx;
+        pos[pi + 1] = vy;
+        pos[pi + 2] = z;
+        pos[pi + 3] = vnx;
+        pos[pi + 4] = vny;
+        pos[pi + 5] = z;
+        col[pi] = cr;
+        col[pi + 1] = cg;
+        col[pi + 2] = cb;
+        col[pi + 3] = cr;
+        col[pi + 4] = cg;
+        col[pi + 5] = cb;
+      }
+    }
+
+    // ── Pass 2: write side connector segments (ring r → ring r+1 per vertex) ─
+    for (let r = 0; r < RINGS; r++) {
+      const rNext = (r + 1) % RINGS;
+      const zA = ringZ[r];
+      const zB = ringZ[rNext];
+
+      // Skip the connector if there is a wrap jump (avoids diagonal lines across the tube)
+      const skip = Math.abs(zA - zB) > SPACING * 2.2;
+
+      const spectralT = r / RINGS;
+      let cr: number, cg: number, cb: number;
+      if (opts.reztubeUsePalette) {
+        this.colorAtInto(spectralT, this.tmpColor);
+        const binIdx = Math.min(bins.length - 1, Math.floor(spectralT * bins.length * 0.65));
+        const binVal = (bins[binIdx] ?? 0) / 255;
+        const bright = (0.15 + binVal * 0.3) * 0.65;
+        cr = this.tmpColor.r * bright;
+        cg = this.tmpColor.g * bright;
+        cb = this.tmpColor.b * bright;
+      } else {
+        const hue = (spectralT * 0.65 + time * 0.04) % 1.0;
+        this.tmpColor.setHSL(hue, 1.0, 0.22);
+        cr = this.tmpColor.r;
+        cg = this.tmpColor.g;
+        cb = this.tmpColor.b;
+      }
+
+      for (let s = 0; s < SEGS; s++) {
+        const vi = sideVertStart + (r * SEGS + s) * 2;
+        const pi = vi * 3;
+        if (skip) {
+          // Degenerate (zero-length) line — invisible
+          pos[pi] = pos[pi + 1] = pos[pi + 2] = 0;
+          pos[pi + 3] = pos[pi + 4] = pos[pi + 5] = 0;
+        } else {
+          pos[pi] = ringX[r * SEGS + s];
+          pos[pi + 1] = ringY[r * SEGS + s];
+          pos[pi + 2] = zA;
+          pos[pi + 3] = ringX[rNext * SEGS + s];
+          pos[pi + 4] = ringY[rNext * SEGS + s];
+          pos[pi + 5] = zB;
+        }
+        col[pi] = cr;
+        col[pi + 1] = cg;
+        col[pi + 2] = cb;
+        col[pi + 3] = cr;
+        col[pi + 4] = cg;
+        col[pi + 5] = cb;
+      }
+    }
+
+    posAttr.needsUpdate = true;
+    colAttr.needsUpdate = true;
+
+    if (this.reztubeCoreLight) {
+      this.reztubeCoreLight.intensity = (1.2 + audio.bass * 3.5 + this.reztubeFlash * 4) * amp;
+      if (opts.reztubeUsePalette) {
+        this.reztubeCoreLight.color
+          .copy(this.paletteThree[0])
+          .lerp(this.paletteThree[1], audio.mid);
+      } else {
+        this.reztubeCoreLight.color.setRGB(0.0, 1.0, 0.87);
+      }
+    }
+
+    this.postFxBoost.bloom = 1.4 + audio.bass * 1.4 + this.reztubeFlash * 1.2;
+    this.postFxBoost.glitch = 0;
+  }
+
   update(
     dt: number,
     time: number,
@@ -2306,6 +2578,13 @@ export class Scene {
       geometrynebulaUsePalette: boolean;
       geometrynebulaAmplitude: number;
       geometrynebulaCount: number;
+      reztubeFullscreen: boolean;
+      reztubeUsePalette: boolean;
+      reztubeAmplitude: number;
+      reztubeSpeed: number;
+      reztubeTwist: number;
+      reztubeRadius: number;
+      reztubeSegments: number;
       bgColor: string;
       view: ViewMode;
     },
@@ -2910,6 +3189,54 @@ export class Scene {
       this.camera.fov += (52 - bk * 7 - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
       this.camera.lookAt(0, 0, 0);
+      return;
+    }
+
+    if (opts.view === "reztube") {
+      this.updateReztube(dt, time, audio, {
+        reztubeAmplitude: opts.reztubeAmplitude,
+        reztubeUsePalette: opts.reztubeUsePalette,
+        reztubeSpeed: opts.reztubeSpeed,
+        reztubeTwist: opts.reztubeTwist,
+        reztubeRadius: opts.reztubeRadius,
+        reztubeSegments: opts.reztubeSegments,
+      });
+
+      if (xrMode) return;
+
+      // Fullscreen: camera centred dead-on in the tube mouth
+      if (opts.reztubeFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (0 - this.camera.position.y) * follow;
+        this.camera.position.z += (0 - this.camera.position.z) * follow;
+        this.camera.fov += (82 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, -100);
+        return;
+      }
+
+      // Default: centre in tube with audio-reactive FOV punch and optional drift sway
+      const bk = this.kick * beat;
+      const follow = Math.min(1, dt * 5);
+      this.camera.position.x += (0 - this.camera.position.x) * follow;
+      this.camera.position.y += (0 - this.camera.position.y) * follow;
+      this.camera.position.z += (0 - this.camera.position.z) * follow;
+      // Subtle drift: sway the camera slightly off-axis without leaving the tube
+      if (drift > 0) {
+        const a = driftPos * 0.6;
+        this.camera.position.x += Math.sin(time * 0.18) * a + Math.cos(time * 0.29) * a * 0.5;
+        this.camera.position.y += Math.sin(time * 0.22) * a * 0.7;
+      }
+      this.camera.position.y += bk * 0.35;
+      this.camera.fov += (78 + bk * 14 - this.camera.fov) * Math.min(1, dt * 12);
+      this.camera.updateProjectionMatrix();
+      // Always look straight down the tunnel
+      this.camera.lookAt(
+        this.camera.position.x,
+        this.camera.position.y,
+        this.camera.position.z - 100,
+      );
       return;
     }
 

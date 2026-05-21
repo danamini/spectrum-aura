@@ -74,4 +74,25 @@ describe("settingsStore randomize", () => {
 
     randomSpy.mockRestore();
   });
+
+  it("randomize sets lensFlare and lensFlareAmount in postFx patch", async () => {
+    const { settingsStore } = await import("./store");
+
+    // With random=0.99, b(0.45)=false so lensFlare=false; amount=r(0.2,1.1)≈1.09
+    const highSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    settingsStore.randomize();
+    const highState = settingsStore.get();
+    expect(highState.lensFlare).toBe(false);
+    expect(highState.lensFlareAmount).toBeGreaterThan(1.0);
+    highSpy.mockRestore();
+
+    // With random=0.1, b(0.45)=true so lensFlare=true; amount=r(0.2,1.1)≈0.29
+    const lowSpy = vi.spyOn(Math, "random").mockReturnValue(0.1);
+    settingsStore.randomize();
+    const lowState = settingsStore.get();
+    expect(lowState.lensFlare).toBe(true);
+    expect(lowState.lensFlareAmount).toBeGreaterThanOrEqual(0.2);
+    expect(lowState.lensFlareAmount).toBeLessThan(0.4);
+    lowSpy.mockRestore();
+  });
 });

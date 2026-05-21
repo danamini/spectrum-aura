@@ -86,7 +86,7 @@ describe("Shortcuts", () => {
     // Visual name label above the rows
     expect(container.textContent).toContain("Combo");
     // View count badge inside the visual cluster (e.g. "12 views")
-    expect(container.textContent).toMatch(/\d+ views?/);
+    expect(container.textContent).toMatch(/\d+ visuals?/);
   });
 
   it("renders a Prev Visual button in the visual cluster", () => {

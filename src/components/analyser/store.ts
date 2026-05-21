@@ -127,6 +127,15 @@ export type Settings = {
   geometrynebulaOrbitSpeed: number;
   geometrynebulaSpinSpeed: number;
 
+  // rez tube view
+  reztubeFullscreen: boolean;
+  reztubeUsePalette: boolean;
+  reztubeAmplitude: number;
+  reztubeSpeed: number; // fly-through speed
+  reztubeTwist: number; // tube twist rate (0 = none)
+  reztubeRadius: number; // tube cross-section radius
+  reztubeSegments: number; // cross-section polygon sides (3–12)
+
   // 3D combo view
   comboSphereSize: number; // base sphere scale (1 = default)
   comboSphereSpinSpeed: number; // sphere rotation speed
@@ -158,6 +167,8 @@ export type Settings = {
   dofMaxBlur: number;
   glitch: boolean;
   glitchWild: boolean;
+  lensFlare: boolean;
+  lensFlareAmount: number;
   godRays: boolean;
   godRaysAmount: number;
   motionTrails: boolean;
@@ -297,6 +308,13 @@ export const DEFAULT_SETTINGS: Settings = {
   geometrynebulaSpread: 1.6,
   geometrynebulaOrbitSpeed: 1,
   geometrynebulaSpinSpeed: 1,
+  reztubeFullscreen: false,
+  reztubeUsePalette: false,
+  reztubeAmplitude: 1,
+  reztubeSpeed: 1,
+  reztubeTwist: 1,
+  reztubeRadius: 5.5,
+  reztubeSegments: 4,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,
@@ -343,6 +361,8 @@ export const DEFAULT_SETTINGS: Settings = {
   dofMaxBlur: 0.01,
   glitch: false,
   glitchWild: false,
+  lensFlare: false,
+  lensFlareAmount: 0.6,
   godRays: true,
   godRaysAmount: 0.55,
   motionTrails: false,
@@ -893,6 +913,8 @@ export const settingsStore = {
       dofMaxBlur: r(0.002, 0.02),
       glitch: b(0.2),
       glitchWild: b(0.2),
+      lensFlare: b(0.45),
+      lensFlareAmount: r(0.2, 1.1),
       godRays: b(0.7),
       godRaysAmount: r(0.2, 1.2),
       motionTrails: b(0.25),
@@ -1036,6 +1058,14 @@ export const settingsStore = {
           geometrynebulaSpread: r(0.8, 3),
           geometrynebulaOrbitSpeed: r(0.1, 2.5),
           geometrynebulaSpinSpeed: r(0.1, 4),
+
+          // rez tube
+          reztubeUsePalette: b(0.6),
+          reztubeAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          reztubeSpeed: r(0.3, 4),
+          reztubeTwist: r(0, 4),
+          reztubeRadius: r(3, 9),
+          reztubeSegments: pick([3, 4, 5, 6, 8, 10, 12] as const),
         }
       : {};
 
