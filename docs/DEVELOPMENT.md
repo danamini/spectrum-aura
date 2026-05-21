@@ -12,8 +12,10 @@ src/
 │   └── analyser/
 │       ├── Analyser.tsx            # Main 3D canvas + controls orchestrator
 │       ├── ControlPanel.tsx        # Settings UI (sliders, toggles, dropdowns)
-│       ├── Shortcuts.tsx           # Keyboard handler + view switching
-│       ├── store.ts                # Settings state, presets, slots
+│       ├── Shortcuts.tsx           # Keyboard handler + grouped shortcut rail
+│       ├── store.ts                # Settings state, presets, save list
+│       ├── visuals.ts              # Canonical visual registry
+│       ├── visuals/                # Optional runtime visual manifests (*.visual.ts)
 │       ├── store.normalization.test.ts
 │       ├── store.randomize.test.ts
 │       ├── store.slots.test.ts
@@ -65,7 +67,7 @@ docs/
 ### Settings & State (`store.ts`)
 
 - **Settings**: 40+ properties controlling every aspect
-- **Presets**: 5 curated look + 5 user slots (localStorage)
+- **Presets**: built-in curated looks plus a dynamic local save list
 - **Normalization**: Enforces limits on amplitude, vignette, bloom
 - **Randomization**: Smart background picker using WCAG contrast scoring
 
@@ -85,15 +87,26 @@ Recent controls:
 Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bottom shortcut bar:
 
 - `R`: Randomize
-- `V`: Cycle Visual
-- `X`: Source (stops current audio engine)
+- `B`: Prev Visual
+- `V`: Next Visual
+- `X`: Audio Source (stops the current audio engine so a new source can be selected)
 - `F`: Toggle fullscreen
 - `N`: Toggle Stats panel
 - `G`: Show/Hide shortcut hints
-- `A`: Auto Cycle Saves (slot auto-cycle mode)
+- `A`: Play Saves (save-list auto-cycle mode)
 - `S`: Toggle settings panel
 - `1` to `5`: Load save slot
 - `Shift+1` to `Shift+5`: Save to slot
+
+Shortcut rail clusters:
+- Visual cluster: view count, Prev Visual (B), Randomize, `inc`, `fx`, Next Visual (V)
+- Save cluster: save count, Prev, Play Saves, Next, Random, Save, Delete
+- Utility cluster: Audio Source, Fullscreen, Stats, Hide hints, Settings
+
+Tooltip behavior:
+- Shortcut buttons use a shared styled tooltip treatment rather than native browser `title` hovers.
+- `inc` explains randomize scope: post FX only vs post FX + view settings.
+- `fx` explains the post-processing master pipeline state.
 
 Settings panel and flyout behavior:
 - The `S` shortcut toggles the panel even when focus is inside a text input/slider control.
@@ -104,11 +117,18 @@ Settings panel and flyout behavior:
 
 ### Adding a New Visualization Mode
 
-1. Add to `ViewMode` type in `store.ts`
-2. Create `buildXXX()` and `updateXXX()` in `scene.ts`
-3. Add settings in `store.ts` for customization
-4. Add UI controls in `ControlPanel.tsx`
-5. Update shortcut view cycle in `Shortcuts.tsx`
+1. Add a visual manifest to `src/components/analyser/visuals.ts` or a new `src/components/analyser/visuals/*.visual.ts` file.
+2. Create `buildXXX()` and `updateXXX()` in `scene.ts` and bind the manifest `sceneGroupKey` to the owning `THREE.Group`.
+3. Add settings in `store.ts` for customization, including the `...Fullscreen` or `...Wireframe` keys referenced by the manifest when needed.
+4. Add UI controls in `ControlPanel.tsx` only for view-specific settings. View labels, cycle order, and fullscreen wiring now come from the visual registry automatically.
+5. Verify the shortcut rail still reads correctly: current label, `3D/2D` state, and visual cycling all depend on the registry metadata.
+
+Runtime registry notes:
+- `src/components/analyser/visuals.ts` is the canonical visual registry used by the control panel, shortcuts, and XR view cycle.
+- Any `src/components/analyser/visuals/*.visual.ts` module exporting `visual` or a default object with an `id` is loaded at startup via `import.meta.glob(..., { eager: true })`.
+- Runtime manifests can override labels, settings labels, fullscreen keys, wireframe keys, scene group keys, and order without re-editing the UI lists.
+- Rendering logic still lives in `scene.ts`, so new runtime-picked visuals need a matching scene group and update branch before they can draw.
+- Review rule: if a visual manifest changes label/order/fullscreen metadata, check `Shortcuts.tsx`, XR cycle behavior, and the View section in `ControlPanel.tsx` together.
 
 ### Modifying Audio Features
 
@@ -146,7 +166,7 @@ npm run test                   # Watch mode
   - `store.normalization.test.ts`: amplitude floor, vignette bounds, bloom cap, preset clearing, reset baseline
   - `store.randomize.test.ts`: randomize scope toggle behavior and new torus/geometry-nebula defaults
 - **Shortcut tests**:
-  - `Shortcuts.test.tsx`: updated labels, `S` settings toggle event, `S` while input focused, `A` auto-cycle toggle
+  - `Shortcuts.test.tsx`: grouped rail labels, visual cluster status, randomize/post-FX toggles, save transport behavior, settings toggle behavior
 - **Engine tests**:
   - `engine/bpm-detector.test.ts`: tempo stability, bounded BPM output, reset behavior
 
@@ -208,6 +228,10 @@ npm run preview               # Preview production build locally
   2. pass-through in `Analyser.tsx` and `Scene.update()` options
   3. controls in `ControlPanel.tsx` (if user-facing)
   4. at least one targeted test
+- When changing shortcut-bar behavior, update all three together:
+  1. keyboard handling + rail UI in `Shortcuts.tsx`
+  2. tooltip copy / active-state affordances in the same file
+  3. `Shortcuts.test.tsx` expectations
 
 ## Known Limitations
 

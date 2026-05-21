@@ -16,7 +16,6 @@ describe("settingsStore slots", () => {
     const slots = settingsStore.getSlots();
 
     expect(slots).toHaveLength(SLOT_COUNT);
-    expect(slots.every((slot) => slot !== null)).toBe(true);
     expect(slots.map((slot) => slot?.name)).toEqual([
       "Slot 1",
       "Slot 2",
@@ -29,22 +28,17 @@ describe("settingsStore slots", () => {
   it("uses localStorage slots when present", async () => {
     localStorage.setItem(
       SLOTS_KEY,
-      JSON.stringify([
-        { name: "My Override", settings: { view: "classic", barCount: 72 } },
-        null,
-        null,
-        null,
-        null,
-      ]),
+      JSON.stringify([{ name: "My Override", settings: { view: "classic", barCount: 72 } }, null]),
     );
 
     const { settingsStore } = await import("./store");
 
     const [slot1, slot2] = settingsStore.getSlots();
+    expect(settingsStore.getSlots()).toHaveLength(1);
     expect(slot1?.name).toBe("My Override");
     expect(slot1?.settings.view).toBe("classic");
     expect(slot1?.settings.barCount).toBe(72);
-    expect(slot2).toBeNull();
+    expect(slot2).toBeUndefined();
   });
 
   it("maps legacy rippleWaveLayers when loading a saved slot", async () => {
@@ -58,10 +52,6 @@ describe("settingsStore slots", () => {
             rippleWaveLayers: 11,
           },
         },
-        null,
-        null,
-        null,
-        null,
       ]),
     );
 
@@ -97,5 +87,25 @@ describe("settingsStore slots", () => {
     expect(state.view).toBe("classic");
     expect(state.slotCycleMode).toBe(false);
     expect(state.slotCycleSeconds).toBe(8);
+  });
+
+  it("appends new saves beyond the deployment defaults", async () => {
+    const { settingsStore, SLOT_COUNT } = await import("./store");
+
+    settingsStore.saveSlot(SLOT_COUNT, "Save 6");
+
+    const slots = settingsStore.getSlots();
+    expect(slots).toHaveLength(SLOT_COUNT + 1);
+    expect(slots.at(-1)?.name).toBe("Save 6");
+  });
+
+  it("removes cleared saves instead of leaving empty placeholders", async () => {
+    const { settingsStore, SLOT_COUNT } = await import("./store");
+
+    settingsStore.clearSlot(1);
+
+    const slots = settingsStore.getSlots();
+    expect(slots).toHaveLength(SLOT_COUNT - 1);
+    expect(slots.some((slot) => slot.name === "Slot 2")).toBe(false);
   });
 });

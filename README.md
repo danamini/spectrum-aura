@@ -68,14 +68,21 @@ For shared tab/system audio in Chrome:
 ### Live controls
 
 - `R` randomize look
-- `V` toggle visual mode
-- `C` toggle preset cycling
+- `V` next visual
+- `A` play saved looks in rotation
 - `F` toggle fullscreen
 - `G` show/hide hint bar
-- `1-5` load preset slot
-- `Shift + 1-5` save slot
+- `S` toggle settings panel
+- `X` reset the current audio source selection
 - `N` toggle stats panel
-- `Shift + N` fullscreen stats panel
+
+Bottom shortcut rail:
+
+- Visual cluster shows the active visual and whether it is in `3D` or `2D`.
+- `inc` toggles whether randomize touches view settings in addition to post FX.
+- `fx` toggles the post-processing pipeline.
+- Save controls are grouped like a transport cluster: previous, play saves, next, random, save, delete.
+- Every shortcut button and toggle has an in-app styled tooltip with usage details.
 
 Control panel additions:
 
@@ -96,9 +103,10 @@ Control panel additions:
 ## Presets
 
 - Built-in presets for fast scene changes.
-- First-time users are seeded with five curated starter slots by default.
-- Five user slots saved in local storage.
-- Slot cycle mode for automated live rotation.
+- First-time users are seeded with five curated starter saves by default.
+- Saves are stored in local storage as a growing list instead of a fixed five-slot bank.
+- The shortcut rail and settings panel both support previous/next/random/save/delete flows over the current save list.
+- Play Saves mode rotates through the current saved list automatically.
 
 ## Tech Stack (Lower-Level Details)
 
@@ -162,10 +170,11 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
   - `store.ts`: Settings state management
 	- `store.normalization.test.ts`: Settings guardrails and normalization rules
 	- `store.randomize.test.ts`: Randomize scope and tuning behavior
-	- `store.slots.test.ts`: Slot persistence and compatibility
+	- `store.slots.test.ts`: Save-list persistence, compatibility, and dynamic append/remove behavior
 	- `test-helpers.ts`: Shared test fixtures
   - `Analyser.tsx`: Canvas orchestration
   - `ControlPanel.tsx`: Settings UI
+	- `visuals.ts`: Canonical visual registry for labels, ordering, and view metadata
 	- `engine/`: Audio analysis, 3D scene, post-processing, engine unit tests
 - `docs/`: Technical documentation
 - `docs/DEVELOPMENT.md`: Architecture and contribution guide

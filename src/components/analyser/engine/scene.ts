@@ -5,24 +5,11 @@ import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { sphereVertexShader, sphereFragmentShader } from "./shaders";
 import type { AudioBands } from "./audio";
 import { settingsStore } from "../store";
+import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS, type ViewMode } from "../visuals";
 
 const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
 
 export type Palette = [string, string, string];
-
-export type ViewMode =
-  | "combo"
-  | "classic"
-  | "ripple"
-  | "datastream"
-  | "nebula"
-  | "monolith"
-  | "mandala"
-  | "terrain"
-  | "obsidian"
-  | "torus"
-  | "soundwall"
-  | "geometrynebula";
 
 export class Scene {
   scene = new THREE.Scene();
@@ -329,20 +316,20 @@ export class Scene {
   }
 
   setView(view: ViewMode) {
-    if (this.view === view) return;
-    this.view = view;
-    this.group.visible = view === "combo";
-    this.classicGroup.visible = view === "classic";
-    this.rippleGroup.visible = view === "ripple";
-    this.dataStreamGroup.visible = view === "datastream";
-    this.nebulaGroup.visible = view === "nebula";
-    this.monolithGroup.visible = view === "monolith";
-    this.mandalaGroup.visible = view === "mandala";
-    this.terrainGroup.visible = view === "terrain";
-    this.obsidianGroup.visible = view === "obsidian";
-    this.torusGroup.visible = view === "torus";
-    this.soundwallGroup.visible = view === "soundwall";
-    this.geometrynebulaGroup.visible = view === "geometrynebula";
+    const nextView = this.getSceneObjectForView(view) ? view : DEFAULT_VISUAL_ID;
+    if (this.view === nextView) return;
+    this.view = nextView;
+    for (const visual of VISUALS) {
+      const object = this.getSceneObjectForView(visual.id);
+      if (object) object.visible = visual.id === nextView;
+    }
+  }
+
+  private getSceneObjectForView(view: string) {
+    const visual = getVisualDefinition(view);
+    if (!visual?.sceneGroupKey) return null;
+    const object = (this as unknown as Record<string, unknown>)[visual.sceneGroupKey];
+    return object instanceof THREE.Object3D ? object : null;
   }
 
   setPalette(p: Palette) {
@@ -3199,23 +3186,12 @@ export class Scene {
   }
 
   private cycleXrView() {
-    const views: ViewMode[] = [
-      "combo",
-      "classic",
-      "ripple",
-      "datastream",
-      "nebula",
-      "monolith",
-      "mandala",
-      "terrain",
-      "obsidian",
-      "torus",
-      "soundwall",
-      "geometrynebula",
-    ];
+    const views = VISUALS.map((visual) => visual.id).filter((view): view is ViewMode =>
+      Boolean(this.getSceneObjectForView(view)),
+    );
     const current = settingsStore.get().view;
     const index = views.indexOf(current);
-    const next = views[(index + 1) % views.length] ?? "combo";
+    const next = views[(index + 1) % views.length] ?? DEFAULT_VISUAL_ID;
     settingsStore.set({ view: next });
   }
 

@@ -1,11 +1,66 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import {
+  Maximize2,
+  Mic,
+  Play,
+  Save,
+  Settings2,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+  Trash2,
+} from "lucide-react";
 import { settingsStore, useSettings, useSlots, type Settings } from "./store";
 import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "./engine/xr";
+import { getVisualDefinition, VISUALS } from "./visuals";
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 const TOGGLE_FULLSCREEN_EVENT = "spectrum-aura:toggle-fullscreen";
 const STOP_AUDIO_EVENT = "spectrum-aura:stop-audio";
+
+const TooltipProvider = TooltipPrimitive.Provider;
+const Tooltip = TooltipPrimitive.Root;
+const TooltipTrigger = TooltipPrimitive.Trigger;
+
+function ShortcutTooltipContent({ children }: { children: ReactNode }) {
+  return (
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Content
+        sideOffset={6}
+        className="z-[160] overflow-hidden rounded-md border border-white/10 bg-white/10 backdrop-blur-lg px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-white/90 shadow-[0_2px_16px_0_rgba(0,0,0,0.18)] animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
+      >
+        {children}
+      </TooltipPrimitive.Content>
+    </TooltipPrimitive.Portal>
+  );
+}
+
+type Hint = {
+  key: string;
+  label?: string;
+  onClick: (ev: MouseEvent<HTMLButtonElement>) => void;
+  title?: string;
+  tooltip?: ReactNode;
+  icon?: ReactNode;
+  active?: boolean;
+  showKey?: boolean;
+  ariaLabel?: string;
+};
+
+function TooltipBlock({ title, hint, detail }: { title: string; hint?: string; detail: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-[10px] text-white">
+        <span className="text-white/55">&gt;&gt;</span>
+        <span>{title}</span>
+        {hint ? <span className="text-white/45">[{hint}]</span> : null}
+      </div>
+      <div className="pl-5 text-[9px] normal-case tracking-normal text-white/70">{detail}</div>
+    </div>
+  );
+}
 
 export function Shortcuts() {
   const slots = useSlots();
@@ -14,22 +69,14 @@ export function Shortcuts() {
   const [xrActive, setXrActive] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
+  const saveCursorRef = useRef(0);
 
-  const fullscreenByView: Record<Settings["view"], keyof Settings> = {
-    combo: "comboFullscreen",
-    classic: "classicFullscreen",
-    ripple: "rippleFullscreen",
-    datastream: "datastreamFullscreen",
-    nebula: "nebulaFullscreen",
-    monolith: "monolithFullscreen",
-    mandala: "mandalaFullscreen",
-    terrain: "terrainFullscreen",
-    obsidian: "obsidianFullscreen",
-    torus: "torusFullscreen",
-    soundwall: "soundwallFullscreen",
-    geometrynebula: "geometrynebulaFullscreen",
-  };
-  const is3DMode = !settings[fullscreenByView[settings.view]];
+  const currentVisual = getVisualDefinition(settings.view);
+  const fullscreenKey = currentVisual?.fullscreenKey as keyof Settings | undefined;
+  const is3DMode = fullscreenKey ? !settings[fullscreenKey] : true;
+  const visualLabel = currentVisual?.label ?? settings.view;
+  const visualCount = VISUALS.length;
+  const visualCountLabel = `${visualCount} view${visualCount === 1 ? "" : "s"}`;
 
   const showFlash = (msg: string) => {
     setFlash(msg);
@@ -44,10 +91,18 @@ export function Shortcuts() {
   }, []);
 
   useEffect(() => {
+    if (slots.length === 0) {
+      saveCursorRef.current = 0;
+      return;
+    }
+    saveCursorRef.current = Math.min(saveCursorRef.current, slots.length - 1);
+  }, [slots]);
+
+  useEffect(() => {
     const onWebXrState = (event: Event) => {
       const detail = (event as CustomEvent<WebXrState>).detail;
       if (!detail) return;
-      setXrActive(Boolean(detail.active));
+      setXrActive(detail.active);
     };
     window.addEventListener(WEBXR_STATE_EVENT, onWebXrState);
     return () => window.removeEventListener(WEBXR_STATE_EVENT, onWebXrState);
@@ -57,81 +112,37 @@ export function Shortcuts() {
     settingsStore.randomize();
     showFlash("Randomized");
   };
-  const doToggleView = () => {
-    const order = [
-      "combo",
-      "combo2d",
-      "classic",
-      "classic2d",
-      "ripple",
-      "ripple2d",
-      "datastream",
-      "datastream2d",
-      "nebula",
-      "nebula2d",
-      "monolith",
-      "monolith2d",
-      "mandala",
-      "mandala2d",
-      "terrain",
-      "terrain2d",
-      "obsidian",
-      "obsidian2d",
-      "torus",
-      "torus2d",
-      "soundwall",
-      "soundwall2d",
-      "geometrynebula",
-      "geometrynebula2d",
-    ] as const;
-    const labelByView: Record<Settings["view"], string> = {
-      combo: "Combo",
-      classic: "Classic",
-      ripple: "Ripple",
-      datastream: "Data-Stream",
-      nebula: "Nebula",
-      monolith: "Monolith",
-      mandala: "Mandala",
-      terrain: "Terrain",
-      obsidian: "Obsidian",
-      torus: "Torus",
-      soundwall: "Sound-Wall",
-      geometrynebula: "Geo Nebula",
-    };
+  const doToggleRandomizeInclude = () => {
+    const next = !settingsStore.get().randomizeViewSettings;
+    settingsStore.set({ randomizeViewSettings: next });
+    showFlash(next ? "Randomize includes view" : "Randomize post FX only");
+  };
+  const doTogglePostFx = () => {
+    const next = !settingsStore.get().postFxEnabled;
+    settingsStore.set({ postFxEnabled: next });
+    showFlash(next ? "Post FX ON" : "Post FX OFF");
+  };
+  const doToggleView = (direction: 1 | -1 = 1) => {
+    const order = VISUALS.flatMap((visual) =>
+      visual.fullscreenKey ? [visual.id, `${visual.id}2d`] : [visual.id],
+    );
     const current = settingsStore.get();
-    const fullKeyByView: Record<Settings["view"], keyof Settings> = {
-      combo: "comboFullscreen",
-      classic: "classicFullscreen",
-      ripple: "rippleFullscreen",
-      datastream: "datastreamFullscreen",
-      nebula: "nebulaFullscreen",
-      monolith: "monolithFullscreen",
-      mandala: "mandalaFullscreen",
-      terrain: "terrainFullscreen",
-      obsidian: "obsidianFullscreen",
-      torus: "torusFullscreen",
-      soundwall: "soundwallFullscreen",
-      geometrynebula: "geometrynebulaFullscreen",
-    };
-    const cur = current[fullKeyByView[current.view]]
-      ? (`${current.view}2d` as (typeof order)[number])
-      : (current.view as (typeof order)[number]);
-    const next = order[(order.indexOf(cur) + 1) % order.length] ?? "combo";
+    const activeVisual = getVisualDefinition(current.view);
+    const activeFullscreenKey = activeVisual?.fullscreenKey as keyof Settings | undefined;
+    const cur =
+      activeFullscreenKey && current[activeFullscreenKey] ? `${current.view}2d` : current.view;
+    let nextIdx = order.indexOf(cur) + direction;
+    if (nextIdx < 0) nextIdx = order.length - 1;
+    if (nextIdx >= order.length) nextIdx = 0;
+    const next = order[nextIdx] ?? VISUALS[0]?.id ?? "combo";
     const is2d = next.endsWith("2d");
     const view = (is2d ? next.slice(0, -2) : next) as Settings["view"];
-    if (view === "combo") settingsStore.set({ view, comboFullscreen: is2d });
-    else if (view === "classic") settingsStore.set({ view, classicFullscreen: is2d });
-    else if (view === "ripple") settingsStore.set({ view, rippleFullscreen: is2d });
-    else if (view === "datastream") settingsStore.set({ view, datastreamFullscreen: is2d });
-    else if (view === "nebula") settingsStore.set({ view, nebulaFullscreen: is2d });
-    else if (view === "monolith") settingsStore.set({ view, monolithFullscreen: is2d });
-    else if (view === "mandala") settingsStore.set({ view, mandalaFullscreen: is2d });
-    else if (view === "terrain") settingsStore.set({ view, terrainFullscreen: is2d });
-    else if (view === "obsidian") settingsStore.set({ view, obsidianFullscreen: is2d });
-    else if (view === "torus") settingsStore.set({ view, torusFullscreen: is2d });
-    else if (view === "soundwall") settingsStore.set({ view, soundwallFullscreen: is2d });
-    else if (view === "geometrynebula") settingsStore.set({ view, geometrynebulaFullscreen: is2d });
-    showFlash(`${labelByView[view]} ${is2d ? "2D" : "3D"}`);
+    const visual = getVisualDefinition(view);
+    const nextFullscreenKey = visual?.fullscreenKey as keyof Settings | undefined;
+    settingsStore.set(
+      nextFullscreenKey ? ({ view, [nextFullscreenKey]: is2d } as Partial<Settings>) : { view },
+    );
+    showFlash(`${visual?.label ?? view} ${is2d ? "2D" : "3D"}`);
   };
   const doFullscreen = () => {
     window.dispatchEvent(new Event(TOGGLE_FULLSCREEN_EVENT));
@@ -161,16 +172,71 @@ export function Shortcuts() {
     showFlash("Audio stopped");
   };
   const doToggleHints = () => setVisible((v) => !v);
+  const loadSaveAtIndex = (index: number) => {
+    const slot = settingsStore.getSlots()[index];
+    if (!slot) {
+      showFlash("No saved presets");
+      return;
+    }
+    saveCursorRef.current = index;
+    settingsStore.loadSlot(index);
+    showFlash(`Loaded ${slot.name}`);
+  };
   const doSlot = (i: number) => {
     const slot = settingsStore.getSlots()[i];
     if (slot) {
-      settingsStore.loadSlot(i);
-      showFlash(`Loaded ${slot.name}`);
-    } else showFlash(`Slot ${i + 1} empty`);
+      loadSaveAtIndex(i);
+    } else showFlash(`Save ${i + 1} not found`);
   };
   const doSaveSlot = (i: number) => {
     settingsStore.saveSlot(i, `Slot ${i + 1}`);
+    saveCursorRef.current = i;
     showFlash(`Saved to slot ${i + 1}`);
+  };
+  const doSaveCurrent = () => {
+    const nextIndex = settingsStore.getSlots().length;
+    settingsStore.saveSlot(nextIndex, `Save ${nextIndex + 1}`);
+    saveCursorRef.current = nextIndex;
+    showFlash(`Saved as Save ${nextIndex + 1}`);
+  };
+  const doDeleteCurrentSave = () => {
+    const list = settingsStore.getSlots();
+    if (list.length === 0) {
+      showFlash("No saved presets");
+      return;
+    }
+    const current = list[saveCursorRef.current];
+    settingsStore.clearSlot(saveCursorRef.current);
+    if (list.length <= 1) saveCursorRef.current = 0;
+    else saveCursorRef.current = Math.min(saveCursorRef.current, list.length - 2);
+    showFlash(`Deleted ${current?.name ?? "save"}`);
+  };
+  const doCycleSave = (direction: 1 | -1) => {
+    const list = settingsStore.getSlots();
+    if (list.length === 0) {
+      showFlash("No saved presets");
+      return;
+    }
+    const next = (saveCursorRef.current + direction + list.length) % list.length;
+    loadSaveAtIndex(next);
+  };
+  const doRandomSave = () => {
+    const list = settingsStore.getSlots();
+    if (list.length === 0) {
+      showFlash("No saved presets");
+      return;
+    }
+    const next =
+      list.length === 1
+        ? 0
+        : (() => {
+            let index = saveCursorRef.current;
+            while (index === saveCursorRef.current) {
+              index = Math.floor(Math.random() * list.length);
+            }
+            return index;
+          })();
+    loadSaveAtIndex(next);
   };
 
   useEffect(() => {
@@ -207,12 +273,28 @@ export function Shortcuts() {
         doRandomize();
         e.preventDefault();
         e.stopPropagation();
+      } else if (k === "b") {
+        doToggleView(-1);
+        e.preventDefault();
+        e.stopPropagation();
       } else if (k === "v") {
-        doToggleView();
+        doToggleView(1);
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "a") {
         doToggleSlotCycle();
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "[") {
+        doCycleSave(-1);
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "]") {
+        doCycleSave(1);
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "\\") {
+        doRandomSave();
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "f") {
@@ -237,33 +319,59 @@ export function Shortcuts() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  void slots;
-
-  type Hint = {
-    key: string;
-    label?: string;
-    onClick: (ev: MouseEvent<HTMLButtonElement>) => void;
-    title?: string;
-    icon?: ReactNode;
+  const prevVisualHint: Hint = {
+    key: "B",
+    label: "Prev Visual",
+    icon: <SkipBack />,
+    tooltip: (
+      <TooltipBlock title="Prev Visual" hint="B" detail="Steps backward through the visual list." />
+    ),
+    onClick: () => {
+      doToggleView(-1);
+    },
+  };
+  const nextVisualHint: Hint = {
+    key: "V",
+    label: "Next Visual",
+    icon: <SkipForward />,
+    tooltip: (
+      <TooltipBlock
+        title="Next Visual"
+        hint="V"
+        detail="Steps forward through the visual list and keeps the current mode in motion."
+      />
+    ),
+    onClick: () => {
+      doToggleView(1);
+    },
   };
   const hints: Hint[] = [
     {
       key: "R",
       label: "Randomize",
+      icon: <Shuffle />,
+      tooltip: (
+        <TooltipBlock
+          title="Randomize"
+          hint="R"
+          detail="Shuffles the current look using the active scope below."
+        />
+      ),
       onClick: () => {
         doRandomize();
       },
     },
     {
-      key: "V",
-      label: "Cycle Visual",
-      onClick: () => {
-        doToggleView();
-      },
-    },
-    {
       key: "X",
-      label: "Source",
+      label: "Audio Source",
+      icon: <Mic />,
+      tooltip: (
+        <TooltipBlock
+          title="Audio Source"
+          hint="X"
+          detail="Stops the current input so you can pick mic, tab, or system audio again."
+        />
+      ),
       onClick: () => {
         doStopAudio();
       },
@@ -271,6 +379,14 @@ export function Shortcuts() {
     {
       key: "F",
       label: "Fullscreen",
+      icon: <Maximize2 />,
+      tooltip: (
+        <TooltipBlock
+          title="Fullscreen"
+          hint="F"
+          detail="Expands the analyser to fullscreen for a cleaner stage view."
+        />
+      ),
       onClick: () => {
         doFullscreen();
       },
@@ -278,6 +394,13 @@ export function Shortcuts() {
     {
       key: "N",
       label: "Stats",
+      tooltip: (
+        <TooltipBlock
+          title="Stats"
+          hint="N"
+          detail="Opens the nerd panel with FPS, renderer, and audio diagnostics."
+        />
+      ),
       onClick: () => {
         doToggleStats();
       },
@@ -286,6 +409,13 @@ export function Shortcuts() {
     {
       key: "G",
       label: "Hide hints",
+      tooltip: (
+        <TooltipBlock
+          title="Hide Hints"
+          hint="G"
+          detail="Collapses the shortcut strip until you bring it back again."
+        />
+      ),
       onClick: () => {
         doToggleHints();
       },
@@ -294,6 +424,12 @@ export function Shortcuts() {
   const xrHint: Hint = {
     key: "VR",
     label: "Exit VR",
+    tooltip: (
+      <TooltipBlock
+        title="Exit VR"
+        detail="Leaves the immersive session and returns to the desktop controls."
+      />
+    ),
     onClick: () => {
       requestWebXrToggle();
     },
@@ -301,44 +437,176 @@ export function Shortcuts() {
   const settingsHint: Hint = {
     key: "S",
     label: "Settings",
+    icon: <Settings2 />,
+    tooltip: (
+      <TooltipBlock
+        title="Settings"
+        hint="S"
+        detail="Opens the full control drawer for visual, save, and FX tuning."
+      />
+    ),
     onClick: () => {
       doToggleSettings();
     },
   };
   const cycleSavesHint: Hint = {
     key: "A",
-    label: "Auto Cycle Saves",
+    label: "Play Saves",
+    icon: <Play />,
+    active: settings.slotCycleMode,
+    tooltip: (
+      <TooltipBlock
+        title="Play Saves"
+        hint="A"
+        detail="Cycles through your saved looks in sequence using the current dwell timing."
+      />
+    ),
     onClick: () => {
       doToggleSlotCycle();
     },
   };
-  const slotHints: Hint[] = [1, 2, 3, 4, 5].map((n) => ({
-    key: String(n),
-    label: "",
-    onClick: (ev: MouseEvent<HTMLButtonElement>) => {
-      if (ev.shiftKey) doSaveSlot(n - 1);
-      else doSlot(n - 1);
+  const prevSaveHint: Hint = {
+    key: "[",
+    label: "Prev Save",
+    icon: <SkipBack />,
+    tooltip: (
+      <TooltipBlock
+        title="Prev Save"
+        hint="["
+        detail="Loads the previous save in your current list."
+      />
+    ),
+    onClick: () => {
+      doCycleSave(-1);
     },
-    title: xrActive ? "Click to load" : `Click to load · Shift+click or Shift+${n} to save`,
-  }));
+  };
+  const nextSaveHint: Hint = {
+    key: "]",
+    label: "Next Save",
+    icon: <SkipForward />,
+    tooltip: (
+      <TooltipBlock title="Next Save" hint="]" detail="Loads the next save in your current list." />
+    ),
+    onClick: () => {
+      doCycleSave(1);
+    },
+  };
+  const randomSaveHint: Hint = {
+    key: "\\",
+    label: "Random Save",
+    icon: <Shuffle />,
+    tooltip: (
+      <TooltipBlock
+        title="Random Save"
+        hint="\\"
+        detail="Jumps to a random saved look without changing the save list itself."
+      />
+    ),
+    onClick: () => {
+      doRandomSave();
+    },
+  };
+  const saveCurrentHint: Hint = {
+    key: "",
+    label: "Save",
+    icon: <Save />,
+    tooltip: (
+      <TooltipBlock
+        title="Save"
+        detail="Captures the current setup as a new saved state at the end of the list."
+      />
+    ),
+    onClick: () => {
+      doSaveCurrent();
+    },
+    title: "Save current settings",
+    showKey: false,
+  };
+  const deleteSaveHint: Hint = {
+    key: "",
+    label: "Delete",
+    icon: <Trash2 />,
+    tooltip: (
+      <TooltipBlock
+        title="Delete Save"
+        detail="Removes the currently focused save from the list."
+      />
+    ),
+    onClick: () => {
+      doDeleteCurrentSave();
+    },
+    title: "Delete focused save",
+    showKey: false,
+  };
 
   const Btn = ({ h }: { h: Hint }) => (
-    <button
-      type="button"
-      onClick={h.onClick}
-      title={h.title ?? (xrActive ? h.label : `Press ${h.key}`)}
-      data-settings-shortcut={h.key === "S" ? "true" : undefined}
-      className="pointer-events-auto flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition-colors hover:bg-white/10 hover:text-white/90"
-    >
-      {!xrActive && (
-        <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/70 group-hover:border-white/40">
-          {h.key}
-        </kbd>
-      )}
-      {h.icon ? <span className="text-white/75">{h.icon}</span> : null}
-      {h.label ? <span>{h.label}</span> : null}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={h.onClick}
+          aria-label={h.ariaLabel ?? h.label ?? h.title ?? h.key}
+          aria-pressed={h.active}
+          data-settings-shortcut={h.key === "S" ? "true" : undefined}
+          className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition-colors [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0 ${
+            h.active
+              ? "border border-emerald-300/40 bg-emerald-300/12 text-emerald-100 shadow-[0_0_12px_rgba(52,211,153,0.18)]"
+              : "hover:bg-white/10 hover:text-white/90"
+          }`}
+        >
+          {!xrActive && h.showKey !== false && (
+            <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/70 group-hover:border-white/40">
+              {h.key}
+            </kbd>
+          )}
+          {h.icon ? <span className="text-white/75">{h.icon}</span> : null}
+          {h.label ? <span>{h.label}</span> : null}
+        </button>
+      </TooltipTrigger>
+      <ShortcutTooltipContent>
+        {h.tooltip ?? h.title ?? (xrActive || h.showKey === false ? h.label : `Press ${h.key}`)}
+      </ShortcutTooltipContent>
+    </Tooltip>
   );
+
+  const MiniToggle = ({
+    label,
+    active,
+    onClick,
+    title,
+  }: {
+    label: string;
+    active: boolean;
+    onClick: () => void;
+    title: string;
+  }) => (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+          }}
+          aria-label={title}
+          aria-pressed={active}
+          className={`pointer-events-auto rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] transition-colors ${
+            active
+              ? "border-emerald-300/40 bg-emerald-300/12 text-emerald-100"
+              : "border-white/10 bg-white/[0.04] text-white/35 hover:text-white/65"
+          }`}
+        >
+          {label}
+        </button>
+      </TooltipTrigger>
+      <ShortcutTooltipContent>
+        <TooltipBlock title={label.toUpperCase()} detail={title} hint={active ? "ON" : "OFF"} />
+      </ShortcutTooltipContent>
+    </Tooltip>
+  );
+
+  const saveCountLabel = `${slots.length} save${slots.length === 1 ? "" : "s"}`;
 
   return (
     <>
@@ -351,35 +619,83 @@ export function Shortcuts() {
         <div
           className={`pointer-events-none fixed inset-x-0 z-[100] flex justify-center ${xrActive ? "top-3" : "bottom-3"}`}
         >
-          <div className="flex flex-col items-center gap-1">
-            {xrActive && (
-              <div className="rounded-full border border-emerald-300/25 bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-200/75 backdrop-blur">
-                XR: right A settings · right B stats · hold both grips exit
+          <TooltipProvider delayDuration={120}>
+            <div className="flex w-fit max-w-[calc(100vw-1.5rem)] flex-col items-center gap-1">
+              {/* High visual name, subtle */}
+              <div className="mb-1 w-full text-center">
+                <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.22em] text-white/35 select-none">
+                  {visualLabel}
+                </span>
               </div>
-            )}
-            {is3DMode && !xrActive && (
-              <div className="rounded-full border border-white/5 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70">
-                3D: drag mouse to move camera
-              </div>
-            )}
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-white/5 bg-black/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70 hover:opacity-100 transition-opacity">
-              {xrActive && <Btn h={xrHint} />}
-              {hints.map((h) => (
-                <Btn key={h.key} h={h} />
-              ))}
-              <span className="mx-1 h-3 w-px bg-white/10" />
-              <Btn h={cycleSavesHint} />
-              <span className="ml-1 text-white/25 normal-case tracking-normal">Saves</span>
-              {slotHints.map((h) => (
-                <Btn key={h.key} h={h} />
-              ))}
-              {!xrActive && (
-                <span className="ml-1 text-white/25 normal-case tracking-normal">⇧+1–5 save</span>
+              {xrActive && (
+                <div className="rounded-full border border-emerald-300/25 bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-200/75 backdrop-blur">
+                  XR: right A settings · right B stats · hold both grips exit
+                </div>
               )}
-              <span className="mx-1 h-3 w-px bg-white/10" />
-              <Btn h={settingsHint} />
+              {is3DMode && !xrActive && (
+                <div className="rounded-full border border-white/5 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70">
+                  3D: drag mouse to move camera
+                </div>
+              )}
+              <div className="flex w-full flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 opacity-70 transition-opacity hover:opacity-100">
+                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
+                    {xrActive && <Btn h={xrHint} />}
+                    <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
+                      <span className="rounded bg-white/8 px-2 py-0.5 font-mono text-[10px] tracking-wider text-emerald-200/80 select-none">
+                        {visualCountLabel}
+                      </span>
+                      <Btn h={prevVisualHint} />
+                      <Btn h={hints[0]!} />
+                      <MiniToggle
+                        label="inc"
+                        active={settings.randomizeViewSettings}
+                        onClick={doToggleRandomizeInclude}
+                        title={
+                          settings.randomizeViewSettings
+                            ? "Randomize includes view settings"
+                            : "Randomize post FX only"
+                        }
+                      />
+                      <MiniToggle
+                        label="fx"
+                        active={settings.postFxEnabled}
+                        onClick={doTogglePostFx}
+                        title={settings.postFxEnabled ? "Post FX enabled" : "Post FX disabled"}
+                      />
+                      <Btn h={nextVisualHint} />
+                    </div>
+                  </div>
+                </div>
+                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
+                    <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
+                      <span className="rounded bg-white/8 px-2 py-0.5 font-mono text-[10px] tracking-wider text-emerald-200/80 select-none">
+                        {saveCountLabel}
+                      </span>
+                      <Btn h={prevSaveHint} />
+                      <Btn h={cycleSavesHint} />
+                      <Btn h={nextSaveHint} />
+                      <Btn h={randomSaveHint} />
+                      <Btn h={saveCurrentHint} />
+                      <Btn h={deleteSaveHint} />
+                    </div>
+                  </div>
+                </div>
+                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
+                    <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
+                      <Btn h={hints[1]!} />
+                      <Btn h={hints[2]!} />
+                      <Btn h={hints[3]!} />
+                      <Btn h={hints[4]!} />
+                      <Btn h={settingsHint} />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          </TooltipProvider>
         </div>
       ) : (
         <button

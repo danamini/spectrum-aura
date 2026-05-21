@@ -43,7 +43,6 @@ describe("analyser store slot bootstrap", () => {
     const slots = settingsStore.getSlots();
 
     expect(slots).toHaveLength(SLOT_COUNT);
-    expect(slots.every((slot) => slot !== null)).toBe(true);
     expect(slots.map((slot) => slot?.name)).toEqual([
       "Slot 1",
       "Slot 2",
@@ -56,22 +55,17 @@ describe("analyser store slot bootstrap", () => {
   it("uses localStorage slots when present", async () => {
     localStorage.setItem(
       SLOTS_KEY,
-      JSON.stringify([
-        { name: "My Override", settings: { view: "classic", barCount: 72 } },
-        null,
-        null,
-        null,
-        null,
-      ]),
+      JSON.stringify([{ name: "My Override", settings: { view: "classic", barCount: 72 } }, null]),
     );
 
     const { settingsStore } = await import("./store");
 
     const [slot1, slot2] = settingsStore.getSlots();
+    expect(settingsStore.getSlots()).toHaveLength(1);
     expect(slot1?.name).toBe("My Override");
     expect(slot1?.settings.view).toBe("classic");
     expect(slot1?.settings.barCount).toBe(72);
-    expect(slot2).toBeNull();
+    expect(slot2).toBeUndefined();
   });
 });
 

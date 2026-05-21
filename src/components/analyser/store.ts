@@ -1,18 +1,7 @@
 import { useSyncExternalStore } from "react";
+import type { ViewMode } from "./visuals";
 
-export type ViewMode =
-  | "combo"
-  | "classic"
-  | "ripple"
-  | "datastream"
-  | "nebula"
-  | "monolith"
-  | "mandala"
-  | "terrain"
-  | "obsidian"
-  | "torus"
-  | "soundwall"
-  | "geometrynebula";
+export type { ViewMode } from "./visuals";
 
 export type Settings = {
   // view
@@ -613,7 +602,7 @@ const STORAGE_KEY = "analyser-settings-v1";
 const SLOTS_KEY = "analyser-slots-v1";
 export const SLOT_COUNT = 5;
 
-export type SavedSlot = { name: string; settings: Settings } | null;
+export type SavedSlot = { name: string; settings: Settings };
 
 type SlotSeed = {
   name: string;
@@ -782,7 +771,7 @@ const DEPLOYMENT_DEFAULT_SLOTS: SlotSeed[] = [
   },
 ];
 
-function normalizeSlot(seed: SlotSeed): SavedSlot {
+function normalizeSlot(seed: SlotSeed): SavedSlot | null {
   if (!seed) return null;
   const raw = seed.settings ?? {};
   const merged = { ...DEFAULT_SETTINGS, ...raw } as Settings;
@@ -795,14 +784,18 @@ function normalizeSlot(seed: SlotSeed): SavedSlot {
   };
 }
 
+function isSavedSlot(slot: SavedSlot | null): slot is SavedSlot {
+  return slot !== null;
+}
+
 let state: Settings = { ...DEFAULT_SETTINGS };
-const slots: SavedSlot[] = Array.from({ length: SLOT_COUNT }, (_, i) =>
-  normalizeSlot(DEPLOYMENT_DEFAULT_SLOTS[i] ?? null),
+const slots: SavedSlot[] = DEPLOYMENT_DEFAULT_SLOTS.map((slot) => normalizeSlot(slot)).filter(
+  isSavedSlot,
 );
 /** Shallow copy so `useSyncExternalStore` sees a new snapshot when slots change (in-place `slots[]` edits keep the same array ref). */
 let slotsSnapshot: SavedSlot[] = [];
 function refreshSlotsSnapshot() {
-  slotsSnapshot = slots.map((s) => (s ? { name: s.name, settings: { ...s.settings } } : null));
+  slotsSnapshot = slots.map((slot) => ({ name: slot.name, settings: { ...slot.settings } }));
 }
 const listeners = new Set<() => void>();
 const slotListeners = new Set<() => void>();
@@ -813,9 +806,8 @@ if (typeof window !== "undefined") {
     if (raw) {
       const parsed = JSON.parse(raw) as SlotSeed[];
       if (Array.isArray(parsed)) {
-        for (let i = 0; i < SLOT_COUNT; i++) {
-          slots[i] = normalizeSlot(parsed[i] ?? null);
-        }
+        const normalized = parsed.map((slot) => normalizeSlot(slot)).filter(isSavedSlot);
+        slots.splice(0, slots.length, ...normalized);
       }
     }
   } catch {
@@ -1061,16 +1053,17 @@ export const settingsStore = {
   },
   getSlots: () => slotsSnapshot,
   saveSlot: (index: number, name?: string) => {
-    if (index < 0 || index >= SLOT_COUNT) return;
-    slots[index] = { name: name ?? `Slot ${index + 1}`, settings: { ...state } };
+    if (index < 0 || index > slots.length) return;
+    const slot = { name: name ?? `Save ${index + 1}`, settings: { ...state } };
+    if (index === slots.length) slots.push(slot);
+    else slots[index] = slot;
     refreshSlotsSnapshot();
     persistSlots();
     slotListeners.forEach((l) => l());
   },
   loadSlot: (index: number) => {
-    if (index < 0 || index >= SLOT_COUNT) return;
+    if (index < 0 || index >= slots.length) return;
     const slot = slots[index];
-    if (!slot) return;
     const currentCycleMode = state.slotCycleMode;
     const currentCycleSeconds = state.slotCycleSeconds;
     const raw = slot.settings as Partial<Settings> & { rippleWaveLayers?: number };
@@ -1089,8 +1082,8 @@ export const settingsStore = {
     emit();
   },
   clearSlot: (index: number) => {
-    if (index < 0 || index >= SLOT_COUNT) return;
-    slots[index] = null;
+    if (index < 0 || index >= slots.length) return;
+    slots.splice(index, 1);
     refreshSlotsSnapshot();
     persistSlots();
     slotListeners.forEach((l) => l());

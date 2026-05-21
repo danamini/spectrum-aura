@@ -9,7 +9,7 @@ import {
   WEBXR_STATE_EVENT,
   WebXrRuntime,
 } from "./engine/xr";
-import { PALETTES, settingsStore, SLOT_COUNT, useSettings, type ViewMode } from "./store";
+import { PALETTES, settingsStore, useSettings, type ViewMode } from "./store";
 import { Maximize2, Mic, Minimize2, MonitorSpeaker, X } from "lucide-react";
 
 type NerdStats = {
@@ -180,33 +180,18 @@ export function Analyser() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
-  // Rotate through saved preset slots 1→5 when cycle mode is on (skips empty slots).
+  // Rotate through the saved preset list when cycle mode is on.
   useEffect(() => {
     if (!settings.slotCycleMode) return;
     const SLOT_CYCLE_DWELL_MS = Math.max(1, settings.slotCycleSeconds) * 1000;
 
-    const firstOccupied = (): number | null => {
-      const list = settingsStore.getSlots();
-      for (let i = 0; i < SLOT_COUNT; i++) if (list[i]) return i;
-      return null;
-    };
-
-    const nextOccupied = (from: number): number | null => {
-      const list = settingsStore.getSlots();
-      for (let k = 1; k <= SLOT_COUNT; k++) {
-        const i = (from + k) % SLOT_COUNT;
-        if (list[i]) return i;
-      }
-      return null;
-    };
-
-    const start = firstOccupied();
-    if (start === null) {
+    const initialCount = settingsStore.getSlots().length;
+    if (initialCount === 0) {
       settingsStore.set({ slotCycleMode: false });
       return;
     }
 
-    let cursor = start;
+    let cursor = 0;
     settingsStore.loadSlot(cursor);
     let lastSwitch = performance.now();
 
@@ -214,13 +199,14 @@ export function Analyser() {
       if (!settingsStore.get().slotCycleMode) return;
       if (performance.now() - lastSwitch < SLOT_CYCLE_DWELL_MS) return;
 
-      const next = nextOccupied(cursor);
-      if (next === null) {
+      const count = settingsStore.getSlots().length;
+      if (count === 0) {
         settingsStore.set({ slotCycleMode: false });
         window.clearInterval(id);
         return;
       }
-      cursor = next;
+      if (cursor >= count) cursor = 0;
+      cursor = count === 1 ? cursor : (cursor + 1) % count;
       lastSwitch = performance.now();
       settingsStore.loadSlot(cursor);
     }, 350);
