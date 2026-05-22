@@ -26,6 +26,10 @@ describe("visual registry", () => {
       wireframeKey: "terrainWireframe",
       sceneGroupKey: "terrainGroup",
     });
+    expect(getVisualDefinition("reztube")).toMatchObject({
+      label: "On-rails Tube",
+      settingsLabel: "On-rails Tube settings",
+    });
     expect(getVisualDefinition("missing-visual")).toBeUndefined();
   });
 });

@@ -135,6 +135,7 @@ export type Settings = {
   reztubeTwist: number; // tube twist rate (0 = none)
   reztubeRadius: number; // tube cross-section radius
   reztubeSegments: number; // cross-section polygon sides (3–12)
+  reztubeLineWidth: number; // line thickness in screen pixels
 
   // 3D combo view
   comboSphereSize: number; // base sphere scale (1 = default)
@@ -315,6 +316,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reztubeTwist: 1,
   reztubeRadius: 5.5,
   reztubeSegments: 4,
+  reztubeLineWidth: 1,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,

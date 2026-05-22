@@ -21,6 +21,7 @@ describe("settingsStore randomize", () => {
     expect(state.geometrynebulaSpread).toBe(1.6);
     expect(state.geometrynebulaOrbitSpeed).toBe(1);
     expect(state.geometrynebulaSpinSpeed).toBe(1);
+    expect(state.reztubeLineWidth).toBe(1);
   });
 
   it("keeps randomize scoped to post FX when view settings are disabled", async () => {

@@ -1277,6 +1277,14 @@ export function ControlPanel() {
                           step={1}
                           onChange={(v) => set({ reztubeSegments: Math.round(v) })}
                         />
+                        <S
+                          label="Line width"
+                          value={s.reztubeLineWidth}
+                          min={0.5}
+                          max={6}
+                          step={0.5}
+                          onChange={(v) => set({ reztubeLineWidth: v })}
+                        />
                         <div className="flex items-center justify-between">
                           <Label className="text-[11px]">Use selected palette</Label>
                           <Sw

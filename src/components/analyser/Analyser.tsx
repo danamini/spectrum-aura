@@ -578,6 +578,7 @@ export function Analyser() {
         reztubeTwist: s.reztubeTwist,
         reztubeRadius: s.reztubeRadius,
         reztubeSegments: s.reztubeSegments,
+        reztubeLineWidth: s.reztubeLineWidth,
         comboSphereSize: s.comboSphereSize,
         comboSphereSpinSpeed: s.comboSphereSpinSpeed,
         comboSphereBassPunch: s.comboSphereBassPunch,

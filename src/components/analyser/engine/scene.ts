@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { sphereVertexShader, sphereFragmentShader } from "./shaders";
 import type { AudioBands } from "./audio";
 import { settingsStore } from "../store";
@@ -202,8 +204,11 @@ export class Scene {
 
   // rez tube view
   reztubeGroup = new THREE.Group();
-  private reztubeLine?: THREE.LineSegments;
-  private reztubeMat?: THREE.LineBasicMaterial;
+  private reztubeLine?: LineSegments2;
+  private reztubeMat?: LineMaterial;
+  private reztubeGeo?: LineSegmentsGeometry;
+  private reztubePos?: Float32Array;
+  private reztubeCol?: Float32Array;
   private reztubeCoreLight?: THREE.PointLight;
   private reztubeScroll = 0;
   private reztubePrevSegs = 0;
@@ -2231,7 +2236,7 @@ export class Scene {
   buildReztube(segs: number = 4) {
     if (this.reztubeLine) {
       this.reztubeGroup.remove(this.reztubeLine);
-      this.reztubeLine.geometry.dispose();
+      this.reztubeGeo?.dispose();
       this.reztubeMat?.dispose();
     }
     if (this.reztubeCoreLight) {
@@ -2241,34 +2246,27 @@ export class Scene {
     const SEGS = Math.max(3, Math.min(12, Math.round(segs)));
     this.reztubePrevSegs = SEGS;
 
-    // Ring lines + side connector lines in a single LineSegments.
-    // Ring part:  RINGS * SEGS line segments (the cross-section polygon for each ring)
-    // Side part:  RINGS * SEGS line segments (connecting vertex s of ring r to ring r+1)
-    const ringVertCount = RINGS * SEGS * 2;
-    const sideVertCount = RINGS * SEGS * 2;
-    const totalVerts = ringVertCount + sideVertCount;
+    // Ring outlines (RINGS * SEGS segments) + side connectors (RINGS * SEGS segments)
+    const segCount = RINGS * SEGS * 2;
+    const posArray = new Float32Array(segCount * 6); // [sx,sy,sz, ex,ey,ez] per segment
+    const colArray = new Float32Array(segCount * 6); // [sr,sg,sb, er,eg,eb] per segment
+    this.reztubePos = posArray;
+    this.reztubeCol = colArray;
 
-    const positions = new Float32Array(totalVerts * 3);
-    const colors = new Float32Array(totalVerts * 3);
+    const geo = new LineSegmentsGeometry();
+    geo.setPositions(posArray);
+    geo.setColors(colArray);
+    this.reztubeGeo = geo;
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute(
-      "position",
-      new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage),
-    );
-    geo.setAttribute(
-      "color",
-      new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage),
-    );
-    // Prevent frustum culling — we manage Z ourselves
-    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1000);
-
-    this.reztubeMat = new THREE.LineBasicMaterial({
+    this.reztubeMat = new LineMaterial({
       vertexColors: true,
       transparent: true,
       opacity: 1.0,
+      linewidth: 1,
+      worldUnits: false,
     });
-    this.reztubeLine = new THREE.LineSegments(geo, this.reztubeMat);
+    this.reztubeMat.resolution.set(window.innerWidth || 1, window.innerHeight || 1);
+    this.reztubeLine = new LineSegments2(geo, this.reztubeMat);
     this.reztubeLine.frustumCulled = false;
     this.reztubeGroup.add(this.reztubeLine);
 
@@ -2297,6 +2295,7 @@ export class Scene {
       reztubeTwist: number;
       reztubeRadius: number;
       reztubeSegments: number;
+      reztubeLineWidth: number;
     },
   ) {
     const segs = Math.max(3, Math.min(12, Math.round(opts.reztubeSegments)));
@@ -2304,6 +2303,9 @@ export class Scene {
     if (
       !this.reztubeLine ||
       !this.reztubeMat ||
+      !this.reztubeGeo ||
+      !this.reztubePos ||
+      !this.reztubeCol ||
       !this.reztubeRingX ||
       !this.reztubeRingY ||
       !this.reztubeRingZ
@@ -2316,6 +2318,8 @@ export class Scene {
     const TOTAL_DEPTH = RINGS * SPACING;
     const amp = Math.max(0.1, opts.reztubeAmplitude);
 
+    this.reztubeMat.linewidth = Math.max(0.5, opts.reztubeLineWidth);
+
     // Beat flash — decays each frame
     if (audio.beat) this.reztubeFlash = 1.0;
     this.reztubeFlash *= Math.exp(-dt * 7.0);
@@ -2325,11 +2329,8 @@ export class Scene {
     this.reztubeScroll =
       (this.reztubeScroll + dt * opts.reztubeSpeed * 8 * bassBoost) % TOTAL_DEPTH;
 
-    const geo = this.reztubeLine.geometry;
-    const posAttr = geo.attributes.position as THREE.BufferAttribute;
-    const colAttr = geo.attributes.color as THREE.BufferAttribute;
-    const pos = posAttr.array as Float32Array;
-    const col = colAttr.array as Float32Array;
+    const pos = this.reztubePos;
+    const col = this.reztubeCol;
 
     const bins = audio.bins;
     const sideVertStart = RINGS * SEGS * 2;
@@ -2463,8 +2464,13 @@ export class Scene {
       }
     }
 
-    posAttr.needsUpdate = true;
-    colAttr.needsUpdate = true;
+    // Mark the LineSegmentsGeometry buffers as needing GPU upload
+    const instStart = this.reztubeGeo.attributes
+      .instanceStart as THREE.InterleavedBufferAttribute;
+    instStart.data.needsUpdate = true;
+    const instCol = this.reztubeGeo.attributes
+      .instanceColorStart as THREE.InterleavedBufferAttribute;
+    instCol.data.needsUpdate = true;
 
     if (this.reztubeCoreLight) {
       this.reztubeCoreLight.intensity = (1.2 + audio.bass * 3.5 + this.reztubeFlash * 4) * amp;
@@ -2585,6 +2591,7 @@ export class Scene {
       reztubeTwist: number;
       reztubeRadius: number;
       reztubeSegments: number;
+      reztubeLineWidth: number;
       bgColor: string;
       view: ViewMode;
     },
@@ -3200,6 +3207,7 @@ export class Scene {
         reztubeTwist: opts.reztubeTwist,
         reztubeRadius: opts.reztubeRadius,
         reztubeSegments: opts.reztubeSegments,
+        reztubeLineWidth: opts.reztubeLineWidth,
       });
 
       if (xrMode) return;
@@ -3913,6 +3921,9 @@ export class Scene {
     this.camera.updateProjectionMatrix();
     for (const ribbon of this.mandalaRibbons) {
       ribbon.material.resolution.set(w, h);
+    }
+    if (this.reztubeMat) {
+      this.reztubeMat.resolution.set(w, h);
     }
   }
 

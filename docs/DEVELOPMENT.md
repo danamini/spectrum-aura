@@ -55,10 +55,11 @@ docs/
 ### Visualization Architecture
 
 **Three.js Scene** (`engine/scene.ts`):
-- **12 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula
+- **13 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube)
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
 - **Post-processing**: Bloom, chromatic aberration, glitch, god rays, lens flare, etc. via Composer
+- **Fat lines**: `Line2`/`LineGeometry`/`LineMaterial` (mandala ribbons) and `LineSegments2`/`LineSegmentsGeometry`/`LineMaterial` (On-rails Tube) from `three/examples/jsm/lines/` for screen-space pixel-width lines that respect `linewidth` in WebGL
 
 **Each View Has**:
 - `buildXXX(size)`: Initialize geometry/materials
@@ -77,6 +78,7 @@ Recent controls:
 - `randomizeViewSettings`: Keeps randomize constrained to post FX by default; when enabled it also touches view-specific geometry and palette controls.
 - `lensFlare` / `lensFlareAmount`: Anamorphic horizontal streak + coloured lens-ghost reflections layered after god rays in the composer chain. Enabled 45% of the time by randomize.
 - `monolithBrightness`: Dedicated lighting/visibility control for Monolith independent of amplitude.
+- `reztubeLineWidth`: Line thickness in screen-space pixels for the On-rails Tube view (0.5–6 px). Rendered via `LineSegments2` + `LineMaterial` (`worldUnits: false`) so the width is invariant to camera distance. The visual's display label was updated to "On-rails Tube"; the internal `id` stays `reztube` to preserve saved settings.
 
 **Key Settings Limits**:
 - Amplitude floor: 0.5 (MIN_VIEW_AMPLITUDE)
@@ -165,7 +167,7 @@ npm run test                   # Watch mode
 - **Store tests**:
   - `store.slots.test.ts`: slot bootstrap, localStorage hydration, legacy ripple migration, slot-cycle preservation
   - `store.normalization.test.ts`: amplitude floor, vignette bounds, bloom cap, preset clearing, reset baseline
-  - `store.randomize.test.ts`: randomize scope toggle behavior, new torus/geometry-nebula defaults, and lensFlare postFx coverage
+  - `store.randomize.test.ts`: randomize scope toggle behavior, new defaults (torus, geometry-nebula, reztubeLineWidth), and lensFlare postFx coverage
 - **Shortcut tests**:
   - `Shortcuts.test.tsx`: grouped rail labels, visual cluster status, randomize/post-FX toggles, save transport behavior, settings toggle behavior
 - **Engine tests**:

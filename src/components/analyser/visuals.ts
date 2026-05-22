@@ -105,8 +105,8 @@ export const BUILTIN_VISUALS = [
   },
   {
     id: "reztube",
-    label: "Rez Tube",
-    settingsLabel: "Rez Tube settings",
+    label: "On-rails Tube",
+    settingsLabel: "On-rails Tube settings",
     fullscreenKey: "reztubeFullscreen",
     sceneGroupKey: "reztubeGroup",
     order: 130,
