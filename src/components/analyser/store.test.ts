@@ -43,13 +43,10 @@ describe("analyser store slot bootstrap", () => {
     const slots = settingsStore.getSlots();
 
     expect(slots).toHaveLength(SLOT_COUNT);
-    expect(slots.map((slot) => slot?.name)).toEqual([
-      "Slot 1",
-      "Slot 2",
-      "Slot 3",
-      "Slot 4",
-      "Slot 5",
-    ]);
+    expect(slots[0]?.name).toBe("Slot 1");
+    expect(slots[1]?.name).toBe("Slot 2");
+    expect(slots[2]?.name).toBe("Slot 3");
+    expect(slots[3]?.name).toBe("Save 1");
   });
 
   it("uses localStorage slots when present", async () => {

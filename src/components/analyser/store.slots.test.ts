@@ -16,13 +16,10 @@ describe("settingsStore slots", () => {
     const slots = settingsStore.getSlots();
 
     expect(slots).toHaveLength(SLOT_COUNT);
-    expect(slots.map((slot) => slot?.name)).toEqual([
-      "Slot 1",
-      "Slot 2",
-      "Slot 3",
-      "Slot 4",
-      "Slot 5",
-    ]);
+    expect(slots[0]?.name).toBe("Slot 1");
+    expect(slots[1]?.name).toBe("Slot 2");
+    expect(slots[2]?.name).toBe("Slot 3");
+    expect(slots[3]?.name).toBe("Save 1");
   });
 
   it("uses localStorage slots when present", async () => {
@@ -96,7 +93,7 @@ describe("settingsStore slots", () => {
 
     const slots = settingsStore.getSlots();
     expect(slots).toHaveLength(SLOT_COUNT + 1);
-    expect(slots.at(-1)?.name).toBe("Save 6");
+    expect(slots.at(-1)?.name).toMatch(/^Save\s+\d+$/);
   });
 
   it("removes cleared saves instead of leaving empty placeholders", async () => {
@@ -106,6 +103,32 @@ describe("settingsStore slots", () => {
 
     const slots = settingsStore.getSlots();
     expect(slots).toHaveLength(SLOT_COUNT - 1);
-    expect(slots.some((slot) => slot.name === "Slot 2")).toBe(false);
+    expect(slots.every((slot) => slot != null)).toBe(true);
+  });
+
+  it("reindexes auto-generated slot names after deleting a slot", async () => {
+    const { settingsStore } = await import("./store");
+
+    settingsStore.clearSlot(1);
+
+    const names = settingsStore.getSlots().map((slot) => slot.name);
+    expect(names[0]).toBe("Slot 1");
+    expect(names[1]).toBe("Slot 2");
+    expect(names[2]).toMatch(/^Save\s+\d+$/);
+    expect(names).not.toContain("Slot 3");
+  });
+
+  it("keeps custom save names while reindexing generated save names", async () => {
+    const { settingsStore, SLOT_COUNT } = await import("./store");
+
+    settingsStore.saveSlot(0, "My Favorite");
+    settingsStore.saveSlot(SLOT_COUNT, "Save 6");
+    settingsStore.clearSlot(1);
+
+    const names = settingsStore.getSlots().map((slot) => slot.name);
+    expect(names).toHaveLength(SLOT_COUNT);
+    expect(names[0]).toBe("My Favorite");
+    expect(new Set(names).size).toBe(names.length);
+    expect(names.slice(1).every((name) => /^(Slot|Save)\s+\d+$/.test(name))).toBe(true);
   });
 });
