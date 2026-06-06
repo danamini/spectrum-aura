@@ -141,6 +141,7 @@ export type Settings = {
   // assetflow view (3D/2D assets)
   assetflowFullscreen: boolean;
   assetflowUsePalette: boolean;
+  assetflowIncludeShapes: boolean;
   assetflowAmplitude: number;
   assetflowModelScale: number;
   assetflowSpriteAmount: number;
@@ -335,10 +336,11 @@ export const DEFAULT_SETTINGS: Settings = {
   reztubeLineWidth: 1,
   assetflowFullscreen: false,
   assetflowUsePalette: true,
+  assetflowIncludeShapes: false,
   assetflowAmplitude: 1,
   assetflowModelScale: 1,
   assetflowSpriteAmount: 1,
-  assetflowModelCount: 12,
+  assetflowModelCount: 24,
   assetflowSpread: 4.7,
   assetflowSpin: 1,
   assetflowMovement: 0.7,
@@ -629,6 +631,7 @@ function normalizeVignetteAmount(settings: Settings): Settings {
 function normalizePostFxRanges(settings: Settings): Settings {
   return {
     ...settings,
+    assetflowIncludeShapes: Boolean(settings.assetflowIncludeShapes),
     trailDecay: Math.max(0.75, Math.min(0.99, settings.trailDecay)),
     trailInject: Math.max(0.5, Math.min(2.25, settings.trailInject)),
     trailThreshold: Math.max(0, Math.min(1, settings.trailThreshold)),
@@ -984,6 +987,7 @@ export const settingsStore = {
 
           // assetflow
           assetflowUsePalette: b(0.75),
+          assetflowIncludeShapes: b(0.4),
           assetflowAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
           assetflowModelScale: r(0.6, 1.8),
           assetflowSpriteAmount: r(0.4, 2.2),

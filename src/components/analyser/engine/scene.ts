@@ -2627,6 +2627,7 @@ export class Scene {
       reztubeLineWidth: number;
       assetflowFullscreen: boolean;
       assetflowUsePalette: boolean;
+      assetflowIncludeShapes: boolean;
       assetflowAmplitude: number;
       assetflowModelScale: number;
       assetflowSpriteAmount: number;
@@ -3297,6 +3298,7 @@ export class Scene {
       this.updateAssetflow(dt, time, audio, {
         assetflowAmplitude: opts.assetflowAmplitude,
         assetflowUsePalette: opts.assetflowUsePalette,
+        assetflowIncludeShapes: opts.assetflowIncludeShapes,
         assetflowModelScale: opts.assetflowModelScale,
         assetflowSpriteAmount: opts.assetflowSpriteAmount,
         assetflowModelCount: opts.assetflowModelCount,
@@ -4062,8 +4064,20 @@ export class Scene {
       const basePos = new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
       root.position.copy(basePos);
 
+      const placeholderGeometry =
+        i % 6 === 0
+          ? new THREE.IcosahedronGeometry(0.5, 1)
+          : i % 6 === 1
+            ? new THREE.BoxGeometry(0.72, 0.72, 0.72)
+            : i % 6 === 2
+              ? new THREE.OctahedronGeometry(0.54, 1)
+              : i % 6 === 3
+                ? new THREE.DodecahedronGeometry(0.52, 0)
+                : i % 6 === 4
+                  ? new THREE.ConeGeometry(0.44, 0.95, 6)
+                  : new THREE.TetrahedronGeometry(0.62, 0);
       const placeholder = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.62, 1),
+        placeholderGeometry,
         new THREE.MeshStandardMaterial({
           color: 0x94b9ff,
           emissive: 0x1a3b66,
@@ -4207,8 +4221,6 @@ export class Scene {
       }
       const template = templates[i % templates.length]!;
       const model = this.cloneAssetflowModel(template);
-      actor.root.remove(actor.placeholder);
-      actor.placeholder.visible = false;
       actor.model = model;
       actor.root.add(model);
     }
@@ -4308,6 +4320,7 @@ export class Scene {
     opts: {
       assetflowAmplitude: number;
       assetflowUsePalette: boolean;
+      assetflowIncludeShapes: boolean;
       assetflowModelScale: number;
       assetflowSpriteAmount: number;
       assetflowModelCount: number;
@@ -4318,6 +4331,16 @@ export class Scene {
     },
   ) {
     const bins = audio.bins;
+    const includeShapes = Boolean(opts.assetflowIncludeShapes);
+    const modelCountInput = Number.isFinite(opts.assetflowModelCount)
+      ? opts.assetflowModelCount
+      : this.assetflowActors.length;
+    const spreadInput = Number.isFinite(opts.assetflowSpread) ? opts.assetflowSpread : 4.7;
+    const spinInput = Number.isFinite(opts.assetflowSpin) ? opts.assetflowSpin : 1;
+    const movementInput = Number.isFinite(opts.assetflowMovement) ? opts.assetflowMovement : 0.7;
+    const driftInput = Number.isFinite(opts.assetflowBackgroundDrift)
+      ? opts.assetflowBackgroundDrift
+      : 1;
     const ampInput = Number.isFinite(opts.assetflowAmplitude) ? opts.assetflowAmplitude : 1;
     const modelScaleInput = Number.isFinite(opts.assetflowModelScale)
       ? opts.assetflowModelScale
@@ -4330,13 +4353,13 @@ export class Scene {
     const spriteAmount = Math.max(0.1, spriteAmountInput);
     const visibleCount = Math.max(
       1,
-      Math.min(this.assetflowActors.length, Math.round(opts.assetflowModelCount)),
+      Math.min(this.assetflowActors.length, Math.round(modelCountInput)),
     );
-    const spread = Math.max(2, opts.assetflowSpread);
-    const spinControl = Math.max(0, opts.assetflowSpin);
-    const movement = Math.max(0.05, opts.assetflowMovement);
+    const spread = Math.max(2, spreadInput);
+    const spinControl = Math.max(0, spinInput);
+    const movement = Math.max(0.05, movementInput);
     const movementFactor = 0.55 + movement * 0.5;
-    const bgDrift = Math.max(0, opts.assetflowBackgroundDrift);
+    const bgDrift = Math.max(0, driftInput);
     const beatPulse = audio.beat ? 1 : this.kick;
     const audioEnergy = THREE.MathUtils.clamp(
       audio.bass * 0.46 + audio.mid * 0.34 + audio.high * 0.2,
@@ -4357,7 +4380,14 @@ export class Scene {
     for (let i = 0; i < this.assetflowActors.length; i++) {
       const actor = this.assetflowActors[i]!;
       actor.root.visible = i < visibleCount;
-      if (!actor.root.visible) continue;
+      if (!actor.root.visible) {
+        actor.placeholder.visible = false;
+        if (actor.model) actor.model.visible = false;
+        continue;
+      }
+      const hasModel = Boolean(actor.model);
+      actor.placeholder.visible = includeShapes || !hasModel;
+      if (actor.model) actor.model.visible = true;
       const bin = bins.length > 0 ? bins[Math.min(actor.bin, bins.length - 1)]! / 255 : 0;
       const phase = time * actor.pathSpeed * globalPathSpeed * activity + actor.pathPhase;
       const radialBeat = 1 + beatPulse * 0.06 + audio.bass * 0.04;

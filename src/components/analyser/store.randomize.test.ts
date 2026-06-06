@@ -23,7 +23,8 @@ describe("settingsStore randomize", () => {
     expect(state.geometrynebulaSpinSpeed).toBe(1);
     expect(state.reztubeLineWidth).toBe(1);
     expect(state.assetflowAmplitude).toBe(1);
-    expect(state.assetflowModelCount).toBe(12);
+    expect(state.assetflowModelCount).toBe(24);
+    expect(state.assetflowIncludeShapes).toBe(false);
     expect(state.assetflowSpread).toBe(4.7);
     expect(state.assetflowMovement).toBe(0.7);
     expect(state.assetflowBackgroundDrift).toBe(1);

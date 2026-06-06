@@ -1367,6 +1367,13 @@ export function ControlPanel() {
                             onCheckedChange={(v) => set({ assetflowUsePalette: v })}
                           />
                         </div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[11px]">Include geometric shapes</Label>
+                          <Sw
+                            checked={s.assetflowIncludeShapes}
+                            onCheckedChange={(v) => set({ assetflowIncludeShapes: v })}
+                          />
+                        </div>
                         <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
                           <Label className="text-[11px]">Asset licenses</Label>
                           <p className="mt-1 text-[10px] leading-relaxed text-white/60">

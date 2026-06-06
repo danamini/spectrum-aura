@@ -581,6 +581,7 @@ export function Analyser() {
         reztubeLineWidth: s.reztubeLineWidth,
         assetflowFullscreen: s.assetflowFullscreen,
         assetflowUsePalette: s.assetflowUsePalette,
+        assetflowIncludeShapes: s.assetflowIncludeShapes,
         assetflowAmplitude: s.assetflowAmplitude,
         assetflowModelScale: s.assetflowModelScale,
         assetflowSpriteAmount: s.assetflowSpriteAmount,

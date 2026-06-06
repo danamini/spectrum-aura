@@ -147,7 +147,8 @@ describe("analyser store utility functions", () => {
     expect(state.sobelMode).toBe(false);
     expect(state.sobelStrength).toBe(1.5);
     expect(state.assetflowAmplitude).toBe(1);
-    expect(state.assetflowModelCount).toBe(12);
+    expect(state.assetflowModelCount).toBe(24);
+    expect(state.assetflowIncludeShapes).toBe(false);
     expect(state.assetflowSpread).toBe(4.7);
     expect(state.assetflowSpin).toBe(1);
     expect(state.assetflowMovement).toBe(0.7);
