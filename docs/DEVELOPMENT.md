@@ -82,11 +82,13 @@ Recent controls:
 - `assetflowMovement`: Global motion intensity multiplier for Asset-Flow model pathing, bounce, and spin.
 - `assetflowBackgroundDrift`: Speed/intensity control for Asset-Flow's layered 2D background drift.
 - `assetflowSpriteAmount`: Controls layered 2D background presence/intensity in Asset-Flow.
+- Asset-Flow actor motion is intentionally biased toward vertical movement with smoothed horizontal follow to prevent visual left/right flicker.
 
 **Key Settings Limits**:
 - Amplitude floor: 0.5 (MIN_VIEW_AMPLITUDE)
 - Vignette amount: [0.5, 1.25]
 - Bloom strength: ≤ 0.25 (unless bloomExtreme)
+- Asset-Flow movement intensity: [0.35, 1.8]
 
 ## Shortcut Map
 

@@ -25,7 +25,7 @@ describe("settingsStore randomize", () => {
     expect(state.assetflowAmplitude).toBe(1);
     expect(state.assetflowModelCount).toBe(12);
     expect(state.assetflowSpread).toBe(4.7);
-    expect(state.assetflowMovement).toBe(1);
+    expect(state.assetflowMovement).toBe(0.7);
     expect(state.assetflowBackgroundDrift).toBe(1);
     expect(state.assetOverlayFx).toBe(false);
   });
@@ -81,7 +81,7 @@ describe("settingsStore randomize", () => {
     expect(state.geometrynebulaOrbitSpeed).toBeGreaterThan(2.4);
     expect(state.geometrynebulaSpinSpeed).toBeGreaterThan(3.8);
     expect(state.assetflowModelScale).toBeGreaterThan(1.7);
-    expect(state.assetflowMovement).toBeGreaterThan(2.2);
+    expect(state.assetflowMovement).toBeGreaterThan(1.4);
     expect(state.assetflowBackgroundDrift).toBeGreaterThan(2.7);
 
     randomSpy.mockRestore();

@@ -1323,8 +1323,8 @@ export function ControlPanel() {
                         <S
                           label="Movement intensity"
                           value={s.assetflowMovement}
-                          min={0.5}
-                          max={2.5}
+                          min={0.35}
+                          max={1.8}
                           step={0.05}
                           onChange={(v) => set({ assetflowMovement: v })}
                         />

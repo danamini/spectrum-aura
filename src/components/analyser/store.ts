@@ -341,7 +341,7 @@ export const DEFAULT_SETTINGS: Settings = {
   assetflowModelCount: 12,
   assetflowSpread: 4.7,
   assetflowSpin: 1,
-  assetflowMovement: 1,
+  assetflowMovement: 0.7,
   assetflowBackgroundDrift: 1,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
@@ -648,7 +648,7 @@ function normalizePostFxRanges(settings: Settings): Settings {
     assetflowModelCount: Math.max(1, Math.min(24, Math.round(settings.assetflowModelCount))),
     assetflowSpread: Math.max(2, Math.min(12, settings.assetflowSpread)),
     assetflowSpin: Math.max(0, Math.min(3, settings.assetflowSpin)),
-    assetflowMovement: Math.max(0.5, Math.min(2.5, settings.assetflowMovement)),
+    assetflowMovement: Math.max(0.35, Math.min(1.8, settings.assetflowMovement)),
     assetflowBackgroundDrift: Math.max(0, Math.min(3, settings.assetflowBackgroundDrift)),
   };
 }
@@ -990,7 +990,7 @@ export const settingsStore = {
           assetflowModelCount: Math.round(r(6, 24)),
           assetflowSpread: r(3, 10),
           assetflowSpin: r(0.2, 2.8),
-          assetflowMovement: r(0.7, 2.3),
+          assetflowMovement: r(0.45, 1.45),
           assetflowBackgroundDrift: r(0.2, 2.8),
         }
       : {};

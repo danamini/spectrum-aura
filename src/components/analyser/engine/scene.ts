@@ -4332,10 +4332,11 @@ export class Scene {
     );
     const spread = Math.max(2, opts.assetflowSpread);
     const spinControl = Math.max(0, opts.assetflowSpin);
-    const movement = Math.max(0.5, opts.assetflowMovement);
+    const movement = Math.max(0.35, opts.assetflowMovement);
+    const movementFactor = 0.55 + movement * 0.5;
     const bgDrift = Math.max(0, opts.assetflowBackgroundDrift);
     const beatPulse = audio.beat ? 1 : this.kick;
-    const globalPathSpeed = (0.5 + audio.mid * 1.15 + audio.bpmConfidence * 0.8) * movement;
+    const globalPathSpeed = (0.42 + audio.mid * 0.82 + audio.bpmConfidence * 0.56) * movementFactor;
     this.assetflowModelScale += (modelScale - this.assetflowModelScale) * Math.min(1, dt * 8);
     if (!Number.isFinite(this.assetflowModelScale)) {
       this.assetflowModelScale = 1;
@@ -4347,51 +4348,46 @@ export class Scene {
       if (!actor.root.visible) continue;
       const bin = bins.length > 0 ? bins[Math.min(actor.bin, bins.length - 1)]! / 255 : 0;
       const phase = time * actor.pathSpeed * globalPathSpeed + actor.pathPhase;
-      const radialBeat =
-        1 + beatPulse * (0.2 + movement * 0.08) + audio.bass * (0.16 + 0.06 * movement);
+      const radialBeat = 1 + beatPulse * 0.06 + audio.bass * 0.04;
       const pathRadius = spread * radialBeat;
 
-      let px = Math.cos(actor.angle) * pathRadius;
-      let pz = Math.sin(actor.angle) * pathRadius;
-      if (actor.pathMode === "figure8") {
-        px = Math.sin(phase) * pathRadius;
-        pz = Math.sin(phase * 2) * pathRadius * 0.62;
-      } else if (actor.pathMode === "lissajous") {
-        px = Math.sin(phase * 1.45 + actor.angle) * pathRadius * 0.95;
-        pz = Math.sin(phase * 0.9 + actor.angle * 0.6) * pathRadius * 0.95;
-      } else if (actor.pathMode === "spiral") {
-        const swirl = 0.65 + 0.35 * Math.sin(phase * 0.35 + actor.angle);
-        px = Math.cos(phase + actor.angle) * pathRadius * swirl;
-        pz = Math.sin(phase + actor.angle) * pathRadius * swirl;
-      }
+      const baseX = Math.cos(actor.angle) * pathRadius;
+      const baseZ = Math.sin(actor.angle) * pathRadius;
+      const drift = 0.12 + movement * 0.18;
+      const driftRate =
+        actor.pathMode === "spiral" ? 0.32 : actor.pathMode === "lissajous" ? 0.28 : 0.24;
+      const px = baseX + Math.sin(phase * driftRate + actor.pathPhase) * drift;
+      const pz = baseZ + Math.cos(phase * (driftRate + 0.05) + actor.pathPhase) * drift;
+
+      const horizontalFollow = Math.min(1, dt * (2.2 + movement * 1.3));
+      actor.root.position.x += (px - actor.root.position.x) * horizontalFollow;
+      actor.root.position.z += (pz - actor.root.position.z) * horizontalFollow;
 
       const verticalOsc =
-        0.45 + Math.sin(phase * (1.3 + movement * 0.45) + actor.angle * 0.8) * 0.55;
+        0.45 + Math.sin(phase * (1.15 + movement * 0.3) + actor.angle * 0.8) * 0.42;
       const lift =
         (verticalOsc +
-          bin * (2.5 + movement * 0.8) +
-          audio.bass * (1.1 + movement * 0.7) +
-          beatPulse * (0.9 + movement * 0.8)) *
+          bin * (1.7 + movement * 0.45) +
+          audio.bass * (0.7 + movement * 0.38) +
+          beatPulse * (0.55 + movement * 0.4)) *
         amp;
-      actor.root.position.x = px;
-      actor.root.position.z = pz;
       actor.root.position.y = actor.basePos.y + lift;
 
       const spin =
         (0.15 +
-          spinControl * (0.85 + movement * 0.55) +
-          bin * (1.8 + movement * 1.15) +
-          audio.mid * (0.9 + movement * 0.85) +
-          audio.bpmConfidence * (0.8 + movement * 0.65)) *
+          spinControl * (0.52 + movement * 0.34) +
+          bin * (0.95 + movement * 0.65) +
+          audio.mid * (0.6 + movement * 0.45) +
+          audio.bpmConfidence * (0.45 + movement * 0.35)) *
         dt;
       actor.root.rotateOnAxis(actor.spinAxis, spin);
 
       const pulse =
         0.72 +
-        amp * (0.33 + movement * 0.15) +
-        bin * (0.7 + movement * 0.4) +
-        audio.high * (0.45 + movement * 0.2) +
-        beatPulse * (0.35 + movement * 0.25);
+        amp * (0.25 + movement * 0.11) +
+        bin * (0.5 + movement * 0.22) +
+        audio.high * (0.34 + movement * 0.11) +
+        beatPulse * (0.22 + movement * 0.16);
       const actorScale = actor.baseScale * this.assetflowModelScale * pulse;
       actor.root.scale.setScalar(Number.isFinite(actorScale) ? actorScale : actor.baseScale);
 

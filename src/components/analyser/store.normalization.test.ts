@@ -95,7 +95,7 @@ describe("settingsStore normalization", () => {
     expect(state.assetflowModelCount).toBe(24);
     expect(state.assetflowSpread).toBe(12);
     expect(state.assetflowSpin).toBe(0);
-    expect(state.assetflowMovement).toBe(2.5);
+    expect(state.assetflowMovement).toBe(1.8);
     expect(state.assetflowBackgroundDrift).toBe(0);
   });
 

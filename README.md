@@ -93,6 +93,7 @@ Control panel additions:
 - `Randomize view settings` toggle in Post FX that keeps randomize constrained to post FX unless you explicitly enable view geometry changes.
 - `Monolith Brightness` slider in Monolith view settings for direct lighting/visibility control.
 - Asset-Flow controls for `Movement intensity`, `2D background amount`, and `2D background drift`.
+- Asset-Flow model motion is tuned for smoother 3D bounce with minimal lateral drift to avoid left/right flicker.
 
 Asset sources and licensing:
 
