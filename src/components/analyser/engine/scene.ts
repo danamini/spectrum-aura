@@ -4118,25 +4118,27 @@ export class Scene {
     if (this.assetflowAssetsRequested) return;
     this.assetflowAssetsRequested = true;
 
+    const baseUrl = (import.meta.env.BASE_URL || "/").replace(/\/*$/, "/");
+    const toPublicUrl = (path: string) => `${baseUrl}${path.replace(/^\/+/, "")}`;
     const modelPaths = [
-      "/assets/models/kenney/model-01.glb",
-      "/assets/models/poly-pizza/model-02.glb",
-      "/assets/models/quaternius/model-03.glb",
-      "/assets/models/kenney/model-04.glb",
-      "/assets/models/poly-pizza/model-05.glb",
-      "/assets/models/quaternius/model-06.glb",
-      "/assets/models/kenney/model-07.glb",
-      "/assets/models/poly-pizza/model-08.glb",
-      "/assets/models/kenney/model-09.glb",
-      "/assets/models/poly-pizza/model-10.glb",
-      "/assets/models/quaternius/model-11.glb",
-      "/assets/models/kenney/model-12.glb",
+      "assets/models/kenney/model-01.glb",
+      "assets/models/poly-pizza/model-02.glb",
+      "assets/models/quaternius/model-03.glb",
+      "assets/models/kenney/model-04.glb",
+      "assets/models/poly-pizza/model-05.glb",
+      "assets/models/quaternius/model-06.glb",
+      "assets/models/kenney/model-07.glb",
+      "assets/models/poly-pizza/model-08.glb",
+      "assets/models/kenney/model-09.glb",
+      "assets/models/poly-pizza/model-10.glb",
+      "assets/models/quaternius/model-11.glb",
+      "assets/models/kenney/model-12.glb",
     ];
     this.assetflowModelTemplates = new Array(modelPaths.length);
     const gltfLoader = new GLTFLoader();
     modelPaths.forEach((path, idx) => {
       gltfLoader.load(
-        path,
+        toPublicUrl(path),
         (gltf) => {
           const model = gltf.scene;
           this.normalizeAssetModel(model, 1.6);
@@ -4332,10 +4334,20 @@ export class Scene {
     );
     const spread = Math.max(2, opts.assetflowSpread);
     const spinControl = Math.max(0, opts.assetflowSpin);
-    const movement = Math.max(0.35, opts.assetflowMovement);
+    const movement = Math.max(0.05, opts.assetflowMovement);
     const movementFactor = 0.55 + movement * 0.5;
     const bgDrift = Math.max(0, opts.assetflowBackgroundDrift);
     const beatPulse = audio.beat ? 1 : this.kick;
+    const audioEnergy = THREE.MathUtils.clamp(
+      audio.bass * 0.46 + audio.mid * 0.34 + audio.high * 0.2,
+      0,
+      1,
+    );
+    const activity = THREE.MathUtils.lerp(
+      0.16,
+      1,
+      THREE.MathUtils.smoothstep(audioEnergy + beatPulse * 0.35, 0.1, 0.75),
+    );
     const globalPathSpeed = (0.42 + audio.mid * 0.82 + audio.bpmConfidence * 0.56) * movementFactor;
     this.assetflowModelScale += (modelScale - this.assetflowModelScale) * Math.min(1, dt * 8);
     if (!Number.isFinite(this.assetflowModelScale)) {
@@ -4347,31 +4359,33 @@ export class Scene {
       actor.root.visible = i < visibleCount;
       if (!actor.root.visible) continue;
       const bin = bins.length > 0 ? bins[Math.min(actor.bin, bins.length - 1)]! / 255 : 0;
-      const phase = time * actor.pathSpeed * globalPathSpeed + actor.pathPhase;
+      const phase = time * actor.pathSpeed * globalPathSpeed * activity + actor.pathPhase;
       const radialBeat = 1 + beatPulse * 0.06 + audio.bass * 0.04;
       const pathRadius = spread * radialBeat;
 
       const baseX = Math.cos(actor.angle) * pathRadius;
       const baseZ = Math.sin(actor.angle) * pathRadius;
-      const drift = 0.12 + movement * 0.18;
+      const drift = (0.03 + movement * 0.14) * activity;
       const driftRate =
         actor.pathMode === "spiral" ? 0.32 : actor.pathMode === "lissajous" ? 0.28 : 0.24;
       const px = baseX + Math.sin(phase * driftRate + actor.pathPhase) * drift;
       const pz = baseZ + Math.cos(phase * (driftRate + 0.05) + actor.pathPhase) * drift;
 
-      const horizontalFollow = Math.min(1, dt * (2.2 + movement * 1.3));
+      const horizontalFollow = Math.min(1, dt * (1.9 + movement * 1.15 + activity * 0.8));
       actor.root.position.x += (px - actor.root.position.x) * horizontalFollow;
       actor.root.position.z += (pz - actor.root.position.z) * horizontalFollow;
 
       const verticalOsc =
-        0.45 + Math.sin(phase * (1.15 + movement * 0.3) + actor.angle * 0.8) * 0.42;
+        (0.08 + movement * 0.18) * activity +
+        Math.sin(phase * (1.05 + movement * 0.28) + actor.angle * 0.8) * (0.09 + 0.33 * activity);
       const lift =
         (verticalOsc +
-          bin * (1.7 + movement * 0.45) +
-          audio.bass * (0.7 + movement * 0.38) +
-          beatPulse * (0.55 + movement * 0.4)) *
+          bin * (1.25 + movement * 0.42) * (0.52 + activity * 0.48) +
+          audio.bass * (0.42 + movement * 0.34) * (0.5 + activity * 0.5) +
+          beatPulse * (0.46 + movement * 0.34)) *
         amp;
-      actor.root.position.y = actor.basePos.y + lift;
+      const targetY = actor.basePos.y + lift;
+      actor.root.position.y += (targetY - actor.root.position.y) * Math.min(1, dt * (3.2 + activity * 2.6));
 
       const spin =
         (0.15 +
@@ -4379,6 +4393,7 @@ export class Scene {
           bin * (0.95 + movement * 0.65) +
           audio.mid * (0.6 + movement * 0.45) +
           audio.bpmConfidence * (0.45 + movement * 0.35)) *
+        (0.25 + activity * 0.75) *
         dt;
       actor.root.rotateOnAxis(actor.spinAxis, spin);
 
@@ -4387,7 +4402,7 @@ export class Scene {
         amp * (0.25 + movement * 0.11) +
         bin * (0.5 + movement * 0.22) +
         audio.high * (0.34 + movement * 0.11) +
-        beatPulse * (0.22 + movement * 0.16);
+        beatPulse * (0.22 + movement * 0.16) * (0.4 + activity * 0.6);
       const actorScale = actor.baseScale * this.assetflowModelScale * pulse;
       actor.root.scale.setScalar(Number.isFinite(actorScale) ? actorScale : actor.baseScale);
 
