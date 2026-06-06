@@ -18,6 +18,7 @@ import {
   ColorGradeShader,
   RadialBlurShader,
   LensFlareShader,
+  AssetOverlayShader,
 } from "./shaders";
 import { BLOOM_STRENGTH_MAX_NORMAL, type Settings } from "../store";
 import { MotionTrailPass } from "./MotionTrailPass";
@@ -46,6 +47,7 @@ export class Composer {
   glitch: GlitchPass;
   godRays: ShaderPass;
   lensFlare: ShaderPass;
+  assetOverlay: ShaderPass;
   pixelate: ShaderPass;
   tiltShift: ShaderPass;
   radialBlur: ShaderPass;
@@ -54,6 +56,8 @@ export class Composer {
   smaa: SMAAPass;
   width: number;
   height: number;
+  private assetOverlayTime = 0;
+  private assetOverlayTexture?: THREE.Texture;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -91,6 +95,12 @@ export class Composer {
     this.lensFlare = new ShaderPass(LensFlareShader);
     this.composer.addPass(this.lensFlare);
 
+    this.assetOverlay = new ShaderPass(AssetOverlayShader);
+    this.composer.addPass(this.assetOverlay);
+    const overlayTexture = this.createOverlayTexture();
+    this.assetOverlayTexture = overlayTexture;
+    this.assetOverlay.uniforms.tOverlay.value = overlayTexture;
+
     this.bokeh = new BokehPass(scene, camera, { focus: 8, aperture: 0.0006, maxblur: 0.01 });
     this.composer.addPass(this.bokeh);
 
@@ -126,6 +136,47 @@ export class Composer {
     this.smaa = new SMAAPass();
     this.smaa.setSize(width, height);
     this.composer.addPass(this.smaa);
+  }
+
+  private createOverlayTexture() {
+    const size = 512;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, size, size);
+      ctx.strokeStyle = "rgba(116, 212, 255, 0.25)";
+      ctx.lineWidth = 2;
+      for (let i = 32; i < size; i += 32) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(size, i);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(188, 243, 255, 0.35)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, 160, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, 88, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    return texture;
   }
 
   apply(s: Settings, reactive: PostFxReactiveState) {
@@ -198,6 +249,20 @@ export class Composer {
     this.lensFlare.enabled = s.lensFlare;
     this.lensFlare.uniforms.amount.value = s.lensFlareAmount;
 
+    this.assetOverlay.enabled = s.assetOverlayFx;
+    this.assetOverlayTime += 0.016 * s.assetOverlaySpeed * (0.7 + centroid * 1.2);
+    this.assetOverlay.uniforms.time.value = this.assetOverlayTime;
+    this.assetOverlay.uniforms.pulse.value = THREE.MathUtils.clamp(
+      pulse * 0.9 + bass * 0.4,
+      0,
+      1.5,
+    );
+    this.assetOverlay.uniforms.amount.value = THREE.MathUtils.clamp(
+      s.assetOverlayAmount * (0.75 + high * 0.8),
+      0,
+      2,
+    );
+
     this.pixelate.enabled = s.pixelate;
     this.pixelate.uniforms.pixelSize.value = s.pixelSize;
 
@@ -265,6 +330,7 @@ export class Composer {
   }
 
   dispose() {
+    this.assetOverlayTexture?.dispose();
     this.motionTrails.dispose();
     this.ssao.dispose();
     this.composer.dispose();

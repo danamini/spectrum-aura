@@ -111,6 +111,14 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "reztubeGroup",
     order: 130,
   },
+  {
+    id: "assetflow",
+    label: "Asset-Flow",
+    settingsLabel: "Asset-Flow settings",
+    fullscreenKey: "assetflowFullscreen",
+    sceneGroupKey: "assetflowGroup",
+    order: 140,
+  },
 ] as const;
 
 type BuiltinVisual = (typeof BUILTIN_VISUALS)[number];

@@ -21,7 +21,7 @@ src/
 │       ├── store.slots.test.ts
 │       ├── test-helpers.ts         # Shared test fixtures
 │       └── engine/
-│           ├── scene.ts            # Three.js scene, 12 visualization modes
+│           ├── scene.ts            # Three.js scene, 14 visualization modes
 │           ├── composer.ts         # Post-processing effects pipeline
 │           ├── audio.ts            # Web Audio API wrapper, FFT, beat detection
 │           ├── bpm-detector.ts     # BPM estimation from bass energy
@@ -55,7 +55,7 @@ docs/
 ### Visualization Architecture
 
 **Three.js Scene** (`engine/scene.ts`):
-- **13 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube)
+- **14 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
 - **Post-processing**: Bloom, chromatic aberration, glitch, god rays, lens flare, etc. via Composer
@@ -79,6 +79,9 @@ Recent controls:
 - `lensFlare` / `lensFlareAmount`: Anamorphic horizontal streak + coloured lens-ghost reflections layered after god rays in the composer chain. Enabled 45% of the time by randomize.
 - `monolithBrightness`: Dedicated lighting/visibility control for Monolith independent of amplitude.
 - `reztubeLineWidth`: Line thickness in screen-space pixels for the On-rails Tube view (0.5–6 px). Rendered via `LineSegments2` + `LineMaterial` (`worldUnits: false`) so the width is invariant to camera distance. The visual's display label was updated to "On-rails Tube"; the internal `id` stays `reztube` to preserve saved settings.
+- `assetflowMovement`: Global motion intensity multiplier for Asset-Flow model pathing, bounce, and spin.
+- `assetflowBackgroundDrift`: Speed/intensity control for Asset-Flow's layered 2D background drift.
+- `assetflowSpriteAmount`: Controls layered 2D background presence/intensity in Asset-Flow.
 
 **Key Settings Limits**:
 - Amplitude floor: 0.5 (MIN_VIEW_AMPLITUDE)
@@ -172,6 +175,10 @@ npm run test                   # Watch mode
   - `Shortcuts.test.tsx`: grouped rail labels, visual cluster status, randomize/post-FX toggles, save transport behavior, settings toggle behavior
 - **Engine tests**:
   - `engine/bpm-detector.test.ts`: tempo stability, bounded BPM output, reset behavior
+
+  Asset documentation:
+  - Keep `docs/THIRD_PARTY_ASSETS.md` in sync whenever adding/removing runtime files under `public/assets/`.
+  - Validate third-party model URLs and licenses before wiring new `model-xx.glb` paths in `scene.ts`.
 
 ### Adding Tests
 

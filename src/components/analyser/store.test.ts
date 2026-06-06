@@ -88,6 +88,7 @@ describe("analyser store utility functions", () => {
       monolithAmplitude: 0.25,
       mandalaAmplitude: 0.3,
       terrainAmplitude: 0.05,
+      assetflowAmplitude: 0.05,
     });
 
     const state = settingsStore.get();
@@ -97,6 +98,7 @@ describe("analyser store utility functions", () => {
     expect(state.monolithAmplitude).toBe(MIN_VIEW_AMPLITUDE);
     expect(state.mandalaAmplitude).toBe(MIN_VIEW_AMPLITUDE);
     expect(state.terrainAmplitude).toBe(MIN_VIEW_AMPLITUDE);
+    expect(state.assetflowAmplitude).toBe(MIN_VIEW_AMPLITUDE);
   });
 
   it("clamps vignette amount between 0.5 and 1.25", async () => {
@@ -144,6 +146,14 @@ describe("analyser store utility functions", () => {
     expect(state.radialKickAmount).toBe(0.32);
     expect(state.sobelMode).toBe(false);
     expect(state.sobelStrength).toBe(1.5);
+    expect(state.assetflowAmplitude).toBe(1);
+    expect(state.assetflowModelCount).toBe(12);
+    expect(state.assetflowSpread).toBe(4.7);
+    expect(state.assetflowSpin).toBe(1);
+    expect(state.assetflowMovement).toBe(1);
+    expect(state.assetflowBackgroundDrift).toBe(1);
+    expect(state.assetOverlayFx).toBe(false);
+    expect(state.assetOverlayAmount).toBe(0.6);
   });
 
   it("keeps randomize scoped to post fx when view settings are disabled", async () => {
@@ -176,6 +186,9 @@ describe("analyser store utility functions", () => {
       geometrynebulaSpread: 1.6,
       geometrynebulaOrbitSpeed: 1,
       geometrynebulaSpinSpeed: 1,
+      assetflowModelScale: 1,
+      assetflowModelCount: 12,
+      assetflowMovement: 1,
       randomizeViewSettings: true,
     });
 
@@ -189,6 +202,9 @@ describe("analyser store utility functions", () => {
     expect(state.geometrynebulaSpread).toBeGreaterThan(2.9);
     expect(state.geometrynebulaOrbitSpeed).toBeGreaterThan(2.4);
     expect(state.geometrynebulaSpinSpeed).toBeGreaterThan(3.8);
+    expect(state.assetflowModelScale).toBeGreaterThan(1.7);
+    expect(state.assetflowModelCount).toBeGreaterThanOrEqual(3);
+    expect(state.assetflowMovement).toBeGreaterThan(2.2);
 
     randomSpy.mockRestore();
   });

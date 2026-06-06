@@ -22,6 +22,12 @@ describe("settingsStore randomize", () => {
     expect(state.geometrynebulaOrbitSpeed).toBe(1);
     expect(state.geometrynebulaSpinSpeed).toBe(1);
     expect(state.reztubeLineWidth).toBe(1);
+    expect(state.assetflowAmplitude).toBe(1);
+    expect(state.assetflowModelCount).toBe(12);
+    expect(state.assetflowSpread).toBe(4.7);
+    expect(state.assetflowMovement).toBe(1);
+    expect(state.assetflowBackgroundDrift).toBe(1);
+    expect(state.assetOverlayFx).toBe(false);
   });
 
   it("keeps randomize scoped to post FX when view settings are disabled", async () => {
@@ -58,6 +64,8 @@ describe("settingsStore randomize", () => {
       geometrynebulaSpread: 1.6,
       geometrynebulaOrbitSpeed: 1,
       geometrynebulaSpinSpeed: 1,
+      assetflowModelScale: 1,
+      assetflowMovement: 1,
       randomizeViewSettings: true,
     });
 
@@ -72,6 +80,9 @@ describe("settingsStore randomize", () => {
     expect(state.geometrynebulaSpread).toBeGreaterThan(2.9);
     expect(state.geometrynebulaOrbitSpeed).toBeGreaterThan(2.4);
     expect(state.geometrynebulaSpinSpeed).toBeGreaterThan(3.8);
+    expect(state.assetflowModelScale).toBeGreaterThan(1.7);
+    expect(state.assetflowMovement).toBeGreaterThan(2.2);
+    expect(state.assetflowBackgroundDrift).toBeGreaterThan(2.7);
 
     randomSpy.mockRestore();
   });
@@ -95,5 +106,20 @@ describe("settingsStore randomize", () => {
     expect(lowState.lensFlareAmount).toBeGreaterThanOrEqual(0.2);
     expect(lowState.lensFlareAmount).toBeLessThan(0.4);
     lowSpy.mockRestore();
+  });
+
+  it("enables asset overlay when randomizing FX in assetflow view", async () => {
+    const { settingsStore } = await import("./store");
+
+    settingsStore.set({ view: "assetflow", randomizeViewSettings: false, assetOverlayFx: false });
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.1);
+    settingsStore.randomize();
+    const state = settingsStore.get();
+
+    expect(state.randomizeViewSettings).toBe(false);
+    expect(state.view).toBe("assetflow");
+    expect(state.assetOverlayFx).toBe(true);
+    randomSpy.mockRestore();
   });
 });

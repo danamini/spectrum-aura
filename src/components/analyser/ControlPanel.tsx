@@ -1294,6 +1294,91 @@ export function ControlPanel() {
                         </div>
                       </>
                     )}
+                    {s.view === "assetflow" && (
+                      <>
+                        <S
+                          label="Amplitude"
+                          value={s.assetflowAmplitude}
+                          min={0.1}
+                          max={3}
+                          step={0.05}
+                          onChange={(v) => set({ assetflowAmplitude: v })}
+                        />
+                        <S
+                          label="Model scale"
+                          value={s.assetflowModelScale}
+                          min={0.4}
+                          max={2.2}
+                          step={0.05}
+                          onChange={(v) => set({ assetflowModelScale: v })}
+                        />
+                        <S
+                          label="2D background amount"
+                          value={s.assetflowSpriteAmount}
+                          min={0.2}
+                          max={2.5}
+                          step={0.05}
+                          onChange={(v) => set({ assetflowSpriteAmount: v })}
+                        />
+                        <S
+                          label="Movement intensity"
+                          value={s.assetflowMovement}
+                          min={0.5}
+                          max={2.5}
+                          step={0.05}
+                          onChange={(v) => set({ assetflowMovement: v })}
+                        />
+                        <S
+                          label="2D background drift"
+                          value={s.assetflowBackgroundDrift}
+                          min={0}
+                          max={3}
+                          step={0.05}
+                          onChange={(v) => set({ assetflowBackgroundDrift: v })}
+                        />
+                        <S
+                          label="Model count"
+                          value={s.assetflowModelCount}
+                          min={1}
+                          max={24}
+                          step={1}
+                          onChange={(v) => set({ assetflowModelCount: Math.round(v) })}
+                        />
+                        <S
+                          label="Model spread"
+                          value={s.assetflowSpread}
+                          min={2}
+                          max={12}
+                          step={0.1}
+                          onChange={(v) => set({ assetflowSpread: v })}
+                        />
+                        <S
+                          label="Model spin"
+                          value={s.assetflowSpin}
+                          min={0}
+                          max={3}
+                          step={0.05}
+                          onChange={(v) => set({ assetflowSpin: v })}
+                        />
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[11px]">Use selected palette</Label>
+                          <Sw
+                            checked={s.assetflowUsePalette}
+                            onCheckedChange={(v) => set({ assetflowUsePalette: v })}
+                          />
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+                          <Label className="text-[11px]">Asset licenses</Label>
+                          <p className="mt-1 text-[10px] leading-relaxed text-white/60">
+                            Asset-Flow uses Khronos glTF Sample Assets. Most runtime models are CC0
+                            1.0; Fox includes CC BY 4.0 contributions and requires attribution.
+                          </p>
+                          <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
+                            Full ledger: docs/THIRD_PARTY_ASSETS.md
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -2077,6 +2162,28 @@ export function ControlPanel() {
                         max={1}
                         step={0.01}
                         onChange={(v) => set({ sobelFillMix: v })}
+                      />
+                    </ToggleRow>
+                    <ToggleRow
+                      label="Asset overlay"
+                      enabled={s.assetOverlayFx}
+                      onToggle={(v) => set({ assetOverlayFx: v })}
+                    >
+                      <S
+                        label="Amount"
+                        value={s.assetOverlayAmount}
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        onChange={(v) => set({ assetOverlayAmount: v })}
+                      />
+                      <S
+                        label="Scroll speed"
+                        value={s.assetOverlaySpeed}
+                        min={0.1}
+                        max={3}
+                        step={0.05}
+                        onChange={(v) => set({ assetOverlaySpeed: v })}
                       />
                     </ToggleRow>
                   </div>

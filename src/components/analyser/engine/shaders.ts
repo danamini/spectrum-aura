@@ -263,6 +263,40 @@ export const LensFlareShader = {
   `,
 };
 
+export const AssetOverlayShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    tOverlay: { value: null },
+    amount: { value: 0.6 },
+    pulse: { value: 0.0 },
+    time: { value: 0.0 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tOverlay;
+    uniform float amount;
+    uniform float pulse;
+    uniform float time;
+    varying vec2 vUv;
+
+    vec3 screenBlend(vec3 base, vec3 blend) {
+      return 1.0 - (1.0 - base) * (1.0 - blend);
+    }
+
+    void main() {
+      vec4 base = texture2D(tDiffuse, vUv);
+      vec2 uvA = vec2(fract(vUv.x + time * 0.03), fract(vUv.y + time * 0.011));
+      vec2 uvB = vec2(fract(vUv.x * 1.13 - time * 0.017), fract(vUv.y * 1.08 + time * 0.009));
+      vec3 layerA = texture2D(tOverlay, uvA).rgb;
+      vec3 layerB = texture2D(tOverlay, uvB).rgb;
+      vec3 overlay = mix(layerA, layerB, 0.5) * (0.55 + pulse * 0.95);
+      vec3 color = screenBlend(base.rgb, overlay * amount);
+      gl_FragColor = vec4(color, base.a);
+    }
+  `,
+};
+
 export const BlueprintSobelShader = {
   uniforms: {
     tDiffuse: { value: null },

@@ -138,6 +138,18 @@ export type Settings = {
   reztubeSegments: number; // cross-section polygon sides (3–12)
   reztubeLineWidth: number; // line thickness in screen pixels
 
+  // assetflow view (3D/2D assets)
+  assetflowFullscreen: boolean;
+  assetflowUsePalette: boolean;
+  assetflowAmplitude: number;
+  assetflowModelScale: number;
+  assetflowSpriteAmount: number;
+  assetflowModelCount: number;
+  assetflowSpread: number;
+  assetflowSpin: number;
+  assetflowMovement: number;
+  assetflowBackgroundDrift: number;
+
   // 3D combo view
   comboSphereSize: number; // base sphere scale (1 = default)
   comboSphereSpinSpeed: number; // sphere rotation speed
@@ -198,6 +210,9 @@ export type Settings = {
   sobelStrength: number;
   sobelThreshold: number;
   sobelFillMix: number;
+  assetOverlayFx: boolean;
+  assetOverlayAmount: number;
+  assetOverlaySpeed: number;
 
   performance: boolean; // cap pixel ratio harder
 
@@ -318,6 +333,16 @@ export const DEFAULT_SETTINGS: Settings = {
   reztubeRadius: 5.5,
   reztubeSegments: 4,
   reztubeLineWidth: 1,
+  assetflowFullscreen: false,
+  assetflowUsePalette: true,
+  assetflowAmplitude: 1,
+  assetflowModelScale: 1,
+  assetflowSpriteAmount: 1,
+  assetflowModelCount: 12,
+  assetflowSpread: 4.7,
+  assetflowSpin: 1,
+  assetflowMovement: 1,
+  assetflowBackgroundDrift: 1,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,
@@ -393,6 +418,9 @@ export const DEFAULT_SETTINGS: Settings = {
   sobelStrength: 1.5,
   sobelThreshold: 0.15,
   sobelFillMix: 0.08,
+  assetOverlayFx: false,
+  assetOverlayAmount: 0.6,
+  assetOverlaySpeed: 1,
 
   performance: false,
   bgColor: "#05060a",
@@ -584,6 +612,7 @@ function normalizeAmplitudeFloor(settings: Settings): Settings {
     monolithAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.monolithAmplitude),
     mandalaAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.mandalaAmplitude),
     terrainAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.terrainAmplitude),
+    assetflowAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.assetflowAmplitude),
   };
 }
 
@@ -612,6 +641,15 @@ function normalizePostFxRanges(settings: Settings): Settings {
     sobelStrength: Math.max(0.25, Math.min(4, settings.sobelStrength)),
     sobelThreshold: Math.max(0.01, Math.min(1, settings.sobelThreshold)),
     sobelFillMix: Math.max(0, Math.min(1, settings.sobelFillMix)),
+    assetOverlayAmount: Math.max(0, Math.min(2, settings.assetOverlayAmount)),
+    assetOverlaySpeed: Math.max(0.1, Math.min(3, settings.assetOverlaySpeed)),
+    assetflowModelScale: Math.max(0.4, Math.min(2.2, settings.assetflowModelScale)),
+    assetflowSpriteAmount: Math.max(0.2, Math.min(2.5, settings.assetflowSpriteAmount)),
+    assetflowModelCount: Math.max(1, Math.min(24, Math.round(settings.assetflowModelCount))),
+    assetflowSpread: Math.max(2, Math.min(12, settings.assetflowSpread)),
+    assetflowSpin: Math.max(0, Math.min(3, settings.assetflowSpin)),
+    assetflowMovement: Math.max(0.5, Math.min(2.5, settings.assetflowMovement)),
+    assetflowBackgroundDrift: Math.max(0, Math.min(3, settings.assetflowBackgroundDrift)),
   };
 }
 
@@ -758,6 +796,7 @@ export const settingsStore = {
     const pick = <T>(items: readonly T[]): T => items[Math.floor(Math.random() * items.length)]!;
     const keepRippleColumns = state.rippleColumns;
     const includeViewSettings = state.randomizeViewSettings;
+    const assetflowActive = state.view === "assetflow";
     const paletteIndex = Math.floor(Math.random() * PALETTES.length);
     const palette = PALETTES[paletteIndex]?.colors ?? PALETTES[0].colors;
     const bgColor = pickReadableRandomBackground(palette);
@@ -815,6 +854,9 @@ export const settingsStore = {
       sobelStrength: r(0.9, 2.2),
       sobelThreshold: r(0.08, 0.25),
       sobelFillMix: r(0.03, 0.18),
+      assetOverlayFx: assetflowActive ? true : b(0.45),
+      assetOverlayAmount: r(0.12, 1.2),
+      assetOverlaySpeed: r(0.3, 2.4),
     };
 
     const viewPatch: Partial<Settings> = includeViewSettings
@@ -939,6 +981,17 @@ export const settingsStore = {
           reztubeTwist: r(0, 4),
           reztubeRadius: r(3, 9),
           reztubeSegments: pick([3, 4, 5, 6, 8, 10, 12] as const),
+
+          // assetflow
+          assetflowUsePalette: b(0.75),
+          assetflowAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          assetflowModelScale: r(0.6, 1.8),
+          assetflowSpriteAmount: r(0.4, 2.2),
+          assetflowModelCount: Math.round(r(6, 24)),
+          assetflowSpread: r(3, 10),
+          assetflowSpin: r(0.2, 2.8),
+          assetflowMovement: r(0.7, 2.3),
+          assetflowBackgroundDrift: r(0.2, 2.8),
         }
       : {};
 

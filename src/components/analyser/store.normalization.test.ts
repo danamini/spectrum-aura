@@ -23,6 +23,7 @@ describe("settingsStore normalization", () => {
       monolithAmplitude: 0.49,
       mandalaAmplitude: 0.3,
       terrainAmplitude: 0.05,
+      assetflowAmplitude: 0.05,
     });
 
     const state = settingsStore.get();
@@ -33,6 +34,7 @@ describe("settingsStore normalization", () => {
     expect(state.monolithAmplitude).toBe(MIN_VIEW_AMPLITUDE);
     expect(state.mandalaAmplitude).toBe(MIN_VIEW_AMPLITUDE);
     expect(state.terrainAmplitude).toBe(MIN_VIEW_AMPLITUDE);
+    expect(state.assetflowAmplitude).toBe(MIN_VIEW_AMPLITUDE);
   });
 
   it("clamps vignette amount to supported bounds", async () => {
@@ -61,6 +63,15 @@ describe("settingsStore normalization", () => {
       sobelStrength: 10,
       sobelThreshold: 0,
       sobelFillMix: 2,
+      assetOverlayAmount: 10,
+      assetOverlaySpeed: 0,
+      assetflowModelScale: 10,
+      assetflowSpriteAmount: 0,
+      assetflowModelCount: 99,
+      assetflowSpread: 99,
+      assetflowSpin: -1,
+      assetflowMovement: 99,
+      assetflowBackgroundDrift: -1,
     });
 
     const state = settingsStore.get();
@@ -77,6 +88,15 @@ describe("settingsStore normalization", () => {
     expect(state.sobelStrength).toBe(4);
     expect(state.sobelThreshold).toBe(0.01);
     expect(state.sobelFillMix).toBe(1);
+    expect(state.assetOverlayAmount).toBe(2);
+    expect(state.assetOverlaySpeed).toBe(0.1);
+    expect(state.assetflowModelScale).toBe(2.2);
+    expect(state.assetflowSpriteAmount).toBe(0.2);
+    expect(state.assetflowModelCount).toBe(24);
+    expect(state.assetflowSpread).toBe(12);
+    expect(state.assetflowSpin).toBe(0);
+    expect(state.assetflowMovement).toBe(2.5);
+    expect(state.assetflowBackgroundDrift).toBe(0);
   });
 
   it("caps bloom strength unless extreme mode is enabled", async () => {

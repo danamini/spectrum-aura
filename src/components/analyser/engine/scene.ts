@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
@@ -29,6 +30,7 @@ export class Scene {
   torusGroup = new THREE.Group();
   soundwallGroup = new THREE.Group();
   geometrynebulaGroup = new THREE.Group();
+  assetflowGroup = new THREE.Group();
   private xrControllerInputs: Array<{
     controller: THREE.Object3D;
     handedness: XRHandedness | "";
@@ -202,6 +204,35 @@ export class Scene {
   private geoNebulaCount = 60;
   private geoNebulaSpread = 1.6;
 
+  // assetflow view (3D models + 2D animated sprites)
+  private assetflowActors: Array<{
+    root: THREE.Group;
+    basePos: THREE.Vector3;
+    angle: number;
+    pathMode: "orbit" | "figure8" | "lissajous" | "spiral";
+    pathPhase: number;
+    pathSpeed: number;
+    spinAxis: THREE.Vector3;
+    baseScale: number;
+    bin: number;
+    placeholder: THREE.Mesh;
+    model?: THREE.Object3D;
+  }> = [];
+  private assetflowSprites: Array<{
+    sprite: THREE.Sprite;
+    phase: number;
+    radius: number;
+    speed: number;
+    bin: number;
+    baseY: number;
+  }> = [];
+  private assetflowTextures: THREE.Texture[] = [];
+  private assetflowBaseDisk?: THREE.Mesh;
+  private assetflowLight?: THREE.PointLight;
+  private assetflowAssetsRequested = false;
+  private assetflowModelScale = 1;
+  private assetflowModelTemplates: Array<THREE.Object3D | undefined> = [];
+
   // rez tube view
   reztubeGroup = new THREE.Group();
   private reztubeLine?: LineSegments2;
@@ -251,6 +282,7 @@ export class Scene {
     this.xrSceneRoot.add(this.soundwallGroup);
     this.xrSceneRoot.add(this.geometrynebulaGroup);
     this.xrSceneRoot.add(this.reztubeGroup);
+    this.xrSceneRoot.add(this.assetflowGroup);
     this.scene.add(this.xrSceneRoot);
     this.buildXrHud();
     this.scene.add(this.xrHudGroup);
@@ -266,6 +298,7 @@ export class Scene {
     this.soundwallGroup.visible = false;
     this.geometrynebulaGroup.visible = false;
     this.reztubeGroup.visible = false;
+    this.assetflowGroup.visible = false;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.25);
     const dir = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -294,6 +327,7 @@ export class Scene {
     this.buildSoundwall();
     this.buildGeoNebula();
     this.buildReztube();
+    this.buildAssetflow();
 
     // Ensure every view material/light starts with the active palette.
     this.setPalette(this.palette);
@@ -2465,8 +2499,7 @@ export class Scene {
     }
 
     // Mark the LineSegmentsGeometry buffers as needing GPU upload
-    const instStart = this.reztubeGeo.attributes
-      .instanceStart as THREE.InterleavedBufferAttribute;
+    const instStart = this.reztubeGeo.attributes.instanceStart as THREE.InterleavedBufferAttribute;
     instStart.data.needsUpdate = true;
     const instCol = this.reztubeGeo.attributes
       .instanceColorStart as THREE.InterleavedBufferAttribute;
@@ -2592,6 +2625,16 @@ export class Scene {
       reztubeRadius: number;
       reztubeSegments: number;
       reztubeLineWidth: number;
+      assetflowFullscreen: boolean;
+      assetflowUsePalette: boolean;
+      assetflowAmplitude: number;
+      assetflowModelScale: number;
+      assetflowSpriteAmount: number;
+      assetflowModelCount: number;
+      assetflowSpread: number;
+      assetflowSpin: number;
+      assetflowMovement: number;
+      assetflowBackgroundDrift: number;
       bgColor: string;
       view: ViewMode;
     },
@@ -3245,6 +3288,58 @@ export class Scene {
         this.camera.position.y,
         this.camera.position.z - 100,
       );
+      return;
+    }
+
+    if (opts.view === "assetflow") {
+      this.postFxBoost.bloom = 1.18;
+      this.postFxBoost.glitch = 0.08;
+      this.updateAssetflow(dt, time, audio, {
+        assetflowAmplitude: opts.assetflowAmplitude,
+        assetflowUsePalette: opts.assetflowUsePalette,
+        assetflowModelScale: opts.assetflowModelScale,
+        assetflowSpriteAmount: opts.assetflowSpriteAmount,
+        assetflowModelCount: opts.assetflowModelCount,
+        assetflowSpread: opts.assetflowSpread,
+        assetflowSpin: opts.assetflowSpin,
+        assetflowMovement: opts.assetflowMovement,
+        assetflowBackgroundDrift: opts.assetflowBackgroundDrift,
+      });
+
+      if (xrMode) return;
+      if (opts.assetflowFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (11.5 - this.camera.position.y) * follow;
+        this.camera.position.z += (0.01 - this.camera.position.z) * follow;
+        this.camera.fov += (56 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0, 0);
+        return;
+      }
+
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 0.92;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          2.8 + Math.sin(this.mousePitch) * r * 0.58,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.62 + 0.05);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 12.5,
+          4.2 + Math.sin(time * 0.32) * 1.45,
+          Math.cos(this.orbitAngle) * 12.5,
+        );
+      }
+
+      const bk = this.kick * beat;
+      applyCameraDrift(3.8);
+      this.camera.position.y += bk * 1.2;
+      this.camera.fov += (53 - bk * 8 - this.camera.fov) * Math.min(1, dt * 11);
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(0, 0.6, 0);
       return;
     }
 
@@ -3916,6 +4011,464 @@ export class Scene {
           (audio.bpm > 0 ? audio.bpmConfidence * 0.8 : 0));
   }
 
+  private buildAssetflow() {
+    this.assetflowAssetsRequested = false;
+    for (const actor of this.assetflowActors) {
+      actor.placeholder.geometry.dispose();
+      actor.placeholder.material.dispose();
+      actor.root.clear();
+    }
+    for (const layer of this.assetflowSprites) {
+      layer.sprite.material.dispose();
+      this.assetflowGroup.remove(layer.sprite);
+    }
+    for (const texture of this.assetflowTextures) texture.dispose();
+    this.assetflowTextures = [];
+    this.assetflowModelTemplates = [];
+    this.assetflowActors = [];
+    this.assetflowSprites = [];
+
+    if (this.assetflowBaseDisk) {
+      this.assetflowGroup.remove(this.assetflowBaseDisk);
+      this.assetflowBaseDisk.geometry.dispose();
+      (this.assetflowBaseDisk.material as THREE.Material).dispose();
+    }
+    this.assetflowBaseDisk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.8, 8.8, 0.22, 64, 1, false),
+      new THREE.MeshStandardMaterial({
+        color: 0x0f1b2c,
+        metalness: 0.3,
+        roughness: 0.55,
+        emissive: 0x0b2234,
+        emissiveIntensity: 0.55,
+      }),
+    );
+    this.assetflowBaseDisk.position.y = -1.45;
+    this.assetflowGroup.add(this.assetflowBaseDisk);
+
+    if (this.assetflowLight) {
+      this.assetflowGroup.remove(this.assetflowLight);
+    }
+    this.assetflowLight = new THREE.PointLight(0x7fd9ff, 3.2, 45, 1.2);
+    this.assetflowLight.position.set(0, 4.5, 2);
+    this.assetflowGroup.add(this.assetflowLight);
+
+    const actorCount = 24;
+    const pathModes = ["orbit", "figure8", "lissajous", "spiral"] as const;
+    for (let i = 0; i < actorCount; i++) {
+      const angle = (i / actorCount) * Math.PI * 2;
+      const radius = 4.7;
+      const root = new THREE.Group();
+      const basePos = new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+      root.position.copy(basePos);
+
+      const placeholder = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.62, 1),
+        new THREE.MeshStandardMaterial({
+          color: 0x94b9ff,
+          emissive: 0x1a3b66,
+          emissiveIntensity: 0.6,
+          metalness: 0.4,
+          roughness: 0.32,
+        }),
+      );
+      root.add(placeholder);
+      this.assetflowGroup.add(root);
+      this.assetflowActors.push({
+        root,
+        basePos,
+        angle,
+        pathMode: pathModes[i % pathModes.length] ?? "orbit",
+        pathPhase: Math.random() * Math.PI * 2,
+        pathSpeed: 0.55 + (i % 7) * 0.12,
+        spinAxis: new THREE.Vector3(Math.sin(angle * 1.7), 1, Math.cos(angle * 1.4)).normalize(),
+        baseScale: 0.95 + (i % 3) * 0.16,
+        bin: Math.floor((i / actorCount) * 80),
+        placeholder,
+      });
+    }
+
+    this.requestAssetflowAssets();
+  }
+
+  private normalizeAssetModel(model: THREE.Object3D, targetSize: number) {
+    const bounds = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    bounds.getSize(size);
+    bounds.getCenter(center);
+    const maxDim = Math.max(size.x, size.y, size.z, 0.0001);
+    const scale = targetSize / maxDim;
+    model.scale.setScalar(scale);
+    model.position.sub(center.multiplyScalar(scale));
+    model.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      if (Array.isArray(mesh.material)) {
+        mesh.material = mesh.material.map((mat) => mat.clone());
+      } else {
+        mesh.material = mesh.material.clone();
+      }
+    });
+  }
+
+  private requestAssetflowAssets() {
+    if (this.assetflowAssetsRequested) return;
+    this.assetflowAssetsRequested = true;
+
+    const modelPaths = [
+      "/assets/models/kenney/model-01.glb",
+      "/assets/models/poly-pizza/model-02.glb",
+      "/assets/models/quaternius/model-03.glb",
+      "/assets/models/kenney/model-04.glb",
+      "/assets/models/poly-pizza/model-05.glb",
+      "/assets/models/quaternius/model-06.glb",
+      "/assets/models/kenney/model-07.glb",
+      "/assets/models/poly-pizza/model-08.glb",
+      "/assets/models/kenney/model-09.glb",
+      "/assets/models/poly-pizza/model-10.glb",
+      "/assets/models/quaternius/model-11.glb",
+      "/assets/models/kenney/model-12.glb",
+    ];
+    this.assetflowModelTemplates = new Array(modelPaths.length);
+    const gltfLoader = new GLTFLoader();
+    modelPaths.forEach((path, idx) => {
+      gltfLoader.load(
+        path,
+        (gltf) => {
+          const model = gltf.scene;
+          this.normalizeAssetModel(model, 1.6);
+          this.assetflowModelTemplates[idx] = model;
+          this.applyAssetflowModelsToActors();
+        },
+        undefined,
+        () => {
+          // Keep fallback meshes when optional third-party GLB files are missing.
+        },
+      );
+    });
+
+    [0, 1, 2, 3].forEach((idx) => {
+      const texture = this.createAssetflowSpriteTexture(idx);
+      this.assetflowTextures.push(texture);
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthWrite: false,
+          depthTest: false,
+          opacity: 0.42,
+          blending: THREE.AdditiveBlending,
+        }),
+      );
+      sprite.renderOrder = -10;
+      const baseY = -1.1 + idx * 0.36;
+      sprite.position.set(0, baseY, 0);
+      this.assetflowGroup.add(sprite);
+      this.assetflowSprites.push({
+        sprite,
+        phase: idx * Math.PI * 0.6,
+        radius: 4.2 + idx * 2.1,
+        speed: 0.14 + idx * 0.08,
+        bin: idx === 0 ? 14 : idx === 1 ? 34 : idx === 2 ? 56 : 76,
+        baseY,
+      });
+    });
+  }
+
+  private cloneAssetflowModel(template: THREE.Object3D) {
+    const model = template.clone(true);
+    model.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      if (Array.isArray(mesh.material)) {
+        mesh.material = mesh.material.map((mat) => mat.clone());
+      } else {
+        mesh.material = mesh.material.clone();
+      }
+    });
+    return model;
+  }
+
+  private applyAssetflowModelsToActors() {
+    const templates = this.assetflowModelTemplates.filter((model): model is THREE.Object3D =>
+      Boolean(model),
+    );
+    if (templates.length === 0) return;
+
+    for (let i = 0; i < this.assetflowActors.length; i++) {
+      const actor = this.assetflowActors[i]!;
+      if (actor.model) {
+        actor.root.remove(actor.model);
+      }
+      const template = templates[i % templates.length]!;
+      const model = this.cloneAssetflowModel(template);
+      actor.root.remove(actor.placeholder);
+      actor.placeholder.visible = false;
+      actor.model = model;
+      actor.root.add(model);
+    }
+  }
+
+  private createAssetflowSpriteTexture(index: number) {
+    const size = 512;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, size, size);
+      ctx.translate(size / 2, size / 2);
+
+      if (index === 0) {
+        ctx.strokeStyle = "rgba(0, 215, 255, 0.6)";
+        ctx.lineWidth = 8;
+        for (let y = -96; y <= 96; y += 48) {
+          ctx.beginPath();
+          for (let x = -240; x <= 240; x += 6) {
+            const yy = y + Math.sin((x / 240) * Math.PI * 4) * 22;
+            if (x === -240) ctx.moveTo(x, yy);
+            else ctx.lineTo(x, yy);
+          }
+          ctx.stroke();
+        }
+      } else if (index === 1) {
+        const grad = ctx.createRadialGradient(0, 0, 24, 0, 0, 220);
+        grad.addColorStop(0, "rgba(184, 245, 255, 0.9)");
+        grad.addColorStop(0.4, "rgba(77, 167, 255, 0.45)");
+        grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, 220, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(146, 237, 255, 0.45)";
+        ctx.lineWidth = 6;
+        [0, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.75].forEach((a) => {
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * 220, Math.sin(a) * 220);
+          ctx.lineTo(-Math.cos(a) * 220, -Math.sin(a) * 220);
+          ctx.stroke();
+        });
+      } else if (index === 2) {
+        const grad = ctx.createLinearGradient(-240, 0, 240, 0);
+        grad.addColorStop(0, "rgba(50, 160, 255, 0)");
+        grad.addColorStop(0.35, "rgba(96, 230, 255, 0.48)");
+        grad.addColorStop(0.65, "rgba(195, 248, 255, 0.5)");
+        grad.addColorStop(1, "rgba(50, 160, 255, 0)");
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 12;
+        for (let y = -180; y <= 180; y += 36) {
+          ctx.beginPath();
+          ctx.moveTo(-240, y);
+          ctx.bezierCurveTo(-120, y - 20, 120, y + 20, 240, y);
+          ctx.stroke();
+        }
+      } else {
+        const grad = ctx.createRadialGradient(0, 0, 40, 0, 0, 240);
+        grad.addColorStop(0, "rgba(0, 0, 0, 0)");
+        grad.addColorStop(0.35, "rgba(132, 206, 255, 0.22)");
+        grad.addColorStop(0.7, "rgba(72, 188, 255, 0.34)");
+        grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, 240, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(170, 235, 255, 0.28)";
+        ctx.lineWidth = 4;
+        for (let i = 0; i < 7; i++) {
+          const r = 60 + i * 24;
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private updateAssetflow(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: {
+      assetflowAmplitude: number;
+      assetflowUsePalette: boolean;
+      assetflowModelScale: number;
+      assetflowSpriteAmount: number;
+      assetflowModelCount: number;
+      assetflowSpread: number;
+      assetflowSpin: number;
+      assetflowMovement: number;
+      assetflowBackgroundDrift: number;
+    },
+  ) {
+    const bins = audio.bins;
+    const ampInput = Number.isFinite(opts.assetflowAmplitude) ? opts.assetflowAmplitude : 1;
+    const modelScaleInput = Number.isFinite(opts.assetflowModelScale)
+      ? opts.assetflowModelScale
+      : 1;
+    const spriteAmountInput = Number.isFinite(opts.assetflowSpriteAmount)
+      ? opts.assetflowSpriteAmount
+      : 1;
+    const amp = Math.max(0.05, ampInput);
+    const modelScale = Math.max(0.2, modelScaleInput);
+    const spriteAmount = Math.max(0.1, spriteAmountInput);
+    const visibleCount = Math.max(
+      1,
+      Math.min(this.assetflowActors.length, Math.round(opts.assetflowModelCount)),
+    );
+    const spread = Math.max(2, opts.assetflowSpread);
+    const spinControl = Math.max(0, opts.assetflowSpin);
+    const movement = Math.max(0.5, opts.assetflowMovement);
+    const bgDrift = Math.max(0, opts.assetflowBackgroundDrift);
+    const beatPulse = audio.beat ? 1 : this.kick;
+    const globalPathSpeed = (0.5 + audio.mid * 1.15 + audio.bpmConfidence * 0.8) * movement;
+    this.assetflowModelScale += (modelScale - this.assetflowModelScale) * Math.min(1, dt * 8);
+    if (!Number.isFinite(this.assetflowModelScale)) {
+      this.assetflowModelScale = 1;
+    }
+
+    for (let i = 0; i < this.assetflowActors.length; i++) {
+      const actor = this.assetflowActors[i]!;
+      actor.root.visible = i < visibleCount;
+      if (!actor.root.visible) continue;
+      const bin = bins.length > 0 ? bins[Math.min(actor.bin, bins.length - 1)]! / 255 : 0;
+      const phase = time * actor.pathSpeed * globalPathSpeed + actor.pathPhase;
+      const radialBeat =
+        1 + beatPulse * (0.2 + movement * 0.08) + audio.bass * (0.16 + 0.06 * movement);
+      const pathRadius = spread * radialBeat;
+
+      let px = Math.cos(actor.angle) * pathRadius;
+      let pz = Math.sin(actor.angle) * pathRadius;
+      if (actor.pathMode === "figure8") {
+        px = Math.sin(phase) * pathRadius;
+        pz = Math.sin(phase * 2) * pathRadius * 0.62;
+      } else if (actor.pathMode === "lissajous") {
+        px = Math.sin(phase * 1.45 + actor.angle) * pathRadius * 0.95;
+        pz = Math.sin(phase * 0.9 + actor.angle * 0.6) * pathRadius * 0.95;
+      } else if (actor.pathMode === "spiral") {
+        const swirl = 0.65 + 0.35 * Math.sin(phase * 0.35 + actor.angle);
+        px = Math.cos(phase + actor.angle) * pathRadius * swirl;
+        pz = Math.sin(phase + actor.angle) * pathRadius * swirl;
+      }
+
+      const verticalOsc =
+        0.45 + Math.sin(phase * (1.3 + movement * 0.45) + actor.angle * 0.8) * 0.55;
+      const lift =
+        (verticalOsc +
+          bin * (2.5 + movement * 0.8) +
+          audio.bass * (1.1 + movement * 0.7) +
+          beatPulse * (0.9 + movement * 0.8)) *
+        amp;
+      actor.root.position.x = px;
+      actor.root.position.z = pz;
+      actor.root.position.y = actor.basePos.y + lift;
+
+      const spin =
+        (0.15 +
+          spinControl * (0.85 + movement * 0.55) +
+          bin * (1.8 + movement * 1.15) +
+          audio.mid * (0.9 + movement * 0.85) +
+          audio.bpmConfidence * (0.8 + movement * 0.65)) *
+        dt;
+      actor.root.rotateOnAxis(actor.spinAxis, spin);
+
+      const pulse =
+        0.72 +
+        amp * (0.33 + movement * 0.15) +
+        bin * (0.7 + movement * 0.4) +
+        audio.high * (0.45 + movement * 0.2) +
+        beatPulse * (0.35 + movement * 0.25);
+      const actorScale = actor.baseScale * this.assetflowModelScale * pulse;
+      actor.root.scale.setScalar(Number.isFinite(actorScale) ? actorScale : actor.baseScale);
+
+      const tint = opts.assetflowUsePalette
+        ? this.colorAt(i / Math.max(1, this.assetflowActors.length - 1))
+        : this.white;
+      const tintHigh = this.colorAt((i + 0.35) / Math.max(1, this.assetflowActors.length));
+      actor.root.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.material) return;
+        const apply = (material: THREE.Material) => {
+          const standard = material as THREE.MeshStandardMaterial;
+          const hasTexture = Boolean(standard.map);
+          if (standard.color) {
+            if (hasTexture) standard.color.setRGB(1, 1, 1);
+            else standard.color.copy(tint).lerp(this.white, 0.2);
+          }
+          if (standard.emissive) {
+            if (hasTexture) standard.emissive.copy(tintHigh).multiplyScalar(0.25 + bin * 0.2);
+            else standard.emissive.copy(tintHigh);
+          }
+          if (standard.emissiveIntensity !== undefined) {
+            standard.emissiveIntensity = hasTexture
+              ? 0.15 + bin * 0.4 + audio.bass * 0.25
+              : 0.45 + bin * 1.2 + audio.bass * 0.45;
+          }
+        };
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(apply);
+        } else {
+          apply(mesh.material);
+        }
+      });
+    }
+
+    for (const layer of this.assetflowSprites) {
+      const bin = bins.length > 0 ? bins[Math.min(layer.bin, bins.length - 1)]! / 255 : 0;
+      const driftSpeed = layer.speed * (0.6 + bgDrift * 0.5 + audio.mid * 0.5);
+      const orbit = layer.phase + time * driftSpeed;
+      const radial =
+        layer.radius +
+        Math.sin(time * (0.45 + bgDrift * 0.25) + layer.phase) * (0.22 + bgDrift * 0.3);
+      layer.sprite.position.set(
+        Math.cos(orbit) * radial,
+        layer.baseY +
+          Math.sin(orbit * (0.35 + bgDrift * 0.22)) * (0.16 + bgDrift * 0.24) +
+          bin * 0.7,
+        Math.sin(orbit) * radial,
+      );
+      const scale = (6.2 + layer.radius * 0.6 + bin * 3 + audio.bass * 1.8) * spriteAmount;
+      layer.sprite.scale.setScalar(Number.isFinite(scale) ? scale : 3.4);
+      const mat = layer.sprite.material as THREE.SpriteMaterial;
+      mat.opacity = THREE.MathUtils.clamp(
+        0.08 + (0.14 + bin * 0.35 + audio.high * 0.2 + bgDrift * 0.08) * spriteAmount,
+        0,
+        1,
+      );
+      const spriteTint = opts.assetflowUsePalette ? this.colorAt(bin) : this.paletteThree[0];
+      mat.color.copy(spriteTint).multiplyScalar(0.95 + audio.mid * 0.25);
+      if (mat.map) {
+        mat.map.offset.x = (time * 0.018 * (1 + audio.centroid)) % 1;
+      }
+    }
+
+    if (this.assetflowBaseDisk) {
+      const mat = this.assetflowBaseDisk.material as THREE.MeshStandardMaterial;
+      mat.emissive.copy(this.paletteThree[2]).multiplyScalar(0.3 + audio.bass * 0.7);
+      this.assetflowBaseDisk.rotation.y += dt * (0.05 + audio.high * 0.08);
+    }
+    if (this.assetflowLight) {
+      this.assetflowLight.intensity = 2.1 + audio.bass * 2.4;
+      this.assetflowLight.color.copy(this.paletteThree[1]).lerp(this.paletteThree[2], audio.high);
+      this.assetflowLight.position.x = Math.sin(time * 0.55) * 2.2;
+      this.assetflowLight.position.z = Math.cos(time * 0.45) * 2.4;
+    }
+  }
+
   resize(w: number, h: number) {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -3998,5 +4551,26 @@ export class Scene {
       this.geoNebulaFloor.geometry.dispose();
       (this.geoNebulaFloor.material as THREE.Material).dispose();
     }
+    if (this.assetflowBaseDisk) {
+      this.assetflowBaseDisk.geometry.dispose();
+      (this.assetflowBaseDisk.material as THREE.Material).dispose();
+    }
+    for (const actor of this.assetflowActors) {
+      actor.root.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const material = mesh.material;
+        if (Array.isArray(material)) {
+          material.forEach((mat) => mat.dispose());
+        } else if (material) {
+          material.dispose();
+        }
+      });
+    }
+    for (const layer of this.assetflowSprites) {
+      layer.sprite.material.dispose();
+    }
+    for (const texture of this.assetflowTextures) texture.dispose();
   }
 }
