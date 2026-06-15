@@ -628,6 +628,8 @@ export function Analyser() {
           high: bands.high,
           centroid: bands.centroid,
           beat: bands.beat,
+          bpm: bands.bpm,
+          bpmConfidence: bands.bpmConfidence,
           pulse: bpmPulse,
           performance: s.performance || xrRuntime.active,
         });

@@ -29,6 +29,10 @@ describe("settingsStore randomize", () => {
     expect(state.assetflowMovement).toBe(0.7);
     expect(state.assetflowBackgroundDrift).toBe(1);
     expect(state.assetOverlayFx).toBe(false);
+    expect(state.crtFx).toBe(false);
+    expect(state.projectorFilmFx).toBe(false);
+    expect(state.crtScanlineIntensity).toBe(0.35);
+    expect(state.projectorFilmAmount).toBe(0.45);
   });
 
   it("keeps randomize scoped to post FX when view settings are disabled", async () => {

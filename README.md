@@ -28,6 +28,7 @@ Depending on your hardware you may need to tune performance via the options in s
 - Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, and Asset-Flow.
 - Beat-aware motion and camera behavior that reacts to energy, not just raw levels.
 - Works with microphone input or shared tab/system audio.
+- Retro post FX options including CRT scanline emulation and projector-film artifacts.
 
 ## Screenshots
 
@@ -94,6 +95,8 @@ Control panel additions:
 - `Monolith Brightness` slider in Monolith view settings for direct lighting/visibility control.
 - Asset-Flow controls for `Movement intensity`, `2D background amount`, and `2D background drift`.
 - Asset-Flow model motion is tuned for smoother 3D bounce with minimal lateral drift to avoid left/right flicker.
+- Asset-Flow layered 2D overlays now crossfade smoothly and bias transition timing toward detected beat intervals when BPM confidence is high.
+- New post FX filters: `CRT` (scanlines/curvature/vignette) and `Projector film` (dust, random scratches, jitter, flicker).
 
 Asset sources and licensing:
 
@@ -104,7 +107,7 @@ Asset sources and licensing:
 
 - FFT size, smoothing, gain, beat sensitivity
 - Camera drift and beat response controls
-- Post FX controls: bloom, chroma, grain, vignette, DOF, glitch, god rays, grading
+- Post FX controls: bloom, chroma, grain, vignette, DOF, glitch, god rays, grading, kaleidoscope, mirror, CRT, projector film
 - Post FX master pipeline bypass toggle
 - View-specific wireframe controls, plus a global wireframe toggle bound to the current view
 - Dedicated monolith brightness control
@@ -116,6 +119,7 @@ Asset sources and licensing:
 - Saves are stored in local storage as a growing list instead of a fixed five-slot bank.
 - The shortcut rail and settings panel both support previous/next/random/save/delete flows over the current save list.
 - Play Saves mode rotates through the current saved list automatically.
+- Added retro-focused built-ins: `CRT Arcade`, `Retro Broadcast`, `16mm Projector`, `Projector Grindhouse`, and `VHS Dream`.
 
 ## Tech Stack (Lower-Level Details)
 

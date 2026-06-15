@@ -108,6 +108,11 @@ describe("Shortcuts", () => {
     expect(secondCall).toHaveProperty("view");
   });
 
+  it("triggers randomize with R key", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true }));
+    expect(mocks.settingsStore.randomize).toHaveBeenCalledTimes(1);
+  });
+
   it("navigates to prev visual when Prev Visual button is clicked", () => {
     const prevButton = container.querySelector("button[aria-label='Prev Visual']");
     expect(prevButton).not.toBeNull();

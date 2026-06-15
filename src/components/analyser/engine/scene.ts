@@ -230,6 +230,7 @@ export class Scene {
   private assetflowBaseDisk?: THREE.Mesh;
   private assetflowLight?: THREE.PointLight;
   private assetflowAssetsRequested = false;
+  private assetflowBuildToken = 0;
   private assetflowModelScale = 1;
   private assetflowModelTemplates: Array<THREE.Object3D | undefined> = [];
 
@@ -260,6 +261,7 @@ export class Scene {
   cameraTarget = new THREE.Vector3();
   private orbitAngle = 0;
   private kick = 0;
+  private lastKickTime = -999;
   private lastBpmPhase = 0;
 
   constructor(width: number, height: number) {
@@ -2678,14 +2680,28 @@ export class Scene {
     // When BPM is locked: fire on the clock edge (phase wraps 1→0).
     // Fall back to raw audio.beat when BPM isn't confident yet.
     if (opts.cameraBeat) {
-      if (bpmConfident) {
-        if (bpmPhase < this.lastBpmPhase && this.lastBpmPhase > 0.5) this.kick = 1;
-      } else if (audio.beat) {
-        this.kick = 1;
+      const bpmKickAllowed =
+        bpmConfident && audio.bpmConfidence > 0.62 && audio.bpm >= 70 && audio.bpm <= 170;
+      const minKickGap = bpmKickAllowed
+        ? Math.max(0.2, Math.min(0.55, (60 / audio.bpm) * 0.7))
+        : 0.28;
+      const kickReady = time - this.lastKickTime >= minKickGap;
+
+      if (bpmKickAllowed) {
+        if (kickReady && bpmPhase < this.lastBpmPhase && this.lastBpmPhase > 0.5) {
+          this.kick = 1;
+          this.lastKickTime = time;
+        }
+      } else {
+        const fallbackBeatGate = audio.bass > 0.42 + audio.mid * 0.12;
+        if (kickReady && audio.beat && fallbackBeatGate) {
+          this.kick = 1;
+          this.lastKickTime = time;
+        }
       }
     }
     this.lastBpmPhase = bpmPhase;
-    this.kick *= Math.exp(-dt * 4.5);
+    this.kick *= Math.exp(-dt * 6.2);
     const beat = opts.cameraBeat ? opts.cameraBeatAmount : 0;
 
     // mouse smoothing (always run so it works in any view)
@@ -4014,6 +4030,7 @@ export class Scene {
   }
 
   private buildAssetflow() {
+    this.assetflowBuildToken += 1;
     this.assetflowAssetsRequested = false;
     for (const actor of this.assetflowActors) {
       actor.placeholder.geometry.dispose();
@@ -4064,18 +4081,7 @@ export class Scene {
       const basePos = new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
       root.position.copy(basePos);
 
-      const placeholderGeometry =
-        i % 6 === 0
-          ? new THREE.IcosahedronGeometry(0.5, 1)
-          : i % 6 === 1
-            ? new THREE.BoxGeometry(0.72, 0.72, 0.72)
-            : i % 6 === 2
-              ? new THREE.OctahedronGeometry(0.54, 1)
-              : i % 6 === 3
-                ? new THREE.DodecahedronGeometry(0.52, 0)
-                : i % 6 === 4
-                  ? new THREE.ConeGeometry(0.44, 0.95, 6)
-                  : new THREE.TetrahedronGeometry(0.62, 0);
+      const placeholderGeometry = this.createAssetflowFallbackGeometry(i);
       const placeholder = new THREE.Mesh(
         placeholderGeometry,
         new THREE.MeshStandardMaterial({
@@ -4102,7 +4108,23 @@ export class Scene {
       });
     }
 
-    this.requestAssetflowAssets();
+    this.requestAssetflowAssets(this.assetflowBuildToken);
+  }
+
+  private createAssetflowFallbackGeometry(index: number) {
+    const variant = index % 12;
+    if (variant === 0) return new THREE.IcosahedronGeometry(0.52, 1);
+    if (variant === 1) return new THREE.TorusKnotGeometry(0.34, 0.11, 96, 14, 2, 3);
+    if (variant === 2) return new THREE.OctahedronGeometry(0.56, 1);
+    if (variant === 3) return new THREE.DodecahedronGeometry(0.5, 0);
+    if (variant === 4) return new THREE.ConeGeometry(0.44, 0.95, 7);
+    if (variant === 5) return new THREE.TetrahedronGeometry(0.62, 0);
+    if (variant === 6) return new THREE.CylinderGeometry(0.34, 0.56, 0.92, 8, 1);
+    if (variant === 7) return new THREE.SphereGeometry(0.52, 18, 14);
+    if (variant === 8) return new THREE.TorusGeometry(0.44, 0.16, 14, 24);
+    if (variant === 9) return new THREE.CylinderGeometry(0.08, 0.56, 1.08, 5, 1);
+    if (variant === 10) return new THREE.ConeGeometry(0.5, 0.96, 3);
+    return new THREE.TorusKnotGeometry(0.28, 0.09, 90, 12, 3, 5);
   }
 
   private normalizeAssetModel(model: THREE.Object3D, targetSize: number) {
@@ -4128,7 +4150,7 @@ export class Scene {
     });
   }
 
-  private requestAssetflowAssets() {
+  private requestAssetflowAssets(buildToken: number) {
     if (this.assetflowAssetsRequested) return;
     this.assetflowAssetsRequested = true;
 
@@ -4154,6 +4176,7 @@ export class Scene {
       gltfLoader.load(
         toPublicUrl(path),
         (gltf) => {
+          if (buildToken !== this.assetflowBuildToken) return;
           const model = gltf.scene;
           this.normalizeAssetModel(model, 1.6);
           this.assetflowModelTemplates[idx] = model;
@@ -4162,6 +4185,74 @@ export class Scene {
         undefined,
         () => {
           // Keep fallback meshes when optional third-party GLB files are missing.
+        },
+      );
+    });
+
+    const spriteImagePaths = [
+      "assets/animations/svg/layer-wave.svg",
+      "assets/animations/svg/layer-flare.svg",
+      "assets/animations/svg/layer-rings.svg",
+      "assets/animations/svg/layer-scanlines.svg",
+      "assets/animations/svg/layer-diagonal.svg",
+      "assets/animations/svg/layer-circuit.svg",
+      "assets/animations/svg/layer-spiral.svg",
+      "assets/animations/svg/layer-starburst.svg",
+      "assets/animations/svg/layer-chevrons.svg",
+      "assets/animations/svg/layer-grid-hex.svg",
+      "assets/animations/svg/layer-halftone.svg",
+      "assets/animations/svg/layer-noise-dots.svg",
+      "assets/textures/overlay-grid.svg",
+      "assets/textures/overlay-circles.svg",
+      "assets/textures/overlay-diag-grid.svg",
+      "assets/textures/overlay-hud.svg",
+    ];
+    const textureLoader = new THREE.TextureLoader();
+    spriteImagePaths.forEach((path, idx) => {
+      textureLoader.load(
+        toPublicUrl(path),
+        (texture) => {
+          if (buildToken !== this.assetflowBuildToken) {
+            texture.dispose();
+            return;
+          }
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.generateMipmaps = false;
+          texture.needsUpdate = true;
+          this.assetflowTextures.push(texture);
+
+          const sprite = new THREE.Sprite(
+            new THREE.SpriteMaterial({
+              map: texture,
+              transparent: true,
+              depthWrite: false,
+              depthTest: false,
+              opacity: 0.35,
+              blending: THREE.AdditiveBlending,
+            }),
+          );
+          sprite.renderOrder = -10;
+          const layer = idx % 8;
+          const band = Math.floor(idx / 8);
+          const baseY = -1.35 + layer * 0.26 + band * 0.1;
+          sprite.position.set(0, baseY, 0);
+          this.assetflowGroup.add(sprite);
+          this.assetflowSprites.push({
+            sprite,
+            phase: idx * Math.PI * 0.27,
+            radius: 3.2 + layer * 0.95 + band * 0.7,
+            speed: 0.12 + layer * 0.028 + band * 0.05,
+            bin: Math.min(96, 6 + idx * 6),
+            baseY,
+          });
+        },
+        undefined,
+        () => {
+          // Keep procedural sprite layers when optional image files are unavailable.
         },
       );
     });
@@ -4415,7 +4506,8 @@ export class Scene {
           beatPulse * (0.46 + movement * 0.34)) *
         amp;
       const targetY = actor.basePos.y + lift;
-      actor.root.position.y += (targetY - actor.root.position.y) * Math.min(1, dt * (3.2 + activity * 2.6));
+      actor.root.position.y +=
+        (targetY - actor.root.position.y) * Math.min(1, dt * (3.2 + activity * 2.6));
 
       const spin =
         (0.15 +

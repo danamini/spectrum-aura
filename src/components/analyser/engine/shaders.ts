@@ -92,6 +92,204 @@ export const TiltShiftShader = {
   `,
 };
 
+export const KaleidoscopeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    sides: { value: 6.0 },
+    angle: { value: 0.0 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float sides;
+    uniform float angle;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 center = vec2(0.5, 0.5);
+      vec2 p = vUv - center;
+      float r = length(p);
+      float a = atan(p.y, p.x) + angle;
+      float n = max(2.0, sides);
+      float seg = 6.28318530718 / n;
+      a = mod(a, seg);
+      a = abs(a - seg * 0.5);
+      vec2 uv = center + vec2(cos(a), sin(a)) * r;
+      uv = clamp(uv, 0.0, 1.0);
+      gl_FragColor = texture2D(tDiffuse, uv);
+    }
+  `,
+};
+
+export const MirrorShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    mode: { value: 0.0 }, // 0=horizontal, 1=vertical, 2=quad
+    offset: { value: 0.0 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float mode;
+    uniform float offset;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 center = vec2(0.5 + offset, 0.5 + offset);
+      vec2 uv = vUv;
+      if (mode < 0.5) {
+        uv.x = center.x + abs(vUv.x - center.x);
+      } else if (mode < 1.5) {
+        uv.y = center.y + abs(vUv.y - center.y);
+      } else {
+        uv.x = center.x + abs(vUv.x - center.x);
+        uv.y = center.y + abs(vUv.y - center.y);
+      }
+      uv = clamp(uv, 0.0, 1.0);
+      gl_FragColor = texture2D(tDiffuse, uv);
+    }
+  `,
+};
+
+export const CRTCShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(1920, 1080) },
+    scanlineIntensity: { value: 0.35 },
+    curvature: { value: 0.22 },
+    vignette: { value: 0.45 },
+    time: { value: 0.0 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float scanlineIntensity;
+    uniform float curvature;
+    uniform float vignette;
+    uniform float time;
+    varying vec2 vUv;
+
+    vec2 crtWarp(vec2 uv, float amount) {
+      vec2 p = uv * 2.0 - 1.0;
+      vec2 p2 = p * p;
+      p.x *= 1.0 + p2.y * amount;
+      p.y *= 1.0 + p2.x * amount;
+      return p * 0.5 + 0.5;
+    }
+
+    void main() {
+      vec2 uv = crtWarp(vUv, curvature);
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+      }
+
+      float px = 1.0 / max(1.0, resolution.x);
+      vec3 col;
+      col.r = texture2D(tDiffuse, uv + vec2(px * 1.2, 0.0)).r;
+      col.g = texture2D(tDiffuse, uv).g;
+      col.b = texture2D(tDiffuse, uv - vec2(px * 1.2, 0.0)).b;
+
+      float scan = 0.5 + 0.5 * sin((uv.y * resolution.y) * 1.18 + time * 22.0);
+      col *= 1.0 - scan * scanlineIntensity;
+
+      float mask = 0.985 + 0.015 * sin((uv.x * resolution.x) * 3.14159);
+      col *= mask;
+
+      float d = distance(uv, vec2(0.5));
+      col *= 1.0 - smoothstep(0.45, 0.85, d) * vignette;
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+};
+
+export const ProjectorFilmShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    amount: { value: 0.45 },
+    jitter: { value: 0.25 },
+    flicker: { value: 0.35 },
+    time: { value: 0.0 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float amount;
+    uniform float jitter;
+    uniform float flicker;
+    uniform float time;
+    varying vec2 vUv;
+
+    float hash(vec2 p) {
+      p = fract(p * vec2(123.34, 456.21));
+      p += dot(p, p + 34.45);
+      return fract(p.x * p.y);
+    }
+
+    float lineScratch(vec2 uv, float xCenter, float width, float drift, float strength) {
+      float x = uv.x + drift * (uv.y - 0.5);
+      float d = abs(x - xCenter);
+      float core = 1.0 - smoothstep(width, width * 4.0, d);
+      float breakup = smoothstep(0.25, 1.0, hash(vec2(floor(uv.y * 420.0), xCenter * 971.0)));
+      return core * breakup * strength;
+    }
+
+    float blotch(vec2 uv, vec2 center, float radius, float feather) {
+      float d = distance(uv, center);
+      return 1.0 - smoothstep(radius, radius + feather, d);
+    }
+
+    void main() {
+      float frame = floor(time * 24.0);
+      float gate = step(0.89, hash(vec2(frame, 0.17)));
+      float yJitter = (hash(vec2(frame, 0.73)) - 0.5) * jitter * gate * 0.035;
+      float xJitter = (hash(vec2(frame, 0.31)) - 0.5) * jitter * gate * 0.02;
+      vec2 uv = clamp(vUv + vec2(xJitter, yJitter), 0.0, 1.0);
+
+      vec4 base = texture2D(tDiffuse, uv);
+
+      float flick = 1.0 + (hash(vec2(frame, 0.53)) - 0.5) * flicker * 0.28;
+      base.rgb *= flick;
+
+      // Fine dust specks (both bright and dark), randomized per frame.
+      float dustSeed = hash(vec2(floor(uv * 1024.0) + frame * 0.73));
+      float brightDust = step(0.9974, dustSeed);
+      float darkDust = step(0.9982, hash(vec2(floor(uv * 840.0) + frame * 1.13)));
+      base.rgb = mix(base.rgb, vec3(1.0, 0.96, 0.86), brightDust * amount * 0.9);
+      base.rgb *= 1.0 - darkDust * amount * 0.42;
+
+      // Sparse, organic vertical/diagonal scratches (not periodic grid lines).
+      float s1x = hash(vec2(frame, 2.1));
+      float s2x = hash(vec2(frame * 0.37, 5.7));
+      float s3x = hash(vec2(frame * 0.19, 8.3));
+      float s1 = lineScratch(uv, s1x, 0.0018, (hash(vec2(frame, 12.4)) - 0.5) * 0.09, 0.8);
+      float s2 = lineScratch(uv, s2x, 0.0012, (hash(vec2(frame, 15.7)) - 0.5) * 0.13, 0.55);
+      float s3 = lineScratch(uv, s3x, 0.0024, (hash(vec2(frame, 18.9)) - 0.5) * 0.06, 0.45);
+      float scratchMix = (s1 + s2 + s3) * amount;
+      base.rgb = mix(base.rgb, vec3(0.92, 0.88, 0.76), scratchMix * 0.45);
+
+      // Occasional emulsion blotches / dirt clumps.
+      float blotchGate = step(0.78, hash(vec2(frame * 0.21, 4.9)));
+      vec2 c1 = vec2(hash(vec2(frame, 22.0)), hash(vec2(frame, 24.0)));
+      vec2 c2 = vec2(hash(vec2(frame * 0.43, 26.0)), hash(vec2(frame * 0.61, 28.0)));
+      float b1 = blotch(uv, c1, 0.018 + hash(vec2(frame, 30.0)) * 0.04, 0.03);
+      float b2 = blotch(uv, c2, 0.012 + hash(vec2(frame, 32.0)) * 0.03, 0.025);
+      float blotchMix = (b1 * 0.65 + b2 * 0.45) * blotchGate * amount;
+      base.rgb *= 1.0 - blotchMix * 0.35;
+
+      // Rare frame-burn / hot edge flash.
+      float burnGate = step(0.965, hash(vec2(frame * 0.12, 44.0)));
+      float edge = smoothstep(0.0, 0.08, uv.x) + smoothstep(0.0, 0.08, 1.0 - uv.x);
+      edge += smoothstep(0.0, 0.08, uv.y) + smoothstep(0.0, 0.08, 1.0 - uv.y);
+      base.rgb += vec3(1.0, 0.62, 0.22) * edge * burnGate * amount * 0.08;
+
+      gl_FragColor = vec4(base.rgb, base.a);
+    }
+  `,
+};
+
 export const GodRaysShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -266,18 +464,30 @@ export const LensFlareShader = {
 export const AssetOverlayShader = {
   uniforms: {
     tDiffuse: { value: null },
-    tOverlay: { value: null },
+    tOverlayA: { value: null },
+    tOverlayB: { value: null },
+    tOverlayC: { value: null },
+    tOverlayA2: { value: null },
+    tOverlayB2: { value: null },
+    tOverlayC2: { value: null },
     amount: { value: 0.6 },
     pulse: { value: 0.0 },
     time: { value: 0.0 },
+    transition: { value: 1.0 },
   },
   vertexShader: ChromaticAberrationShader.vertexShader,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform sampler2D tOverlay;
+    uniform sampler2D tOverlayA;
+    uniform sampler2D tOverlayB;
+    uniform sampler2D tOverlayC;
+    uniform sampler2D tOverlayA2;
+    uniform sampler2D tOverlayB2;
+    uniform sampler2D tOverlayC2;
     uniform float amount;
     uniform float pulse;
     uniform float time;
+    uniform float transition;
     varying vec2 vUv;
 
     vec3 screenBlend(vec3 base, vec3 blend) {
@@ -286,11 +496,28 @@ export const AssetOverlayShader = {
 
     void main() {
       vec4 base = texture2D(tDiffuse, vUv);
-      vec2 uvA = vec2(fract(vUv.x + time * 0.03), fract(vUv.y + time * 0.011));
-      vec2 uvB = vec2(fract(vUv.x * 1.13 - time * 0.017), fract(vUv.y * 1.08 + time * 0.009));
-      vec3 layerA = texture2D(tOverlay, uvA).rgb;
-      vec3 layerB = texture2D(tOverlay, uvB).rgb;
-      vec3 overlay = mix(layerA, layerB, 0.5) * (0.55 + pulse * 0.95);
+      vec2 uvA = vec2(fract(vUv.x * 1.12 + time * 0.028), fract(vUv.y * 1.06 + time * 0.012));
+      vec2 uvB = vec2(fract(vUv.x * 0.84 - time * 0.02), fract(vUv.y * 1.22 + time * 0.015));
+      vec2 uvC = vec2(fract(vUv.x * 1.35 + time * 0.011), fract(vUv.y * 0.78 - time * 0.024));
+
+      vec3 layerA = texture2D(tOverlayA, uvA).rgb;
+      vec3 layerB = texture2D(tOverlayB, uvB).rgb;
+      vec3 layerC = texture2D(tOverlayC, uvC).rgb;
+      vec3 layerA2 = texture2D(tOverlayA2, uvA).rgb;
+      vec3 layerB2 = texture2D(tOverlayB2, uvB).rgb;
+      vec3 layerC2 = texture2D(tOverlayC2, uvC).rgb;
+
+      vec3 layerAOut = mix(layerA, layerA2, transition);
+      vec3 layerBOut = mix(layerB, layerB2, transition);
+      vec3 layerCOut = mix(layerC, layerC2, transition);
+
+      float wobble = 0.5 + 0.5 * sin(time * 0.43 + (vUv.x + vUv.y) * 6.2831);
+      vec3 overlay = mix(
+        mix(layerAOut, layerBOut, 0.5 + wobble * 0.25),
+        layerCOut,
+        0.35 + wobble * 0.2
+      );
+      overlay *= 0.5 + pulse * 1.05;
       vec3 color = screenBlend(base.rgb, overlay * amount);
       gl_FragColor = vec4(color, base.a);
     }

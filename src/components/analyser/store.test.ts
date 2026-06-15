@@ -155,6 +155,12 @@ describe("analyser store utility functions", () => {
     expect(state.assetflowBackgroundDrift).toBe(1);
     expect(state.assetOverlayFx).toBe(false);
     expect(state.assetOverlayAmount).toBe(0.6);
+    expect(state.kaleidoscope).toBe(false);
+    expect(state.mirrorFx).toBe(false);
+    expect(state.crtFx).toBe(false);
+    expect(state.projectorFilmFx).toBe(false);
+    expect(state.crtScanlineIntensity).toBe(0.35);
+    expect(state.projectorFilmAmount).toBe(0.45);
   });
 
   it("keeps randomize scoped to post fx when view settings are disabled", async () => {
@@ -223,6 +229,23 @@ describe("analyser store utility functions", () => {
     // All amplitude values should be above minimum
     expect(state.rippleAmplitude).toBeGreaterThanOrEqual(0.5);
     expect(state.datastreamAmplitude).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("includes retro presets and applies their core flags", async () => {
+    const { settingsStore, PRESETS } = await import("./store");
+
+    expect(PRESETS["CRT Arcade"]).toBeDefined();
+    expect(PRESETS["16mm Projector"]).toBeDefined();
+    expect(PRESETS["VHS Dream"]).toBeDefined();
+
+    settingsStore.applyPreset("CRT Arcade");
+    let state = settingsStore.get();
+    expect(state.crtFx).toBe(true);
+    expect(state.projectorFilmFx).toBe(false);
+
+    settingsStore.applyPreset("16mm Projector");
+    state = settingsStore.get();
+    expect(state.projectorFilmFx).toBe(true);
   });
 
   it("reset restores default settings", async () => {

@@ -239,6 +239,33 @@ export function Shortcuts() {
     loadSaveAtIndex(next);
   };
 
+  const actionsRef = useRef({
+    doRandomize,
+    doToggleView,
+    doToggleSlotCycle,
+    doCycleSave,
+    doRandomSave,
+    doFullscreen,
+    doToggleSettings,
+    doStopAudio,
+    doToggleHints,
+    doSaveSlot,
+    doSlot,
+  });
+  actionsRef.current = {
+    doRandomize,
+    doToggleView,
+    doToggleSlotCycle,
+    doCycleSave,
+    doRandomSave,
+    doFullscreen,
+    doToggleSettings,
+    doStopAudio,
+    doToggleHints,
+    doSaveSlot,
+    doSlot,
+  };
+
   useEffect(() => {
     const slotIndexFromCode = (code: string): number | null => {
       const d = /^Digit([1-5])$/.exec(code)?.[1] ?? /^Numpad([1-5])$/.exec(code)?.[1];
@@ -262,55 +289,55 @@ export function Shortcuts() {
 
       const slotIdx = slotIndexFromEvent(e);
       if (slotIdx !== null) {
-        if (e.shiftKey) doSaveSlot(slotIdx);
-        else doSlot(slotIdx);
+        if (e.shiftKey) actionsRef.current.doSaveSlot(slotIdx);
+        else actionsRef.current.doSlot(slotIdx);
         e.preventDefault();
         e.stopPropagation();
         return;
       }
 
       if (k === "r") {
-        doRandomize();
+        actionsRef.current.doRandomize();
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "b") {
-        doToggleView(-1);
+        actionsRef.current.doToggleView(-1);
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "v") {
-        doToggleView(1);
+        actionsRef.current.doToggleView(1);
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "a") {
-        doToggleSlotCycle();
+        actionsRef.current.doToggleSlotCycle();
         e.preventDefault();
         e.stopPropagation();
       } else if (e.key === "[") {
-        doCycleSave(-1);
+        actionsRef.current.doCycleSave(-1);
         e.preventDefault();
         e.stopPropagation();
       } else if (e.key === "]") {
-        doCycleSave(1);
+        actionsRef.current.doCycleSave(1);
         e.preventDefault();
         e.stopPropagation();
       } else if (e.key === "\\") {
-        doRandomSave();
+        actionsRef.current.doRandomSave();
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "f") {
-        doFullscreen();
+        actionsRef.current.doFullscreen();
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "s") {
-        doToggleSettings();
+        actionsRef.current.doToggleSettings();
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "x") {
-        doStopAudio();
+        actionsRef.current.doStopAudio();
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "g") {
-        doToggleHints();
+        actionsRef.current.doToggleHints();
         e.preventDefault();
         e.stopPropagation();
       }

@@ -83,6 +83,10 @@ Recent controls:
 - `assetflowBackgroundDrift`: Speed/intensity control for Asset-Flow's layered 2D background drift.
 - `assetflowSpriteAmount`: Controls layered 2D background presence/intensity in Asset-Flow.
 - Asset-Flow actor motion is intentionally biased toward vertical movement with smoothed horizontal follow to prevent visual left/right flicker.
+- `kaleidoscope` / `kaleidoscopeSides` / `kaleidoscopeAngle`: mirrored radial wedge post-FX pass.
+- `mirrorFx` / `mirrorMode` / `mirrorOffset`: directional mirror post-FX pass.
+- `crtFx` / `crtScanlineIntensity` / `crtCurvature` / `crtVignette`: retro CRT post-FX pass.
+- `projectorFilmFx` / `projectorFilmAmount` / `projectorFilmJitter` / `projectorFilmFlicker`: random film projector artifact pass.
 
 **Key Settings Limits**:
 - Amplitude floor: 0.5 (MIN_VIEW_AMPLITUDE)
@@ -105,6 +109,9 @@ Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bo
 - `S`: Toggle settings panel
 - `1` to `5`: Load save slot
 - `Shift+1` to `Shift+5`: Save to slot
+
+Shortcut reliability note:
+- Keyboard shortcut handlers in `Shortcuts.tsx` dispatch through a live `actionsRef` so keys like `R`/`B` always execute the latest callbacks and don't drift when React state changes.
 
 Shortcut rail clusters:
 - Visual cluster: view count, Prev Visual (B), Randomize, `inc`, `fx`, Next Visual (V)

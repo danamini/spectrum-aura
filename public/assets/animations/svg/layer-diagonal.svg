@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="black" fill-opacity="0"/>
+  <g stroke="#7fd8ff" stroke-opacity="0.26" stroke-width="6">
+    <path d="M-64 480L480-64"/>
+    <path d="M-32 512L512-32"/>
+    <path d="M0 512L512 0"/>
+    <path d="M32 512L512 32"/>
+    <path d="M64 512L512 64"/>
+    <path d="M96 512L512 96"/>
+    <path d="M128 512L512 128"/>
+    <path d="M160 512L512 160"/>
+    <path d="M192 512L512 192"/>
+    <path d="M224 512L512 224"/>
+  </g>
+  <g stroke="#cdf7ff" stroke-opacity="0.32" stroke-width="3">
+    <path d="M0 96L416 512"/>
+    <path d="M0 192L320 512"/>
+    <path d="M0 288L224 512"/>
+  </g>
+</svg>
