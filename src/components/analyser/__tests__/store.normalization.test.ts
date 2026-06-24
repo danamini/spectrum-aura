@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { installStorageMock } from "./test-helpers";
+import { installStorageMock } from "./helpers/test-helpers";
 
 const MIN_VIEW_AMPLITUDE = 0.5;
 const BLOOM_STRENGTH_MAX_NORMAL = 0.25;
@@ -14,7 +14,7 @@ describe("settingsStore normalization", () => {
   });
 
   it("enforces minimum amplitude floor for reactive views", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       rippleAmplitude: 0,
@@ -38,7 +38,7 @@ describe("settingsStore normalization", () => {
   });
 
   it("clamps vignette amount to supported bounds", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({ vignetteAmount: 0.01 });
     expect(settingsStore.get().vignetteAmount).toBe(VIGNETTE_AMOUNT_MIN);
@@ -48,7 +48,7 @@ describe("settingsStore normalization", () => {
   });
 
   it("clamps the new post-fx control ranges", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       trailDecay: 0.2,
@@ -100,7 +100,7 @@ describe("settingsStore normalization", () => {
   });
 
   it("caps bloom strength unless extreme mode is enabled", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({ bloomExtreme: false, bloomStrength: 0.9 });
     expect(settingsStore.get().bloomStrength).toBe(BLOOM_STRENGTH_MAX_NORMAL);
@@ -110,7 +110,7 @@ describe("settingsStore normalization", () => {
   });
 
   it("clears activePreset on manual edits", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.applyPreset("Cinematic");
     expect(settingsStore.get().activePreset).toBe("Cinematic");
@@ -120,7 +120,7 @@ describe("settingsStore normalization", () => {
   });
 
   it("retains activePreset only when explicitly passed", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({ activePreset: "Manual" });
     expect(settingsStore.get().activePreset).toBe("Manual");
@@ -130,7 +130,7 @@ describe("settingsStore normalization", () => {
   });
 
   it("reset restores baseline defaults", async () => {
-    const { DEFAULT_SETTINGS, settingsStore } = await import("./store");
+    const { DEFAULT_SETTINGS, settingsStore } = await import("../store");
 
     settingsStore.set({
       view: "soundwall",

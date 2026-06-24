@@ -78,6 +78,11 @@ For shared tab/system audio in Chrome:
 - `S` toggle settings panel
 - `X` reset the current audio source selection
 - `N` toggle stats panel
+- `T` beat tap (sync bar grid to music)
+- `⇧T` downbeat tap (align phrase to 1/16)
+- `M` toggle BPM & bar grid overlay
+- `L` toggle latency HUD
+- `C` toggle music-reactive view cycle (every 4 bars)
 
 Bottom shortcut rail:
 
@@ -144,7 +149,15 @@ npm run dev
 
 Default local URL:
 
-- http://localhost:5173
+- http://localhost:6789
+
+### Debug in Cursor / VS Code
+
+1. Install the **Debugger for Chrome** extension (recommended via `.vscode/extensions.json`).
+2. Run and Debug → **Launch Chrome (Spectrum Aura)**.
+3. Use the audio picker in the Chrome window (not Cursor's Simple Browser preview — it cannot access the microphone).
+
+Audio capture requires `http://localhost:6789` (secure context). Opening via a LAN IP like `192.168.x.x` will block mic/tab audio APIs.
 
 The dev server supports hot module reloading for rapid iteration.
 
@@ -169,11 +182,11 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
 
 ### Testing conventions
 
-- Keep tests beside the code they validate (for example `store.*.test.ts` near `store.ts`, engine unit tests in `engine/`).
-- Prefer focused suites over one large test file: split by concern such as normalization, slots, and randomization.
-- Use deterministic tests for stateful logic (`vi.resetModules()`, stable `localStorage` mocks, controlled random values).
-- Test behavior through public APIs instead of implementation details.
-- For every new settings field, add both default-state coverage and at least one behavior test.
+- Tests live in `__tests__/` folders (`analyser/__tests__/`, `analyser/engine/__tests__/`)
+- Prefer focused suites: normalization, slots, sync invariants, engine units
+- Use deterministic tests for stateful logic (`vi.resetModules()`, stable `localStorage` mocks)
+- Test behavior through public APIs (`SongClock`, `settingsStore`, `BPMDetector`)
+- For sync/timing changes, extend `sync-invariants.test.ts`
 
 ### Project Layout
 
@@ -181,15 +194,15 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
 - `src/main.tsx`: Browser entry point
 - `src/components/analyser/`: UI and interaction layer
   - `store.ts`: Settings state management
-	- `store.normalization.test.ts`: Settings guardrails and normalization rules
-	- `store.randomize.test.ts`: Randomize scope and tuning behavior
-	- `store.slots.test.ts`: Save-list persistence, compatibility, and dynamic append/remove behavior
-	- `test-helpers.ts`: Shared test fixtures
-  - `Analyser.tsx`: Canvas orchestration
+  - `Analyser.tsx`: Canvas orchestration + SongClock wiring
+  - `BarTimingHud.tsx`: BPM / bar grid HUD
   - `ControlPanel.tsx`: Settings UI
-	- `visuals.ts`: Canonical visual registry for labels, ordering, and view metadata
-	- `engine/`: Audio analysis, 3D scene, post-processing, engine unit tests
-- `docs/`: Technical documentation
+  - `visuals.ts`: Canonical visual registry
+  - `__tests__/`: Store, shortcuts, regression tests
+  - `engine/`: Audio, SongClock, scene, post-processing
+  - `engine/__tests__/`: Engine and sync invariant tests
+- `AGENTS.md`: Guide for Cursor / Claude coding agents
+- `docs/`: Technical documentation (see [docs/README.md](docs/README.md))
 - `docs/DEVELOPMENT.md`: Architecture and contribution guide
 
 ## Deploy
@@ -200,8 +213,14 @@ Build static assets and publish `dist/` to any static host:
 npm run build
 ```
 
-## Signal Processing Deep Dive
+## Signal Processing and Sync
 
-Detailed notes on FFT, bass energy extraction, beat detection, and BPM estimation:
+Technical documentation (equations, algorithms, latency):
 
-- [FFT and beat detection doc](docs/fft-and-beat-detection.md)
+- [Documentation index](docs/README.md)
+- [Audio analysis pipeline](docs/audio-analysis-pipeline.md) — FFT, BeatMatcher, BPMDetector
+- [Song clock and sync](docs/song-clock-and-sync.md) — bar grid, taps, view cycle
+- [Rendering and latency](docs/rendering-and-latency.md) — rAF loop, timing budgets
+- [FFT overview](docs/fft-and-beat-detection.md) — short map with links
+
+Agents: [AGENTS.md](AGENTS.md)

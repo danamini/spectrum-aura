@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ViewMode } from "./visuals";
+import { VISUALS } from "./visuals";
 import defaultSaves from "./default-saves.json";
 
 export type { ViewMode } from "./visuals";
@@ -243,8 +244,14 @@ export type Settings = {
   /** Seconds to keep each slot before advancing (only used when `slotCycleMode`). */
   slotCycleSeconds: number;
 
+  /** Music-reactive random view cycling — switches every 4 bars (16 beats in 4/4). */
+  viewCycleMode: boolean;
+  /** When switching views via cycle, also randomize post FX (and view settings if enabled). */
+  viewCycleRandomize: boolean;
+
   // experimental features
-  showBPM: boolean; // show BPM overlay when detected
+  showBPM: boolean; // show BPM & bar grid in Audio panel
+  showLatency: boolean; // show audio→UI latency HUD
 };
 
 /** Max bloom strength while "Extreme bloom" is off; higher values need extreme mode. */
@@ -433,7 +440,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mirrorOffset: 0,
   crtFx: false,
   crtScanlineIntensity: 0.35,
-  crtCurvature: 0.22,
+  crtCurvature: 0.08,
   crtVignette: 0.45,
   projectorFilmFx: false,
   projectorFilmAmount: 0.45,
@@ -460,7 +467,11 @@ export const DEFAULT_SETTINGS: Settings = {
   slotCycleMode: false,
   slotCycleSeconds: 22,
 
+  viewCycleMode: false,
+  viewCycleRandomize: true,
+
   showBPM: true,
+  showLatency: true,
 };
 
 export const PRESETS: Record<string, Partial<Settings>> = {
@@ -555,7 +566,7 @@ export const PRESETS: Record<string, Partial<Settings>> = {
     vignetteAmount: 1.12,
     crtFx: true,
     crtScanlineIntensity: 0.62,
-    crtCurvature: 0.28,
+    crtCurvature: 0.1,
     crtVignette: 0.52,
     projectorFilmFx: false,
     mirrorFx: false,
@@ -582,7 +593,7 @@ export const PRESETS: Record<string, Partial<Settings>> = {
     vignetteAmount: 1.08,
     crtFx: true,
     crtScanlineIntensity: 0.48,
-    crtCurvature: 0.18,
+    crtCurvature: 0.1,
     crtVignette: 0.38,
     projectorFilmFx: false,
     mirrorFx: false,
@@ -665,7 +676,7 @@ export const PRESETS: Record<string, Partial<Settings>> = {
     vignetteAmount: 1.16,
     crtFx: true,
     crtScanlineIntensity: 0.42,
-    crtCurvature: 0.14,
+    crtCurvature: 0.1,
     crtVignette: 0.34,
     projectorFilmFx: true,
     projectorFilmAmount: 0.62,
@@ -812,7 +823,7 @@ function normalizePostFxRanges(settings: Settings): Settings {
     kaleidoscopeAngle: Math.max(-Math.PI, Math.min(Math.PI, settings.kaleidoscopeAngle)),
     mirrorOffset: Math.max(-0.45, Math.min(0.45, settings.mirrorOffset)),
     crtScanlineIntensity: Math.max(0, Math.min(1, settings.crtScanlineIntensity)),
-    crtCurvature: Math.max(0, Math.min(0.8, settings.crtCurvature)),
+    crtCurvature: Math.max(0, Math.min(0.1, settings.crtCurvature)),
     crtVignette: Math.max(0, Math.min(1, settings.crtVignette)),
     projectorFilmAmount: Math.max(0, Math.min(1.5, settings.projectorFilmAmount)),
     projectorFilmJitter: Math.max(0, Math.min(1, settings.projectorFilmJitter)),
@@ -1032,7 +1043,7 @@ export const settingsStore = {
       mirrorOffset: r(-0.22, 0.22),
       crtFx: b(0.2),
       crtScanlineIntensity: r(0.15, 0.8),
-      crtCurvature: r(0.05, 0.45),
+      crtCurvature: r(0.02, 0.1),
       crtVignette: r(0.2, 0.8),
       projectorFilmFx: b(0.22),
       projectorFilmAmount: r(0.2, 1.0),
@@ -1196,6 +1207,20 @@ export const settingsStore = {
       ...postFxPatch,
     });
     emit();
+  },
+  cycleRandomView: () => {
+    const current = state.view;
+    const ids = VISUALS.map((v) => v.id);
+    if (ids.length <= 1) return;
+    let next = current;
+    while (next === current) {
+      next = ids[Math.floor(Math.random() * ids.length)]!;
+    }
+    state = normalizeSettings({ ...state, view: next, activePreset: null });
+    emit();
+    if (state.viewCycleRandomize) {
+      settingsStore.randomize();
+    }
   },
   applyPreset: (name: keyof typeof PRESETS) => {
     state = normalizeSettings({ ...state, ...PRESETS[name], activePreset: name as string });

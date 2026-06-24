@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS } from "./visuals";
+import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS } from "../visuals";
 
 describe("visual registry", () => {
   it("keeps runtime visual order and metadata in one place", () => {

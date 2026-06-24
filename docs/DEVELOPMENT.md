@@ -6,51 +6,62 @@ This guide covers the architecture, key concepts, and development workflows for 
 
 ```
 src/
-├── App.tsx                          # Root component
-├── main.tsx                         # Entry point
+├── App.tsx
+├── main.tsx
 ├── components/
 │   └── analyser/
-│       ├── Analyser.tsx            # Main 3D canvas + controls orchestrator
-│       ├── ControlPanel.tsx        # Settings UI (sliders, toggles, dropdowns)
-│       ├── Shortcuts.tsx           # Keyboard handler + grouped shortcut rail
-│       ├── store.ts                # Settings state, presets, save list
-│       ├── visuals.ts              # Canonical visual registry
-│       ├── visuals/                # Optional runtime visual manifests (*.visual.ts)
-│       ├── store.normalization.test.ts
-│       ├── store.randomize.test.ts
-│       ├── store.slots.test.ts
-│       ├── test-helpers.ts         # Shared test fixtures
+│       ├── Analyser.tsx              # Canvas orchestrator, rAF loop, SongClock wiring
+│       ├── BarTimingHud.tsx          # BPM / bar grid overlay (M toggle)
+│       ├── ControlPanel.tsx
+│       ├── Shortcuts.tsx
+│       ├── store.ts
+│       ├── visuals.ts
+│       ├── visuals/                  # Optional *.visual.ts manifests
+│       ├── __tests__/                # Component + store + UI tests
+│       │   ├── helpers/test-helpers.ts
+│       │   ├── Analyser.regression.test.ts
+│       │   ├── Shortcuts.test.tsx
+│       │   └── store.*.test.ts
 │       └── engine/
-│           ├── scene.ts            # Three.js scene, 14 visualization modes
-│           ├── composer.ts         # Post-processing effects pipeline
-│           ├── audio.ts            # Web Audio API wrapper, FFT, beat detection
-│           ├── bpm-detector.ts     # BPM estimation from bass energy
-│           ├── bpm-detector.test.ts
-│           └── shaders.ts          # Reusable shader code snippets
-│   └── ui/                         # Shadcn/ui component library
+│           ├── audio.ts              # FFT read, BeatMatcher, BPMDetector feed
+│           ├── beat-matcher.ts         # Multi-band onset detection
+│           ├── bpm-detector.ts       # Tempo estimation (not grid owner)
+│           ├── song-clock.ts         # Authoritative bar/beat clock
+│           ├── bar-clock.ts          # BarTiming types + SongClock re-export
+│           ├── live-tempo.ts         # Per-frame HUD bus
+│           ├── latency-metrics.ts    # Render latency measurement (tested)
+│           ├── view-cycle-controller.ts
+│           ├── scene.ts
+│           ├── composer.ts
+│           ├── shaders.ts
+│           └── __tests__/            # Engine unit + sync invariant tests
+│               ├── helpers/song-clock.harness.ts
+│               ├── song-clock.test.ts
+│               ├── sync-invariants.test.ts
+│               └── …
+│   └── ui/
+AGENTS.md                             # Agent guide (Cursor / Claude)
 docs/
-├── fft-and-beat-detection.md       # Audio analysis algorithm docs
-└── screenshots/                    # Demo screenshots
+├── README.md                         # Documentation index
+├── audio-analysis-pipeline.md
+├── song-clock-and-sync.md
+├── rendering-and-latency.md
+├── fft-and-beat-detection.md         # Short overview (links to above)
+└── screenshots/
 ```
 
 ## Architecture Overview
 
-### Audio Pipeline
+### Audio and Sync Pipeline
 
-1. **Audio Capture** (`engine/audio.ts`)
-   - Captures from microphone or browser tab
-   - Feeds to Web Audio `AnalyserNode`
-   - Default FFT size: 2048
+1. **Capture** (`engine/audio.ts`) — mic or tab → `AnalyserNode` (default FFT 2048)
+2. **Features** — bass / mid / high / centroid each frame
+3. **BeatMatcher** — fused onset detection for accents and signal-change timing
+4. **BPMDetector** — tempo estimate + confidence (feeds SongClock, does not own grid after manual tap)
+5. **SongClock** (`engine/song-clock.ts`) — authoritative bar grid, `beatPhase`, phrase boundaries
+6. **Consumers** — `scene.ts`, post-FX, `BarTimingHud`, `view-cycle-controller`
 
-2. **Feature Extraction**
-   - Reads frequency bins each frame
-   - Extracts bass, mid, high energy bands
-   - Computes spectral centroid
-
-3. **Beat/BPM Detection** (`engine/bpm-detector.ts`)
-   - Analyzes bass energy history
-   - Estimates BPM and confidence score
-   - Signals to camera for beat-responsive motion
+Deep dive: [audio-analysis-pipeline.md](./audio-analysis-pipeline.md), [song-clock-and-sync.md](./song-clock-and-sync.md), [rendering-and-latency.md](./rendering-and-latency.md).
 
 ### Visualization Architecture
 
@@ -107,6 +118,11 @@ Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bo
 - `G`: Show/Hide shortcut hints
 - `A`: Play Saves (save-list auto-cycle mode)
 - `S`: Toggle settings panel
+- `T`: Beat tap (manual SongClock sync)
+- `Shift+T`: Downbeat tap (reset phrase to 1/16)
+- `M`: Toggle BPM & bar grid HUD
+- `L`: Toggle latency HUD
+- `C`: Toggle music-reactive view cycle (every 4-bar phrase)
 - `1` to `5`: Load save slot
 - `Shift+1` to `Shift+5`: Save to slot
 
@@ -172,29 +188,37 @@ npm run test:run               # Single run
 npm run test                   # Watch mode
 ```
 
-### Test Coverage
+### Test layout
 
-- **Analyser regression tests**:
-  - `Analyser.regression.test.ts`: guards render-loop variable initialization order to prevent TDZ crashes during component startup.
-- **Store tests**:
-  - `store.slots.test.ts`: slot bootstrap, localStorage hydration, legacy ripple migration, slot-cycle preservation
-  - `store.normalization.test.ts`: amplitude floor, vignette bounds, bloom cap, preset clearing, reset baseline
-  - `store.randomize.test.ts`: randomize scope toggle behavior, new defaults (torus, geometry-nebula, reztubeLineWidth), and lensFlare postFx coverage
-- **Shortcut tests**:
-  - `Shortcuts.test.tsx`: grouped rail labels, visual cluster status, randomize/post-FX toggles, save transport behavior, settings toggle behavior
-- **Engine tests**:
-  - `engine/bpm-detector.test.ts`: tempo stability, bounded BPM output, reset behavior
+All tests live under `__tests__/` (see `vitest.config.ts`):
 
-  Asset documentation:
+| Location | Suites |
+|----------|--------|
+| `analyser/__tests__/` | `Analyser.regression`, `Shortcuts`, `store.*`, `visuals` |
+| `analyser/engine/__tests__/` | `song-clock`, `sync-invariants`, `bpm-detector`, `beat-matcher`, `latency-metrics`, `view-cycle-controller`, `latency-benchmark`, `xr` |
+
+Shared fixtures: `__tests__/helpers/test-helpers.ts`, `engine/__tests__/helpers/song-clock.harness.ts`.
+
+### Test coverage highlights
+
+- **sync-invariants.test.ts** — manual tap lock, phrase view cycle, no audio-driven grid drift
+- **Analyser.regression.test.ts** — render-loop TDZ guard
+- **song-clock.test.ts** — tap/auto modes, beat index math
+- **store.*** — normalization, slots, randomize
+- **Shortcuts.test.tsx** — rail UI and keyboard behavior
+- **latency-metrics.test.ts** — signal latency only on transient frames; no stale timestamp growth
+
+Asset documentation:
   - Keep `docs/THIRD_PARTY_ASSETS.md` in sync whenever adding/removing runtime files under `public/assets/`.
   - Validate third-party model URLs and licenses before wiring new `model-xx.glb` paths in `scene.ts`.
 
 ### Adding Tests
 
-1. Add tests beside the module under test (for example `store.*.test.ts` or `engine/*.test.ts`)
-2. Use `vi.resetModules()` and a localStorage mock for deterministic store tests
-3. Test behavior through public APIs (`settingsStore`, `BPMDetector`) instead of implementation details
-4. Keep test files focused by concern (normalization, randomize, slots, engine units)
+1. Place new files under `src/**/__tests__/` (not beside source modules)
+2. Import implementation with relative paths (`../store`, `../song-clock`, etc.)
+3. Use `vi.resetModules()` and a localStorage mock for deterministic store tests
+4. Test behavior through public APIs (`settingsStore`, `SongClock`, `BPMDetector`)
+5. For sync changes, extend `sync-invariants.test.ts` and `song-clock.test.ts`
 
 Example:
 ```typescript
@@ -212,8 +236,14 @@ it("enforces constraint X", async () => {
 
 ```bash
 npm install                    # Install deps
-npm run dev                    # Start Vite dev server (localhost:5173)
+npm run dev                    # Start Vite dev server (localhost:6789)
 ```
+
+### Debug in Cursor / VS Code
+
+Use **Run and Debug → Launch Chrome (Spectrum Aura)** (`.vscode/launch.json`). This starts Vite and opens Chrome at `http://localhost:6789` with source maps.
+
+Do not use Cursor's Simple Browser or a LAN IP URL for audio work — `getUserMedia` / `getDisplayMedia` need a secure context (`localhost` or HTTPS).
 
 ### Production Build
 
@@ -239,8 +269,9 @@ npm run preview               # Preview production build locally
 
 ## Repository conventions
 
-- Keep documentation inside `docs/` unless it is a top-level product artifact (`README.md`, license, tooling config).
-- Keep tests adjacent to implementation files with `*.test.ts` naming.
+- Keep documentation inside `docs/` unless it is a top-level product artifact (`README.md`, `AGENTS.md`, license, tooling config).
+- Keep tests in `__tests__/` folders; Vitest only includes `src/**/__tests__/**/*.{test,spec}.{ts,tsx}`.
+- Agents: read [AGENTS.md](../AGENTS.md) before changing sync or render-loop code.
 - Prefer concern-specific test files (`store.normalization.test.ts`, `store.slots.test.ts`) over catch-all files.
 - When adding a new setting, update all required layers in one change set:
   1. `Settings` type + `DEFAULT_SETTINGS` in `store.ts`

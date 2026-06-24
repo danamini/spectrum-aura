@@ -1,0 +1,161 @@
+# Song Clock and Musical Sync
+
+**Authoritative timing for bar grid, view cycling, and visual beat phase.**
+
+**Source:** `engine/song-clock.ts`  
+**Consumers:** `Analyser.tsx`, `BarTimingHud.tsx`, `view-cycle-controller.ts`, `scene.ts` (via injected `beatPhase`)
+
+---
+
+## Design principle
+
+> One clock owns bar/beat position. Audio analysis **estimates tempo**; it never skips or double-counts bars after manual sync.
+
+```
+BPMDetector  ──estimated BPM/confidence──┐
+                                       ├──► SongClock.tick() ──► BarTiming
+Manual taps (T / ⇧T) ──epoch/BPM──────┘
+```
+
+---
+
+## Clock modes (`ClockSource`)
+
+| Mode | Entry | Behavior |
+|------|-------|----------|
+| `idle` | Initial / lost auto confidence | No grid (`EMPTY_BAR_TIMING`) |
+| `auto` | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM drifts 3%/frame toward estimate |
+| `manual` | Any `hintBeat` / `hintDownbeat` | Runs from tap epoch only; ignores audio onsets |
+
+---
+
+## Continuous beat index
+
+Given epoch \((t_0, b_0)\) where \(b_0\) is the 1-based beat number at \(t_0\), and clock BPM \(\text{BPM}_c\):
+
+\[
+T_{\text{beat}} = \frac{60000}{\text{BPM}_c}
+\]
+
+\[
+B(t) = (b_0 - 1) + \frac{\max(0,\; t - t_0)}{T_{\text{beat}}}
+\]
+
+Phrase position (16 beats in 4/4):
+
+\[
+p = B(t) \bmod 16
+\]
+
+\[
+\text{beatInPhrase} = \lfloor p \rfloor + 1
+\]
+
+\[
+\phi_{\text{beat}} = p - \lfloor p \rfloor
+\]
+
+\[
+\text{beatInBar} = ((\text{beatInPhrase} - 1) \bmod 4) + 1
+\]
+
+\[
+\phi_{\text{phrase}} = \frac{p}{16}
+\]
+
+### Boundary flags
+
+- `beatJustTicked`: \(\lfloor B(t) \rfloor > \lfloor B(t_{\text{prev}}) \rfloor\)
+- `barJustStarted`: beat ticked AND `beatInBar === 1`
+- `phraseJustStarted`: beat ticked AND `beatInPhrase === 1` AND `totalBeats > 1`
+
+---
+
+## Manual taps
+
+### `T` — beat tap (`hintBeat`)
+
+1. Record tap time; reset tap list if gap \(> 2000\,\text{ms}\) (`TAP_TIMEOUT_MS`)
+2. If ≥2 taps in window: \(\text{BPM}_c = 60000 / \text{median}(\Delta t_i)\), clamped \([60,200]\)
+3. Set `source = manual`
+4. If consecutive tap within \(1.6 \cdot T_{\text{beat}}\): increment epoch beat; else resync phase
+
+### `⇧T` — downbeat (`hintDownbeat`)
+
+Sets \(b_0 = 1\), \(t_0 = \text{now}\) — phrase resets to **1/16**.
+
+---
+
+## Auto mode entry
+
+Requires:
+
+\[
+\text{BPM} \in [65, 195] \land (\text{bpmLocked} \lor \text{confidence} > 0.62)
+\]
+
+After 4 consecutive qualifying frames (or immediate if `bpmLocked`):
+
+\[
+t_0 = \text{now},\quad b_0 = 1,\quad \text{BPM}_c = \text{BPM}_{\text{est}}
+\]
+
+While auto and not detector-locked:
+
+\[
+\text{BPM}_c \leftarrow 0.97\,\text{BPM}_c + 0.03\,\text{BPM}_{\text{est}}
+\]
+
+No beat index jumps — only tempo slowly corrects.
+
+---
+
+## View cycle coupling
+
+**File:** `view-cycle-controller.ts`
+
+Switches visual on **phrase boundary** (start of beat 1 after first full 16-beat phrase):
+
+```typescript
+phraseJustStarted && totalBeats > 16
+```
+
+Cooldown:
+
+\[
+t_{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T_{\text{beat}})
+\]
+
+---
+
+## Live tempo bus
+
+**File:** `engine/live-tempo.ts`
+
+| API | Rate | Use |
+|-----|------|-----|
+| `setLiveTempoFrame()` | Every engine frame | `BarTimingHud` rAF reader |
+| `dispatchLiveTempo()` | ~8 Hz | Control panel BPM label |
+
+`BarTiming` in frame bus is the same struct `SongClock.tick()` returns.
+
+---
+
+## Invariants (enforced by tests)
+
+`engine/__tests__/sync-invariants.test.ts`
+
+1. Manual lock: audio beats cannot change `beatInPhrase`
+2. Scene `bpmPhase` uses `audio.beatPhase` from SongClock injection, not session wall clock
+3. View cycle only on `phraseJustStarted` after 16 beats
+
+---
+
+## Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `T` | Beat tap |
+| `⇧T` | Downbeat (1/16) |
+| `M` | Toggle BPM & bar grid HUD |
+| `C` | Toggle music-reactive view cycle (phrase boundaries) |

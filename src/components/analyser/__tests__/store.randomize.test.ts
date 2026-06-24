@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { installStorageMock } from "./test-helpers";
+import { installStorageMock } from "./helpers/test-helpers";
 
 describe("settingsStore randomize", () => {
   beforeEach(() => {
@@ -9,7 +9,7 @@ describe("settingsStore randomize", () => {
   });
 
   it("includes new torus and geometry-nebula defaults", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     const state = settingsStore.get();
 
@@ -36,7 +36,7 @@ describe("settingsStore randomize", () => {
   });
 
   it("keeps randomize scoped to post FX when view settings are disabled", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       torusCount: 4,
@@ -61,7 +61,7 @@ describe("settingsStore randomize", () => {
   });
 
   it("randomizes view settings when scope toggle is enabled", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       torusCount: 1,
@@ -93,7 +93,7 @@ describe("settingsStore randomize", () => {
   });
 
   it("randomize sets lensFlare and lensFlareAmount in postFx patch", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     // With random=0.99, b(0.45)=false so lensFlare=false; amount=r(0.2,1.1)≈1.09
     const highSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
@@ -114,7 +114,7 @@ describe("settingsStore randomize", () => {
   });
 
   it("enables asset overlay when randomizing FX in assetflow view", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({ view: "assetflow", randomizeViewSettings: false, assetOverlayFx: false });
 

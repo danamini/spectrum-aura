@@ -38,7 +38,7 @@ describe("analyser store slot bootstrap", () => {
   });
 
   it("seeds deployment default slots for first-time users", async () => {
-    const { settingsStore, SLOT_COUNT } = await import("./store");
+    const { settingsStore, SLOT_COUNT } = await import("../store");
 
     const slots = settingsStore.getSlots();
 
@@ -55,7 +55,7 @@ describe("analyser store slot bootstrap", () => {
       JSON.stringify([{ name: "My Override", settings: { view: "classic", barCount: 72 } }, null]),
     );
 
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     const [slot1, slot2] = settingsStore.getSlots();
     expect(settingsStore.getSlots()).toHaveLength(1);
@@ -78,7 +78,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("enforces MIN_VIEW_AMPLITUDE floor of 0.5 on all amplitude settings", async () => {
-    const { settingsStore, MIN_VIEW_AMPLITUDE } = await import("./store");
+    const { settingsStore, MIN_VIEW_AMPLITUDE } = await import("../store");
 
     // Set all amplitudes below minimum
     settingsStore.set({
@@ -102,7 +102,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("clamps vignette amount between 0.5 and 1.25", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({ vignetteAmount: 0.2 });
     let state = settingsStore.get();
@@ -114,7 +114,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("caps bloom strength to 0.25 unless bloomExtreme is enabled", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({ bloom: true, bloomExtreme: false, bloomStrength: 1.0 });
     let state = settingsStore.get();
@@ -126,7 +126,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("exposes the newer visual defaults", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     const state = settingsStore.get();
 
@@ -164,7 +164,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("keeps randomize scoped to post fx when view settings are disabled", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       torusCount: 4,
@@ -186,7 +186,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("randomizes the new view settings when the scope toggle is enabled", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       torusCount: 1,
@@ -217,7 +217,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("applies presets and normalizes settings", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.applyPreset("Cinematic");
     const state = settingsStore.get();
@@ -232,7 +232,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("includes retro presets and applies their core flags", async () => {
-    const { settingsStore, PRESETS } = await import("./store");
+    const { settingsStore, PRESETS } = await import("../store");
 
     expect(PRESETS["CRT Arcade"]).toBeDefined();
     expect(PRESETS["16mm Projector"]).toBeDefined();
@@ -249,7 +249,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("reset restores default settings", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       view: "classic",
@@ -266,7 +266,7 @@ describe("analyser store utility functions", () => {
   });
 
   it("save and load slots preserve settings", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     // Customize settings
     settingsStore.set({ view: "classic", barCount: 100, vignetteAmount: 0.8 });

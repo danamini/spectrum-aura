@@ -509,11 +509,16 @@ export class Composer {
       0.01,
       0.95,
     );
-    this.sobel.uniforms.fillMix.value = THREE.MathUtils.clamp(
-      s.sobelFillMix * (0.85 + bass * 0.5),
-      0,
-      1,
-    );
+    if (reactive.performance) {
+      this.ssao.enabled = false;
+      this.smaa.enabled = false;
+      this.motionTrails.enabled = false;
+      this.bokeh.enabled = false;
+      this.film.enabled = false;
+      this.assetOverlay.enabled = false;
+      this.bloom.radius = Math.min(this.bloom.radius, 0.45);
+      this.bloom.strength = Math.min(this.bloom.strength, 0.9);
+    }
   }
 
   resize(w: number, h: number) {

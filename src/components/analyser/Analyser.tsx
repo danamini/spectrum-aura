@@ -3,13 +3,34 @@ import * as THREE from "three";
 import { Scene } from "./engine/scene";
 import { Composer } from "./engine/composer";
 import { AudioEngine } from "./engine/audio";
+import { ViewCycleController } from "./engine/view-cycle-controller";
+import { SongClock } from "./engine/song-clock";
+import { BEAT_HINT_EVENT, type BeatHintDetail } from "./engine/beat-hint";
+import {
+  dispatchLiveTempo,
+  EMPTY_LIVE_TEMPO,
+  LIVE_TEMPO_EVENT,
+  setLiveTempoFrame,
+  type LiveTempoState,
+} from "./engine/live-tempo";
+import { BarTimingHud, ExperimentalBadge } from "./BarTimingHud";
+import { getAudioCaptureSupport } from "./engine/audio-support";
+import {
+  createSceneUpdateOpts,
+  syncSceneUpdateOpts,
+} from "./engine/scene-update-opts";
+import {
+  isSignalLatencyVisible,
+  measureFrameLatency,
+  smoothLatency,
+} from "./engine/latency-metrics";
 import {
   WEBXR_BACKGROUND_EVENT,
   WEBXR_REQUEST_EVENT,
   WEBXR_STATE_EVENT,
   WebXrRuntime,
 } from "./engine/xr";
-import { PALETTES, settingsStore, useSettings, type ViewMode } from "./store";
+import { PALETTES, settingsStore, useSettings, type Settings, type ViewMode } from "./store";
 import { Maximize2, Mic, Minimize2, MonitorSpeaker, X } from "lucide-react";
 
 type NerdStats = {
@@ -49,6 +70,13 @@ type NerdStats = {
   beat: boolean;
   bpm: number;
   bpmConfidence: number;
+  audioReadCpuMs: number;
+  audioToSceneMs: number;
+  sceneToRenderMs: number;
+  audioToRenderMs: number;
+  signalToRenderMs: number;
+  baseLatencyMs: number;
+  fftWindowMs: number;
 };
 
 const EMPTY_STATS: NerdStats = {
@@ -88,6 +116,13 @@ const EMPTY_STATS: NerdStats = {
   beat: false,
   bpm: 0,
   bpmConfidence: 0,
+  audioReadCpuMs: 0,
+  audioToSceneMs: 0,
+  sceneToRenderMs: 0,
+  audioToRenderMs: 0,
+  signalToRenderMs: 0,
+  baseLatencyMs: 0,
+  fftWindowMs: 0,
 };
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
@@ -101,15 +136,34 @@ export function Analyser() {
   const settings = useSettings();
   const [audioStatus, setAudioStatus] = useState<"idle" | "running" | "error">("idle");
   const [audioError, setAudioError] = useState<string | null>(null);
+  const audioCaptureSupport = getAudioCaptureSupport();
   const [statsOpen, setStatsOpen] = useState(false);
   const [statsFullscreen, setStatsFullscreen] = useState(false);
   const [stats, setStats] = useState<NerdStats>(EMPTY_STATS);
-  const [liveTempo, setLiveTempo] = useState({ beat: false, bpm: 0, bpmConfidence: 0 });
+  const [latencyHud, setLatencyHud] = useState({
+    audioToRenderMs: 0,
+    signalToRenderMs: 0,
+    audioToSceneMs: 0,
+    sceneToRenderMs: 0,
+    performanceMode: false,
+  });
   const statsOpenRef = useRef(false);
+  const songClockRef = useRef(new SongClock());
+  const beatHintFlashRef = useRef<string | null>(null);
+  const [liveTempo, setLiveTempo] = useState<LiveTempoState>(EMPTY_LIVE_TEMPO);
 
   useEffect(() => {
     statsOpenRef.current = statsOpen;
   }, [statsOpen]);
+
+  useEffect(() => {
+    const onLiveTempo = (event: Event) => {
+      const detail = (event as CustomEvent<LiveTempoState>).detail;
+      if (detail) setLiveTempo(detail);
+    };
+    window.addEventListener(LIVE_TEMPO_EVENT, onLiveTempo);
+    return () => window.removeEventListener(LIVE_TEMPO_EVENT, onLiveTempo);
+  }, []);
 
   const toggleFullscreen = async () => {
     try {
@@ -238,6 +292,9 @@ export function Analyser() {
     container.appendChild(renderer.domElement);
 
     const scene = new Scene(width, height);
+    scene.setPalette(
+      PALETTES[settingsRef.current.paletteIndex]?.colors ?? PALETTES[0].colors,
+    );
     const composer = new Composer(renderer, scene.scene, scene.camera, width, height);
     rendererRef.current = renderer;
     sceneRef.current = scene;
@@ -245,6 +302,7 @@ export function Analyser() {
 
     const audio = new AudioEngine();
     audioRef.current = audio;
+    const viewCycleController = new ViewCycleController();
 
     let raf = 0;
     let last = performance.now();
@@ -260,6 +318,23 @@ export function Analyser() {
     const midHistory: number[] = [];
     const highHistory: number[] = [];
     let displayedView: ViewMode = settingsRef.current.view;
+    const sceneOpts = createSceneUpdateOpts(displayedView);
+    const postFxReactive = {
+      bass: 0,
+      mid: 0,
+      high: 0,
+      centroid: 0,
+      beat: false,
+      bpm: 0,
+      bpmConfidence: 0,
+      pulse: 0,
+      performance: false,
+    };
+    const mandalaPostFx = { ...settingsStore.get() };
+    let lastPaletteIndex = settingsRef.current.paletteIndex;
+    let lastPerformanceMode = settingsRef.current.performance;
+    let smoothedLatency = { audioToRenderMs: 0, signalToRenderMs: 0 };
+    let lastLatencyHudCommitAt = 0;
     const pushHistory = (history: number[], value: number, max = 52) => {
       history.push(value);
       if (history.length > max) history.shift();
@@ -347,6 +422,9 @@ export function Analyser() {
       lastY = 0;
     const dom = renderer.domElement;
     dom.style.touchAction = "none";
+    dom.style.position = "absolute";
+    dom.style.inset = "0";
+    dom.style.zIndex = "0";
     dom.style.display = "block";
     dom.style.width = "100%";
     dom.style.height = "100%";
@@ -438,6 +516,11 @@ export function Analyser() {
         lastBgColor = s.bgColor;
       }
 
+      if (s.performance !== lastPerformanceMode) {
+        lastPerformanceMode = s.performance;
+        setRendererQualityForMode(xrLoopActive);
+      }
+
       if (s.view !== displayedView) {
         if (viewTransition === null) {
           viewTransition = { phase: "out", elapsed: 0 };
@@ -472,170 +555,111 @@ export function Analyser() {
         lastOpacity = nextOpacity;
       }
 
-      const bands = audio.read(s.beatSensitivity);
+      const bands = audio.read(s.beatSensitivity, now);
+      const barTimingFrame = songClockRef.current.tick({
+        now,
+        estimatedBpm: bands.bpm,
+        bpmConfidence: bands.bpmConfidence,
+        bpmLocked: bands.bpmLocked,
+      });
+      const clockBpm = barTimingFrame.clockBpm || bands.bpm;
+      const clockBeatPhase = barTimingFrame.synced ? barTimingFrame.beatPhase : bands.beatPhase;
+      const bandsForScene = {
+        ...bands,
+        bpm: clockBpm,
+        beatPhase: clockBeatPhase,
+      };
+      if (s.viewCycleMode) {
+        const cycle = viewCycleController.tick({
+          now,
+          barTiming: barTimingFrame,
+          bpm: clockBpm,
+          enabled: s.viewCycleMode,
+          viewTransitionActive: viewTransition !== null,
+        });
+        if (cycle.shouldSwitch) {
+          settingsStore.cycleRandomView();
+        }
+      } else {
+        viewCycleController.reset();
+      }
       radialKickEnv = bands.beat ? 1 : Math.max(0, radialKickEnv - dt * 5);
+      const tempoFrame = {
+        audioRunning: audio.isRunning(),
+        beat: bands.beat,
+        bpm: Math.round(clockBpm),
+        bpmConfidence: bands.bpmConfidence,
+        barTiming: barTimingFrame,
+        beatHintFlash: beatHintFlashRef.current,
+      };
+      setLiveTempoFrame(tempoFrame);
       if (now - lastLiveTempoCommitAt >= 120) {
         lastLiveTempoCommitAt = now;
-        setLiveTempo({
-          beat: bands.beat,
-          bpm: Math.round(bands.bpm),
-          bpmConfidence: bands.bpmConfidence,
-        });
+        dispatchLiveTempo(tempoFrame);
       }
-      scene.setPalette(PALETTES[s.paletteIndex]?.colors ?? PALETTES[0].colors);
-      scene.update(dt, t, bands, {
-        view: displayedView,
-        sphereDisp: s.sphereDisplacement,
-        orbitSpeed: s.orbitSpeed,
-        peakDecay: s.classicPeakDecay,
-        peakHold: s.classicPeakHold,
-        colorBands: s.classicColorBands,
-        blocky: s.classicBlocky,
-        segments: s.classicSegments,
-        grid: s.classicGrid,
-        gridOpacity: s.classicGridOpacity,
-        cameraDrift: s.cameraDrift,
-        cameraDriftAmount: s.cameraDriftAmount,
-        cameraBeat: s.cameraBeat,
-        cameraBeatAmount: s.cameraBeatAmount,
-        cameraMouse: s.cameraMouse,
-        xrMode: xrRuntime.active,
-        xrBackgroundHidden,
-        classicSpin: s.classicSpin,
-        classicSpinSpeed: s.classicSpinSpeed,
-        classicWireframe: s.classicWireframe,
-        classicFullscreen: s.classicFullscreen,
-        peakColor: s.classicPeakColor,
-        peakStyle: s.classicPeakStyle,
-        rippleRingCount: xrRuntime.active ? Math.min(s.rippleRingCount, 72) : s.rippleRingCount,
-        rippleColumns: s.rippleColumns,
-        rippleMaxRadius: s.rippleMaxRadius,
-        rippleSpeed: s.rippleSpeed,
-        rippleAmplitude: s.rippleAmplitude,
-        rippleWaveCycles: s.rippleWaveCycles,
-        rippleThickness: s.rippleThickness,
-        rippleRotationSpeed: s.rippleRotationSpeed,
-        rippleOpacity: s.rippleOpacity,
-        rippleWireframe: s.rippleWireframe,
-        datastreamUsePalette: s.datastreamUsePalette,
-        datastreamAmplitude: s.datastreamAmplitude,
-        datastreamItemCount: s.datastreamItemCount,
-        nebulaUsePalette: s.nebulaUsePalette,
-        nebulaAmplitude: s.nebulaAmplitude,
-        nebulaDetail: s.nebulaDetail,
-        nebulaWireframe: s.nebulaWireframe,
-        monolithUsePalette: s.monolithUsePalette,
-        monolithAmplitude: s.monolithAmplitude,
-        monolithBrightness: s.monolithBrightness,
-        monolithGridSize: s.monolithGridSize,
-        monolithWireframe: s.monolithWireframe,
-        mandalaUsePalette: s.mandalaUsePalette,
-        mandalaAmplitude: s.mandalaAmplitude,
-        mandalaLineCount: xrRuntime.active ? Math.min(s.mandalaLineCount, 24) : s.mandalaLineCount,
-        mandalaLineWidth: s.mandalaLineWidth,
-        terrainUsePalette: s.terrainUsePalette,
-        terrainAmplitude: s.terrainAmplitude,
-        terrainColumns: s.terrainColumns,
-        terrainWireframe: s.terrainWireframe,
-        rippleFullscreen: s.rippleFullscreen,
-        datastreamFullscreen: s.datastreamFullscreen,
-        nebulaFullscreen: s.nebulaFullscreen,
-        monolithFullscreen: s.monolithFullscreen,
-        mandalaFullscreen: s.mandalaFullscreen,
-        terrainFullscreen: s.terrainFullscreen,
-        obsidianFullscreen: s.obsidianFullscreen,
-        obsidianUsePalette: s.obsidianUsePalette,
-        obsidianAmplitude: s.obsidianAmplitude,
-        obsidianShardDetail: s.obsidianShardDetail,
-        torusFullscreen: s.torusFullscreen,
-        torusUsePalette: s.torusUsePalette,
-        torusAmplitude: s.torusAmplitude,
-        torusParticleCount: s.torusParticleCount,
-        torusSpeed: s.torusSpeed,
-        torusCount: s.torusCount,
-        torusSpacing: s.torusSpacing,
-        torusSize: s.torusSize,
-        torusParticleSize: s.torusParticleSize,
-        torusColorMode: s.torusColorMode,
-        torusRotationMode: s.torusRotationMode,
-        torusOddUpright: s.torusOddUpright,
-        soundwallFullscreen: s.soundwallFullscreen,
-        soundwallUsePalette: s.soundwallUsePalette,
-        soundwallAmplitude: s.soundwallAmplitude,
-        soundwallColumns: s.soundwallColumns,
-        soundwallRows: s.soundwallRows,
-        geometrynebulaFullscreen: s.geometrynebulaFullscreen,
-        geometrynebulaUsePalette: s.geometrynebulaUsePalette,
-        geometrynebulaAmplitude: s.geometrynebulaAmplitude,
-        geometrynebulaCount: s.geometrynebulaCount,
-        geometrynebulaSpread: s.geometrynebulaSpread,
-        geometrynebulaOrbitSpeed: s.geometrynebulaOrbitSpeed,
-        geometrynebulaSpinSpeed: s.geometrynebulaSpinSpeed,
-        reztubeFullscreen: s.reztubeFullscreen,
-        reztubeUsePalette: s.reztubeUsePalette,
-        reztubeAmplitude: s.reztubeAmplitude,
-        reztubeSpeed: s.reztubeSpeed,
-        reztubeTwist: s.reztubeTwist,
-        reztubeRadius: s.reztubeRadius,
-        reztubeSegments: s.reztubeSegments,
-        reztubeLineWidth: s.reztubeLineWidth,
-        assetflowFullscreen: s.assetflowFullscreen,
-        assetflowUsePalette: s.assetflowUsePalette,
-        assetflowIncludeShapes: s.assetflowIncludeShapes,
-        assetflowAmplitude: s.assetflowAmplitude,
-        assetflowModelScale: s.assetflowModelScale,
-        assetflowSpriteAmount: s.assetflowSpriteAmount,
-        assetflowModelCount: s.assetflowModelCount,
-        assetflowSpread: s.assetflowSpread,
-        assetflowSpin: s.assetflowSpin,
-        assetflowMovement: s.assetflowMovement,
-        assetflowBackgroundDrift: s.assetflowBackgroundDrift,
-        comboSphereSize: s.comboSphereSize,
-        comboSphereSpinSpeed: s.comboSphereSpinSpeed,
-        comboSphereBassPunch: s.comboSphereBassPunch,
-        comboBarRadius: s.comboBarRadius,
-        comboBarHeightScale: s.comboBarHeightScale,
-        comboParticleSize: s.comboParticleSize,
-        comboLevelMeter: s.comboLevelMeter,
-        comboWireframe: s.comboWireframe,
-        comboFullscreen: s.comboFullscreen,
-        bgColor: s.bgColor,
-      });
+      if (s.paletteIndex !== lastPaletteIndex) {
+        lastPaletteIndex = s.paletteIndex;
+        scene.setPalette(PALETTES[s.paletteIndex]?.colors ?? PALETTES[0].colors);
+      }
+      syncSceneUpdateOpts(sceneOpts, s, displayedView, xrRuntime.active, xrBackgroundHidden);
+      scene.update(dt, t, bandsForScene, sceneOpts);
 
       renderer.info.reset();
-      const composerResetKey = `${displayedView}|${s.activePreset ?? ""}|${s.postFxEnabled ? 1 : 0}|${s.motionTrails ? 1 : 0}`;
+      const composerResetKey = `${displayedView}|${s.activePreset ?? ""}|${s.postFxEnabled ? 1 : 0}|${s.motionTrails ? 1 : 0}|${s.performance ? 1 : 0}`;
       if (composerResetKey !== lastComposerResetKey) {
         composer.resetTemporalEffects();
         lastComposerResetKey = composerResetKey;
       }
-      if (s.postFxEnabled && !xrRuntime.active) {
+      const tAfterScene = performance.now();
+      const usePostFx = s.postFxEnabled && !xrRuntime.active && !s.performance;
+      if (usePostFx) {
         const bpmPulse =
-          bands.bpm > 0 && bands.bpmConfidence > 0.4
-            ? Math.max(0, Math.sin(((t * (bands.bpm / 60)) % 1) * Math.PI))
+          clockBpm > 0 && barTimingFrame.synced
+            ? Math.max(0, Math.sin(clockBeatPhase * Math.PI))
             : radialKickEnv;
-        const postFxSettings =
-          displayedView === "mandala"
-            ? {
-                ...s,
-                bloomStrength: Math.min(3, s.bloomStrength * scene.postFxBoost.bloom),
-                glitch: s.glitch || scene.postFxBoost.glitch > 0.45,
-                glitchWild: s.glitchWild || scene.postFxBoost.glitch > 0.75,
-              }
-            : s;
-        composer.apply(postFxSettings, {
-          bass: bands.bass,
-          mid: bands.mid,
-          high: bands.high,
-          centroid: bands.centroid,
-          beat: bands.beat,
-          bpm: bands.bpm,
-          bpmConfidence: bands.bpmConfidence,
-          pulse: bpmPulse,
-          performance: s.performance || xrRuntime.active,
-        });
+        let postFxSettings: Settings = s;
+        if (displayedView === "mandala") {
+          Object.assign(mandalaPostFx, s);
+          mandalaPostFx.bloomStrength = Math.min(3, s.bloomStrength * scene.postFxBoost.bloom);
+          mandalaPostFx.glitch = s.glitch || scene.postFxBoost.glitch > 0.45;
+          mandalaPostFx.glitchWild = s.glitchWild || scene.postFxBoost.glitch > 0.75;
+          postFxSettings = mandalaPostFx;
+        }
+        postFxReactive.bass = bandsForScene.bass;
+        postFxReactive.mid = bandsForScene.mid;
+        postFxReactive.high = bandsForScene.high;
+        postFxReactive.centroid = bandsForScene.centroid;
+        postFxReactive.beat = bandsForScene.beat;
+        postFxReactive.bpm = clockBpm;
+        postFxReactive.bpmConfidence = bands.bpmConfidence;
+        postFxReactive.pulse = bpmPulse;
+        postFxReactive.performance = s.performance || xrRuntime.active;
+        composer.apply(postFxSettings, postFxReactive);
         composer.render(dt);
       } else {
         renderer.render(scene.scene, scene.camera);
+      }
+      const tAfterRender = performance.now();
+
+      const latency = measureFrameLatency({
+        fftReadAt: bands.fftReadAt,
+        tAfterScene,
+        tAfterRender,
+        signalSwing: bands.signalSwing,
+        signalChangeAt: bands.timing.signalChangeAt,
+      });
+      smoothedLatency = smoothLatency(smoothedLatency, latency);
+      const { audioToSceneMs, sceneToRenderMs } = latency;
+
+      if (s.showLatency && audio.isRunning() && now - lastLatencyHudCommitAt >= 100) {
+        lastLatencyHudCommitAt = now;
+        setLatencyHud({
+          audioToRenderMs: smoothedLatency.audioToRenderMs,
+          signalToRenderMs: smoothedLatency.signalToRenderMs,
+          audioToSceneMs,
+          sceneToRenderMs,
+          performanceMode: s.performance,
+        });
       }
 
       if (statsOpenRef.current) {
@@ -696,6 +720,13 @@ export function Analyser() {
             beat: bands.beat,
             bpm: Math.round(bands.bpm),
             bpmConfidence: bands.bpmConfidence,
+            audioReadCpuMs: bands.timing.readCpuMs,
+            audioToSceneMs,
+            sceneToRenderMs,
+            audioToRenderMs: smoothedLatency.audioToRenderMs,
+            signalToRenderMs: smoothedLatency.signalToRenderMs,
+            baseLatencyMs: bands.timing.baseLatencyMs,
+            fftWindowMs: bands.timing.fftWindowMs,
           });
         }
       }
@@ -791,8 +822,10 @@ export function Analyser() {
   };
   const handleStop = () => {
     audioRef.current?.stop();
+    songClockRef.current.reset();
+    beatHintFlashRef.current = null;
+    dispatchLiveTempo(EMPTY_LIVE_TEMPO);
     setAudioStatus("idle");
-    setLiveTempo({ beat: false, bpm: 0, bpmConfidence: 0 });
   };
 
   useEffect(() => {
@@ -803,6 +836,50 @@ export function Analyser() {
     return () => window.removeEventListener(STOP_AUDIO_EVENT, onStopAudio);
   }, []);
 
+  useEffect(() => {
+    let flashTimer: number | null = null;
+    const onBeatHint = (event: Event) => {
+      const detail = ((event as CustomEvent<BeatHintDetail>).detail ?? {}) as BeatHintDetail;
+      const now = performance.now();
+      if (detail.downbeat) {
+        songClockRef.current.hintDownbeat(now);
+      } else {
+        songClockRef.current.hintBeat(now);
+      }
+      audioRef.current?.hintBeat(now, detail.downbeat);
+      const s = settingsRef.current;
+      if (audioRef.current?.isRunning()) {
+        const bands = audioRef.current.read(s.beatSensitivity, now);
+        beatHintFlashRef.current = detail.downbeat ? "Downbeat" : "Beat";
+        const barTiming = songClockRef.current.tick({
+          now,
+          estimatedBpm: bands.bpm,
+          bpmConfidence: bands.bpmConfidence,
+          bpmLocked: bands.bpmLocked,
+        });
+        const tempoFrame = {
+          audioRunning: true,
+          beat: true,
+          bpm: Math.round(barTiming.clockBpm || bands.bpm),
+          bpmConfidence: bands.bpmConfidence,
+          barTiming,
+          beatHintFlash: beatHintFlashRef.current,
+        };
+        setLiveTempoFrame(tempoFrame);
+        dispatchLiveTempo(tempoFrame);
+      }
+      if (flashTimer !== null) window.clearTimeout(flashTimer);
+      flashTimer = window.setTimeout(() => {
+        beatHintFlashRef.current = null;
+      }, 700);
+    };
+    window.addEventListener(BEAT_HINT_EVENT, onBeatHint);
+    return () => {
+      window.removeEventListener(BEAT_HINT_EVENT, onBeatHint);
+      if (flashTimer !== null) window.clearTimeout(flashTimer);
+    };
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -810,7 +887,7 @@ export function Analyser() {
       style={{ backgroundColor: settings.bgColor }}
     >
       {audioStatus !== "running" && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
+        <div className="pointer-events-none absolute inset-0 z-[150] flex items-center justify-center p-6">
           <div className="pointer-events-auto w-full max-w-md rounded-md border border-white/10 bg-black/70 p-7 backdrop-blur-xl shadow-[0_0_60px_rgba(52,211,153,0.08)]">
             <div className="mb-5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em] text-emerald-300/80">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
@@ -819,32 +896,48 @@ export function Analyser() {
             <h1 className="mb-2 font-mono text-2xl uppercase tracking-[0.15em] text-white">
               Spectrum<span className="text-emerald-400">.</span>Analyser
             </h1>
-            <p className="mb-6 max-w-sm font-mono text-[11px] leading-relaxed tracking-wide text-white/50">
-              Pick an input. For system audio, choose a tab in Chrome and tick
-              <span className="text-emerald-300"> "Share tab audio"</span>.
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={handleMic}
-                className="group flex items-center justify-between gap-3 rounded-md border border-white/15 bg-white/5 px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.2em] text-white/80 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/10 hover:text-white"
-              >
-                <span className="flex items-center gap-3">
-                  <Mic className="h-4 w-4 text-white/60 group-hover:text-emerald-300" />
-                  Use microphone
-                </span>
-                <span className="text-white/30 group-hover:text-emerald-300">→</span>
-              </button>
-              <button
-                onClick={handleSystem}
-                className="group flex items-center justify-between gap-3 rounded-md border border-emerald-300/40 bg-emerald-400/10 px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-100 transition-colors hover:bg-emerald-400 hover:text-black"
-              >
-                <span className="flex items-center gap-3">
-                  <MonitorSpeaker className="h-4 w-4" />
-                  Share system audio
-                </span>
-                <span>→</span>
-              </button>
-            </div>
+            {audioCaptureSupport.ok ? (
+              <>
+                <p className="mb-6 max-w-sm font-mono text-[11px] leading-relaxed tracking-wide text-white/50">
+                  Pick an input. For system audio, choose a tab in Chrome and tick
+                  <span className="text-emerald-300"> "Share tab audio"</span>.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={handleMic}
+                    className="group flex items-center justify-between gap-3 rounded-md border border-white/15 bg-white/5 px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.2em] text-white/80 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/10 hover:text-white"
+                  >
+                    <span className="flex items-center gap-3">
+                      <Mic className="h-4 w-4 text-white/60 group-hover:text-emerald-300" />
+                      Use microphone
+                    </span>
+                    <span className="text-white/30 group-hover:text-emerald-300">→</span>
+                  </button>
+                  <button
+                    onClick={handleSystem}
+                    className="group flex items-center justify-between gap-3 rounded-md border border-emerald-300/40 bg-emerald-400/10 px-4 py-3 text-left font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-100 transition-colors hover:bg-emerald-400 hover:text-black"
+                  >
+                    <span className="flex items-center gap-3">
+                      <MonitorSpeaker className="h-4 w-4" />
+                      Share system audio
+                    </span>
+                    <span>→</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <p className="max-w-sm font-mono text-[11px] leading-relaxed tracking-wide text-amber-200/90">
+                  {audioCaptureSupport.reason}
+                </p>
+                <p className="max-w-sm font-mono text-[10px] leading-relaxed tracking-wide text-white/45">
+                  In Cursor: open Run and Debug, choose{" "}
+                  <span className="text-emerald-300">Launch Chrome (Spectrum Aura)</span>, then pick
+                  mic or tab audio in the Chrome window at{" "}
+                  <span className="text-emerald-300">http://localhost:6789</span>.
+                </p>
+              </div>
+            )}
             {audioError && (
               <p className="mt-4 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 font-mono text-[11px] text-red-300">
                 {audioError}
@@ -854,30 +947,34 @@ export function Analyser() {
         </div>
       )}
 
-      {audioStatus === "running" &&
-        liveTempo.bpm > 0 &&
-        liveTempo.bpmConfidence > 0.4 &&
-        (settings.showBPM ?? true) && (
-          <div className="absolute bottom-3 left-3 z-10 pointer-events-none">
-            <div className="text-center">
-              <div className="font-mono text-xs uppercase tracking-widest text-white/40 mb-1 flex items-center justify-center gap-2">
-                BPM
-                <span className="px-1.5 py-0.5 rounded text-[6px] font-bold bg-white/10 text-white/50 border border-white/15">
-                  EXPERIMENTAL
-                </span>
-              </div>
-              <div
-                className="font-mono text-3xl font-bold text-white/70 tabular-nums"
-                style={{
-                  textShadow: `0 0 ${Math.max(8, liveTempo.bpmConfidence * 20)}px rgba(52, 211, 153, ${liveTempo.bpmConfidence * 0.6})`,
-                  opacity: 0.3 + liveTempo.bpmConfidence * 0.4,
-                }}
-              >
-                {liveTempo.bpm}
-              </div>
+      {audioStatus === "running" && settings.showLatency && (
+        <LatencyHud latency={latencyHud} />
+      )}
+
+      {settings.showBPM && (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-10">
+          <BarTimingHud />
+          <div className="text-center">
+            <div className="mb-1 flex items-center justify-center gap-2 font-mono text-xs uppercase tracking-widest text-white/40">
+              BPM
+              <ExperimentalBadge />
+            </div>
+            <div
+              className="font-mono text-3xl font-bold tabular-nums text-white/70"
+              style={{
+                textShadow:
+                  liveTempo.bpm > 0 && liveTempo.bpmConfidence > 0.4
+                    ? `0 0 ${Math.max(8, liveTempo.bpmConfidence * 20)}px rgba(52, 211, 153, ${liveTempo.bpmConfidence * 0.6})`
+                    : undefined,
+                opacity:
+                  liveTempo.bpm > 0 ? 0.3 + liveTempo.bpmConfidence * 0.4 : 0.35,
+              }}
+            >
+              {liveTempo.audioRunning && liveTempo.bpm > 0 ? liveTempo.bpm : "—"}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {statsOpen && (
         <StatsForNerdsPanel
@@ -895,6 +992,55 @@ export function Analyser() {
         settings.classicFullscreen &&
         settings.classicShowFreqLabels &&
         audioStatus === "running" && <FreqLabels />}
+    </div>
+  );
+}
+
+function LatencyHud({
+  latency,
+}: {
+  latency: {
+    audioToRenderMs: number;
+    signalToRenderMs: number;
+    audioToSceneMs: number;
+    sceneToRenderMs: number;
+    performanceMode: boolean;
+  };
+}) {
+  const fmt = (v: number) => v.toFixed(1);
+  const primary = latency.audioToRenderMs;
+  const tone =
+    primary <= 20 ? "text-emerald-300" : primary <= 40 ? "text-amber-300" : "text-orange-300";
+  const showSignal = isSignalLatencyVisible(latency.signalToRenderMs);
+
+  return (
+    <div className="pointer-events-none absolute bottom-3 right-3 z-10">
+      <div
+        className={`rounded-md border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] backdrop-blur-md ${
+          latency.performanceMode
+            ? "border-amber-300/35 bg-black/75 shadow-[0_0_24px_rgba(251,191,36,0.12)]"
+            : "border-white/15 bg-black/60"
+        }`}
+      >
+        <div className="mb-1 flex items-center gap-2 text-white/40">
+          <span className={`h-1.5 w-1.5 rounded-full ${latency.performanceMode ? "bg-amber-300" : "bg-emerald-400"}`} />
+          Latency
+          {latency.performanceMode && (
+            <span className="rounded border border-amber-300/30 px-1 py-px text-[8px] text-amber-200/80">
+              perf
+            </span>
+          )}
+        </div>
+        <div className={`tabular-nums text-sm font-bold ${tone}`}>{fmt(primary)} ms</div>
+        <div className="mt-1 text-[9px] normal-case tracking-normal text-white/45">Audio → UI</div>
+        <div className="mt-1 grid gap-0.5 text-[9px] normal-case tracking-normal text-white/35">
+          <span>audio→scene {fmt(latency.audioToSceneMs)} ms</span>
+          <span>scene→render {fmt(latency.sceneToRenderMs)} ms</span>
+          {showSignal && (
+            <span>signal→ui {fmt(latency.signalToRenderMs)} ms</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1063,6 +1209,25 @@ function StatsForNerdsPanel({
         <StatSection title="Timing">
           <Stat label="FPS" value={fmt(stats.fps)} sparkline={stats.fpsHistory} color="emerald" />
           <Stat label="Frame ms" value={fmt(stats.frameMs, 2)} />
+          <Stat
+            label="Audio → UI"
+            value={`${fmt(stats.audioToRenderMs, 1)} ms`}
+            color="emerald"
+          />
+          <Stat
+            label="Signal → UI"
+            value={
+              isSignalLatencyVisible(stats.signalToRenderMs)
+                ? `${fmt(stats.signalToRenderMs, 1)} ms`
+                : "idle"
+            }
+            color="cyan"
+          />
+          <Stat label="Audio → scene" value={`${fmt(stats.audioToSceneMs, 1)} ms`} />
+          <Stat label="Scene → render" value={`${fmt(stats.sceneToRenderMs, 1)} ms`} />
+          <Stat label="Audio read CPU" value={`${fmt(stats.audioReadCpuMs, 2)} ms`} />
+          <Stat label="FFT window" value={`${fmt(stats.fftWindowMs, 1)} ms`} />
+          <Stat label="Base latency" value={`${fmt(stats.baseLatencyMs, 1)} ms`} />
           <Stat label="Updates" value={String(stats.updates)} />
           <Stat label="Uptime" value={`${fmt(stats.uptimeSec, 1)}s`} />
         </StatSection>

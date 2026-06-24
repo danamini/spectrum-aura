@@ -1,0 +1,13 @@
+---
+description: Spectrum Aura sync, audio, and render-loop conventions
+globs:
+  - src/components/analyser/**
+  - docs/**
+  - AGENTS.md
+---
+
+Read [AGENTS.md](../../AGENTS.md) before changing timing, beat sync, or the Analyser render loop.
+
+Key invariant: **SongClock** owns bar/beat phase; manual taps override audio onsets. Do not drive the grid from `bands.beat` after manual lock.
+
+Technical docs: [docs/README.md](../../docs/README.md)

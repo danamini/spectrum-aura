@@ -1,136 +1,437 @@
 /**
- * BPM Detection using a sliding window of bass energy analysis.
+ * BPM Detection using multi-band onset fusion, peak intervals, and autocorrelation.
  *
  * Algorithm:
- * 1. Maintains a history of bass energy values with timestamps
- * 2. Looks for energy peaks (local maxima) within the window
- * 3. Calculates intervals between consecutive peaks
- * 4. Estimates BPM from the median peak interval
- * 5. Applies temporal smoothing to reduce jitter
+ * 1. Maintains a history of fused onset energy with timestamps
+ * 2. Finds peaks via slope detection (local maxima)
+ * 3. Estimates BPM from median peak interval
+ * 4. Refines with autocorrelation tempogram on resampled onset envelope
+ * 5. Blends estimates using confidence weighting
+ * 6. Exposes beat phase for downbeat-synced visuals
  */
 
+export type BPMTickResult = {
+  bpm: number;
+  confidence: number;
+  beatPhase: number;
+  bpmLocked: boolean;
+};
+
+export type BPMBandSample = {
+  bass: number;
+  mid: number;
+  high: number;
+  bassDelta?: number;
+  midDelta?: number;
+  highDelta?: number;
+};
+
 export class BPMDetector {
-  // History of bass values with timestamps
   private energyHistory: Array<{ energy: number; time: number }> = [];
-  // Window size in milliseconds (default: 8 seconds for better analysis)
   private windowSizeMs = 8000;
-  // Minimum interval between peaks in ms (helps filter noise)
   private minPeakIntervalMs = 120;
-  // Threshold multiplier for peak detection (relative to average) - lowered for sensitivity
   private peakThreshold = 1.08;
-  // Alternative: detect peaks via slope change (energy increasing then decreasing)
   private useSlopeDetection = true;
 
   private lastBPM = 0;
-  private bpmSmoothingAlpha = 0.08; // Slower smoothing for more stable detection
+  private bpmSmoothingAlpha = 0.08;
 
-  /**
-   * Feed a new bass energy value into the detector.
-   * @param energy Bass energy value (typically 0-1)
-   * @param time Current time in milliseconds
-   */
+  private cachedPeaks: Array<{ energy: number; time: number }> = [];
+  private cachedConfidence = 0;
+  private cachedBeatPhase = 0;
+  private lastAnalysisAt = -Infinity;
+  private analysisIntervalMs = 250;
+  private lastFeedAt = -Infinity;
+  private feedIntervalMs = 50;
+  private lastFeedTime = 0;
+  private lastPeakTime = 0;
+
+  private lastBass = 0;
+  private lastMid = 0;
+  private lastHigh = 0;
+
+  private bpmLocked = false;
+  private tapLocked = false;
+  private lockedBpm = 0;
+  private phaseAnchorTime = 0;
+  private highConfidenceStreak = 0;
+  private tapTimes: number[] = [];
+  private driftRejectStreak = 0;
+
+  private static clampBpm(bpm: number): number {
+    let v = bpm;
+    if (v < 80) v *= 2;
+    if (v > 180) v *= 0.5;
+    return Math.max(60, Math.min(200, v));
+  }
+
   feed(energy: number, time: number): void {
+    this.feedBands({ bass: energy, mid: energy * 0.35, high: energy * 0.15 }, time);
+  }
+
+  feedBands(bands: BPMBandSample, time: number): void {
+    if (time - this.lastFeedAt < this.feedIntervalMs) return;
+    this.lastFeedAt = time;
+    this.lastFeedTime = time;
+
+    const bassDelta = bands.bassDelta ?? bands.bass - this.lastBass;
+    const midDelta = bands.midDelta ?? bands.mid - this.lastMid;
+    const highDelta = bands.highDelta ?? bands.high - this.lastHigh;
+    this.lastBass = bands.bass;
+    this.lastMid = bands.mid;
+    this.lastHigh = bands.high;
+
+    const onset =
+      Math.max(0, bassDelta) * 1 +
+      Math.max(0, midDelta) * 0.55 +
+      Math.max(0, highDelta) * 0.28;
+    const energy = bands.bass * 0.68 + bands.mid * 0.24 + bands.high * 0.08 + onset * 0.35;
+
     this.energyHistory.push({ energy, time });
 
-    // Remove old entries outside the window
     const cutoffTime = time - this.windowSizeMs;
     while (this.energyHistory.length > 0 && this.energyHistory[0].time < cutoffTime) {
       this.energyHistory.shift();
     }
   }
 
-  /**
-   * Get the current estimated BPM.
-   * @returns BPM value (typically 60-200)
-   */
-  getBPM(): number {
-    if (this.energyHistory.length < 5) return this.lastBPM;
-
-    // Find peaks (local maxima) in the energy history
-    const peaks = this.findPeaks();
-
-    // Need at least 2 peaks to calculate interval
-    if (peaks.length < 2) return this.lastBPM;
-
-    // Calculate intervals between consecutive peaks
-    const intervals: number[] = [];
-    for (let i = 1; i < peaks.length; i++) {
-      const interval = peaks[i].time - peaks[i - 1].time;
-      intervals.push(interval);
+  /** Run peak analysis at most every `analysisIntervalMs`; phase updates every tick. */
+  tick(time: number): BPMTickResult {
+    this.analyzeIfNeeded(time);
+    if (this.lastBPM > 0) {
+      this.cachedBeatPhase = this.computeBeatPhase(time);
     }
+    return {
+      bpm: this.lastBPM,
+      confidence: this.cachedConfidence,
+      beatPhase: this.cachedBeatPhase,
+      bpmLocked: this.bpmLocked,
+    };
+  }
 
-    if (intervals.length === 0) return this.lastBPM;
-
-    // Get the median interval to be robust to outliers
-    intervals.sort((a, b) => a - b);
-    const medianInterval = intervals[Math.floor(intervals.length / 2)];
-
-    // Convert interval (ms) to BPM (beats per minute)
-    let newBPM = 60000 / medianInterval;
-
-    // Handle octave errors (beat detected at half or double the actual tempo)
-    // Check if half or double BPM makes more sense
-    if (newBPM < 80) newBPM = newBPM * 2; // Likely detected every other beat
-    if (newBPM > 180) newBPM = newBPM * 0.5; // Likely detected extra peaks
-
-    // Clamp to reasonable range
-    newBPM = Math.max(60, Math.min(200, newBPM));
-
-    // Apply temporal smoothing to reduce jitter
-    this.lastBPM = this.lastBPM * (1 - this.bpmSmoothingAlpha) + newBPM * this.bpmSmoothingAlpha;
-
+  getBPM(): number {
+    this.analyzeIfNeeded(this.lastFeedTime, true);
     return this.lastBPM;
   }
 
-  /**
-   * Get the current beat confidence (0-1).
-   * Based on how consistent and frequent the detected peaks are.
-   */
   getConfidence(): number {
+    this.analyzeIfNeeded(this.lastFeedTime, true);
+    return this.cachedConfidence;
+  }
+
+  getBeatPhase(): number {
+    this.analyzeIfNeeded(this.lastFeedTime, true);
+    return this.cachedBeatPhase;
+  }
+
+  isLocked(): boolean {
+    return this.bpmLocked;
+  }
+
+  isTapLocked(): boolean {
+    return this.tapLocked;
+  }
+
+  /**
+   * Manual beat tap — aligns phase and refines BPM from tap spacing.
+   * Use `downbeat` to mark bar 1 beat 1.
+   */
+  hintBeat(time: number, downbeat = false): void {
+    this.tapTimes.push(time);
+    if (this.tapTimes.length > 8) this.tapTimes.shift();
+
+    this.phaseAnchorTime = time;
+    this.cachedBeatPhase = 0;
+    this.lastPeakTime = time;
+
+    if (this.tapTimes.length >= 2) {
+      const intervals: number[] = [];
+      for (let i = 1; i < this.tapTimes.length; i++) {
+        intervals.push(this.tapTimes[i]! - this.tapTimes[i - 1]!);
+      }
+      intervals.sort((a, b) => a - b);
+      const medianInterval = intervals[Math.floor(intervals.length / 2)]!;
+      if (medianInterval >= 250 && medianInterval <= 1200) {
+        const tappedBpm = BPMDetector.clampBpm(60000 / medianInterval);
+        this.lockedBpm = tappedBpm;
+        this.lastBPM = tappedBpm;
+        this.bpmLocked = true;
+        this.tapLocked = true;
+        this.cachedConfidence = Math.max(this.cachedConfidence, 0.88);
+        this.highConfidenceStreak = 0;
+        this.driftRejectStreak = 0;
+      }
+    } else if (downbeat && this.lastBPM > 0) {
+      this.bpmLocked = true;
+      this.lockedBpm = this.lastBPM;
+      this.cachedConfidence = Math.max(this.cachedConfidence, 0.75);
+    }
+  }
+
+  reset(): void {
+    this.energyHistory = [];
+    this.lastBPM = 0;
+    this.cachedPeaks = [];
+    this.cachedConfidence = 0;
+    this.cachedBeatPhase = 0;
+    this.lastAnalysisAt = -Infinity;
+    this.lastFeedAt = -Infinity;
+    this.lastFeedTime = 0;
+    this.lastPeakTime = 0;
+    this.lastBass = 0;
+    this.lastMid = 0;
+    this.lastHigh = 0;
+    this.bpmLocked = false;
+    this.tapLocked = false;
+    this.lockedBpm = 0;
+    this.phaseAnchorTime = 0;
+    this.highConfidenceStreak = 0;
+    this.tapTimes = [];
+    this.driftRejectStreak = 0;
+  }
+
+  private analyzeIfNeeded(time: number, force = false): void {
+    if (!force && time - this.lastAnalysisAt < this.analysisIntervalMs) return;
+    this.lastAnalysisAt = time;
+    this.cachedPeaks = this.findPeaks();
+    const peakBpm = this.computeBpmFromPeaks(this.cachedPeaks);
+    const useAutocorr = !this.bpmLocked && this.cachedPeaks.length < 3;
+    const { bpm: autoBpm, strength: autoStrength } = useAutocorr
+      ? this.computeAutocorrelationBpm(time)
+      : { bpm: 0, strength: 0 };
+    const candidateBpm = this.blendBpmEstimates(peakBpm, autoBpm, autoStrength);
+    this.cachedConfidence = this.computeConfidenceFromPeaks(this.cachedPeaks, autoStrength);
+    if (this.tapLocked) {
+      this.cachedConfidence = Math.max(this.cachedConfidence, 0.88);
+    }
+    this.lastBPM = this.applyBpmLock(candidateBpm);
+    if (this.cachedPeaks.length > 0) {
+      const latestPeak = this.cachedPeaks[this.cachedPeaks.length - 1]!.time;
+      this.lastPeakTime = latestPeak;
+      this.snapPhaseToPeak(latestPeak);
+    }
+  }
+
+  private applyBpmLock(candidateBpm: number): number {
+    if (this.tapLocked) {
+      const locked = this.lockedBpm > 0 ? this.lockedBpm : this.lastBPM;
+      this.lastBPM = locked;
+      return locked;
+    }
+
+    if (candidateBpm <= 0 && !this.bpmLocked) return this.lastBPM;
+
+    if (!this.bpmLocked) {
+      if (this.cachedConfidence > 0.62 && candidateBpm > 0) {
+        this.highConfidenceStreak += 1;
+      } else {
+        this.highConfidenceStreak = 0;
+      }
+      if (this.highConfidenceStreak >= 4 && candidateBpm > 0) {
+        this.bpmLocked = true;
+        this.lockedBpm = candidateBpm;
+        if (this.phaseAnchorTime <= 0 && this.lastPeakTime > 0) {
+          this.phaseAnchorTime = this.lastPeakTime;
+        }
+      }
+      return candidateBpm > 0 ? candidateBpm : this.lastBPM;
+    }
+
+    const locked = this.lockedBpm > 0 ? this.lockedBpm : this.lastBPM;
+    if (candidateBpm <= 0) return locked;
+
+    const diff = Math.abs(candidateBpm - locked);
+    if (diff <= 2.5) {
+      this.driftRejectStreak = 0;
+      this.lockedBpm = locked * 0.97 + candidateBpm * 0.03;
+      this.lastBPM = this.lockedBpm;
+      return this.lockedBpm;
+    }
+
+    this.driftRejectStreak += 1;
+    if (this.driftRejectStreak >= 12 && diff > 6) {
+      this.bpmLocked = false;
+      this.lockedBpm = 0;
+      this.highConfidenceStreak = 0;
+      this.driftRejectStreak = 0;
+      return candidateBpm;
+    }
+
+    return locked;
+  }
+
+  private snapPhaseToPeak(peakTime: number): void {
+    if (this.tapLocked) return;
+    if (!this.bpmLocked || this.lastBPM <= 0 || this.phaseAnchorTime <= 0) return;
+    const periodMs = 60000 / this.lastBPM;
+    const beatsSince =
+      Math.round((peakTime - this.phaseAnchorTime) / periodMs) || 0;
+    const expected = this.phaseAnchorTime + beatsSince * periodMs;
+    if (Math.abs(peakTime - expected) < periodMs * 0.18) {
+      this.phaseAnchorTime = expected * 0.35 + peakTime * 0.65;
+    }
+  }
+
+  private blendBpmEstimates(peakBpm: number, autoBpm: number, autoStrength: number): number {
+    if (peakBpm <= 0 && autoBpm <= 0) return this.lastBPM;
+    if (peakBpm <= 0) return autoBpm;
+    if (autoBpm <= 0 || autoStrength < 0.12) return peakBpm;
+
+    const diff = Math.abs(peakBpm - autoBpm);
+    const harmonicMatch =
+      diff < 8 ||
+      Math.abs(peakBpm - autoBpm * 2) < 10 ||
+      Math.abs(peakBpm * 2 - autoBpm) < 10;
+    if (!harmonicMatch) return peakBpm;
+
+    const autoWeight = Math.min(0.35, autoStrength * 0.45);
+    const blended = peakBpm * (1 - autoWeight) + autoBpm * autoWeight;
+    const alpha =
+      autoStrength > 0.45 && diff < 4
+        ? this.bpmSmoothingAlpha * 1.25
+        : diff > 5
+          ? this.bpmSmoothingAlpha * 0.65
+          : this.bpmSmoothingAlpha;
+    return this.lastBPM * (1 - alpha) + blended * alpha;
+  }
+
+  private computeAutocorrelationBpm(time: number): { bpm: number; strength: number } {
+    if (this.energyHistory.length < 12) return { bpm: 0, strength: 0 };
+
+    const binMs = 25;
+    const binCount = Math.floor(this.windowSizeMs / binMs);
+    const envelope = new Float32Array(binCount);
+    const startTime = time - this.windowSizeMs;
+
+    for (const sample of this.energyHistory) {
+      const idx = Math.floor((sample.time - startTime) / binMs);
+      if (idx >= 0 && idx < binCount) {
+        envelope[idx] = Math.max(envelope[idx]!, sample.energy);
+      }
+    }
+
+    const minLag = Math.max(2, Math.floor(60000 / 200 / binMs));
+    const maxLag = Math.min(binCount - 2, Math.ceil(60000 / 60 / binMs));
+    let bestLag = 0;
+    let bestScore = 0;
+    let secondScore = 0;
+    const scores: number[] = [];
+
+    for (let lag = minLag; lag <= maxLag; lag++) {
+      let sum = 0;
+      let count = 0;
+      for (let i = lag; i < binCount; i++) {
+        sum += envelope[i]! * envelope[i - lag]!;
+        count++;
+      }
+      const score = count > 0 ? sum / count : 0;
+      scores.push(score);
+      if (score > bestScore) {
+        secondScore = bestScore;
+        bestScore = score;
+        bestLag = lag;
+      } else if (score > secondScore) {
+        secondScore = score;
+      }
+    }
+
+    if (bestLag <= 0 || bestScore <= 0) return { bpm: 0, strength: 0 };
+
+    const lagIdx = bestLag - minLag;
+    let refinedLag = bestLag;
+    if (lagIdx > 0 && lagIdx < scores.length - 1) {
+      const y0 = scores[lagIdx - 1]!;
+      const y1 = scores[lagIdx]!;
+      const y2 = scores[lagIdx + 1]!;
+      const denom = y0 - 2 * y1 + y2;
+      if (Math.abs(denom) > 1e-9) {
+        refinedLag = bestLag + 0.5 * (y0 - y2) / denom;
+      }
+    }
+
+    const intervalMs = refinedLag * binMs;
+    let bpm = 60000 / intervalMs;
+    if (bpm < 80) bpm *= 2;
+    if (bpm > 180) bpm *= 0.5;
+    bpm = Math.max(60, Math.min(200, bpm));
+
+    const strength = secondScore > 0 ? (bestScore - secondScore) / bestScore : bestScore;
+    return { bpm, strength: Math.max(0, Math.min(1, strength)) };
+  }
+
+  private computeBeatPhase(time: number): number {
+    if (this.lastBPM <= 0) return 0;
+    if (this.cachedConfidence < 0.25 && !this.bpmLocked && !this.tapLocked) return 0;
+    const periodMs = 60000 / this.lastBPM;
+    const anchor =
+      this.phaseAnchorTime > 0
+        ? this.phaseAnchorTime
+        : this.lastPeakTime > 0
+          ? this.lastPeakTime
+          : this.lastFeedTime;
+    const elapsed = Math.max(0, time - anchor);
+    return (elapsed % periodMs) / periodMs;
+  }
+
+  private computeBpmFromPeaks(peaks: Array<{ energy: number; time: number }>): number {
+    if (this.energyHistory.length < 5 || peaks.length < 2) return 0;
+
+    const refinedTimes = peaks.map((peak) => this.refinePeakTime(peak));
+    const intervals: number[] = [];
+    for (let i = 1; i < refinedTimes.length; i++) {
+      intervals.push(refinedTimes[i] - refinedTimes[i - 1]);
+    }
+    if (intervals.length === 0) return 0;
+
+    intervals.sort((a, b) => a - b);
+    const medianInterval = intervals[Math.floor(intervals.length / 2)];
+
+    let bpm = 60000 / medianInterval;
+    bpm = BPMDetector.clampBpm(bpm);
+    return bpm;
+  }
+
+  private refinePeakTime(peak: { energy: number; time: number }): number {
+    const history = this.energyHistory;
+    let idx = history.findIndex((s) => s.time === peak.time);
+    if (idx <= 0 || idx >= history.length - 1) return peak.time;
+
+    const prev = history[idx - 1]!;
+    const curr = history[idx]!;
+    const next = history[idx + 1]!;
+    const denom = prev.energy - 2 * curr.energy + next.energy;
+    if (Math.abs(denom) < 1e-9) return peak.time;
+
+    const offset = 0.5 * (prev.energy - next.energy) / denom;
+    const clamped = Math.max(-0.5, Math.min(0.5, offset));
+    return curr.time + clamped * (next.time - prev.time);
+  }
+
+  private computeConfidenceFromPeaks(
+    peaks: Array<{ energy: number; time: number }>,
+    autoStrength: number,
+  ): number {
     if (this.energyHistory.length < 5) return 0;
+    if (peaks.length < 2) return autoStrength * 0.35;
+    if (peaks.length < 3) return Math.max(0.25, autoStrength * 0.5);
 
-    const peaks = this.findPeaks();
-
-    // More peaks = more confident
-    if (peaks.length < 2) return 0;
-    if (peaks.length < 3) return 0.3; // At least has a beat
-
-    // Calculate intervals
     const intervals: number[] = [];
     for (let i = 1; i < peaks.length; i++) {
       intervals.push(peaks[i].time - peaks[i - 1].time);
     }
+    if (intervals.length < 2) return Math.max(0.35, autoStrength * 0.55);
 
-    if (intervals.length < 2) return 0.4;
-
-    // Calculate consistency of intervals
     const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
     const variance =
       intervals.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / intervals.length;
     const stdDev = Math.sqrt(variance);
     const cv = mean > 0 ? stdDev / mean : 1;
 
-    // More forgiving confidence scale:
-    // cv < 0.08 → confidence ~1 (very consistent)
-    // cv < 0.15 → confidence ~0.8 (consistent)
-    // cv < 0.25 → confidence ~0.5 (somewhat consistent)
-    // cv > 0.4  → confidence ~0 (inconsistent)
     let confidence = 1 - cv * 3;
     confidence = Math.max(0, Math.min(1, confidence));
-
-    // Bonus: more peaks = higher confidence
     const peakBonus = Math.min(0.2, (peaks.length - 3) * 0.05);
-    confidence = Math.min(1, confidence + peakBonus);
-
-    return confidence;
-  }
-
-  /**
-   * Reset the detector (useful when changing tracks).
-   */
-  reset(): void {
-    this.energyHistory = [];
-    this.lastBPM = 0;
+    const autoBonus = autoStrength * 0.25;
+    return Math.min(1, confidence + peakBonus + autoBonus);
   }
 
   private findPeaks(): Array<{ energy: number; time: number }> {
@@ -139,9 +440,19 @@ export class BPMDetector {
     const peaks: typeof this.energyHistory = [];
     const history = this.energyHistory;
 
+    const shortWindow = Math.min(12, history.length);
+    const shortSlice = history.slice(-shortWindow);
+    const shortAvg = shortSlice.reduce((s, e) => s + e.energy, 0) / shortWindow;
+    const longAvg = history.reduce((s, e) => s + e.energy, 0) / history.length;
+    const shortVar =
+      shortSlice.reduce((s, e) => s + Math.pow(e.energy - shortAvg, 2), 0) / shortWindow;
+    const adaptiveFloor = longAvg + Math.sqrt(shortVar) * (shortAvg > longAvg * 1.05 ? 0.6 : 0.9);
+
+    if (this.lastBPM > 0) {
+      this.minPeakIntervalMs = Math.max(120, Math.min(900, (60000 / this.lastBPM) * 0.42));
+    }
+
     if (this.useSlopeDetection) {
-      // Slope-based detection: find where derivative changes from positive to negative
-      // This is more robust to smooth audio than threshold-based detection
       let lastPeakTime = -Infinity;
       let wasRising = false;
 
@@ -150,9 +461,7 @@ export class BPMDetector {
         const curr = history[i];
         const isRising = curr.energy > prev.energy;
 
-        // Peak found: was rising, now falling
-        if (wasRising && !isRising) {
-          // Use previous point as peak (top of the hill)
+        if (wasRising && !isRising && prev.energy >= adaptiveFloor * 0.5) {
           const timeSinceLast = prev.time - lastPeakTime;
           if (timeSinceLast >= this.minPeakIntervalMs) {
             peaks.push(prev);
@@ -163,9 +472,7 @@ export class BPMDetector {
         wasRising = isRising;
       }
     } else {
-      // Fallback: threshold-based (original approach)
-      const avg = history.reduce((sum, e) => sum + e.energy, 0) / history.length;
-      const threshold = avg * this.peakThreshold;
+      const threshold = Math.max(adaptiveFloor, longAvg * this.peakThreshold);
 
       for (let i = 1; i < history.length - 1; i++) {
         const prev = history[i - 1];

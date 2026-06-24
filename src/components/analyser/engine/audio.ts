@@ -1,4 +1,16 @@
+import { BeatMatcher } from "./beat-matcher";
 import { BPMDetector } from "./bpm-detector";
+import { formatMediaError } from "./audio-support";
+
+export type AudioTiming = {
+  readCpuMs: number;
+  audioToRenderMs: number;
+  baseLatencyMs: number;
+  outputLatencyMs: number;
+  fftWindowMs: number;
+  bassDelta: number;
+  signalChangeAt: number;
+};
 
 export type AudioBands = {
   bass: number;
@@ -8,7 +20,45 @@ export type AudioBands = {
   beat: boolean;
   bpm: number; // detected BPM (60-200, or 0 if not detected)
   bpmConfidence: number; // 0-1, how confident the BPM detection is
+  /** 0–1 phase within the current beat period (BPM clock). */
+  beatPhase: number;
+  /** Fused onset strength from multi-band deltas. */
+  onsetStrength: number;
+  /** True when bass/mid/centroid swing indicates a musical change. */
+  signalSwing: boolean;
+  /** BPM is locked — tempo won't drift mid-song. */
+  bpmLocked: boolean;
   bins: Uint8Array;
+  timing: AudioTiming;
+  /** Monotonic timestamp (performance.now) when this frame's FFT data was read. */
+  fftReadAt: number;
+};
+
+const EMPTY_TIMING: AudioTiming = {
+  readCpuMs: 0,
+  audioToRenderMs: 0,
+  baseLatencyMs: 0,
+  outputLatencyMs: 0,
+  fftWindowMs: 0,
+  bassDelta: 0,
+  signalChangeAt: 0,
+};
+
+const EMPTY_BANDS: AudioBands = {
+  bass: 0,
+  mid: 0,
+  high: 0,
+  centroid: 0,
+  beat: false,
+  bpm: 0,
+  bpmConfidence: 0,
+  beatPhase: 0,
+  onsetStrength: 0,
+  signalSwing: false,
+  bpmLocked: false,
+  bins: new Uint8Array(0),
+  timing: EMPTY_TIMING,
+  fftReadAt: 0,
 };
 
 export class AudioEngine {
@@ -19,51 +69,75 @@ export class AudioEngine {
   stream: MediaStream | null = null;
   bins: Uint8Array = new Uint8Array(0);
 
-  private bassHistory: number[] = [];
-  private lastBeat = 0;
+  private beatMatcher = new BeatMatcher();
   private bpmDetector = new BPMDetector();
+  private bandBounds = { n: 0, bassEnd: 0, midEnd: 0, bassDiv: 1, midDiv: 1, highDiv: 1 };
 
   async startMic(options?: { latencyOptimized?: boolean }) {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    this.attach(stream, options);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.attach(stream, options);
+    } catch (error) {
+      throw new Error(formatMediaError(error));
+    }
   }
 
   async startSystem(options?: { latencyOptimized?: boolean }) {
-    // Chromium trick: getDisplayMedia with audio. User must check "Share tab audio".
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true,
-    });
-    // strip video tracks — we only want audio
-    stream.getVideoTracks().forEach((t) => t.stop());
-    if (stream.getAudioTracks().length === 0) {
-      stream.getTracks().forEach((t) => t.stop());
-      throw new Error(
-        'No audio track was shared. In the Chrome dialog, choose a Tab and tick "Share tab audio".',
-      );
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      });
+      stream.getVideoTracks().forEach((t) => t.stop());
+      if (stream.getAudioTracks().length === 0) {
+        stream.getTracks().forEach((t) => t.stop());
+        throw new Error(
+          'No audio track was shared. In the Chrome dialog, choose a Tab and tick "Share tab audio".',
+        );
+      }
+      this.attach(stream, options);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("No audio track was shared")) {
+        throw error;
+      }
+      throw new Error(formatMediaError(error));
     }
-    this.attach(stream, options);
   }
 
   private attach(stream: MediaStream, options?: { latencyOptimized?: boolean }) {
     this.stop();
+    const latencyOptimized = options?.latencyOptimized ?? true;
     const ctx = new AudioContext({
-      latencyHint: options?.latencyOptimized ? "interactive" : "playback",
+      latencyHint: latencyOptimized ? "interactive" : "playback",
     });
     const source = ctx.createMediaStreamSource(stream);
     const gain = ctx.createGain();
     gain.gain.value = 1;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.82;
+    analyser.smoothingTimeConstant = latencyOptimized ? 0.45 : 0.82;
     source.connect(gain).connect(analyser);
-    // do NOT connect analyser to destination — avoid feedback / double playback
     this.ctx = ctx;
     this.source = source;
     this.gain = gain;
     this.analyser = analyser;
     this.stream = stream;
     this.bins = new Uint8Array(analyser.frequencyBinCount);
+    this.updateBandBounds(analyser.frequencyBinCount);
+    void ctx.resume();
+  }
+
+  private updateBandBounds(n: number) {
+    const bassEnd = Math.floor(n * 0.08);
+    const midEnd = Math.floor(n * 0.35);
+    this.bandBounds = {
+      n,
+      bassEnd,
+      midEnd,
+      bassDiv: bassEnd || 1,
+      midDiv: midEnd - bassEnd || 1,
+      highDiv: n - midEnd || 1,
+    };
   }
 
   setSmoothing(v: number) {
@@ -73,55 +147,91 @@ export class AudioEngine {
     if (this.analyser) {
       this.analyser.fftSize = n;
       this.bins = new Uint8Array(this.analyser.frequencyBinCount);
+      this.updateBandBounds(this.analyser.frequencyBinCount);
     }
   }
   setGain(v: number) {
     if (this.gain) this.gain.gain.value = v;
   }
 
-  read(beatThreshold: number): AudioBands {
+  read(beatThreshold: number, clockTime?: number): AudioBands {
     if (!this.analyser) {
-      return { bass: 0, mid: 0, high: 0, centroid: 0, beat: false, bins: this.bins };
+      return { ...EMPTY_BANDS, bins: this.bins };
     }
+
+    const t0 = performance.now();
     this.analyser.getByteFrequencyData(this.bins as Uint8Array<ArrayBuffer>);
-    const n = this.bins.length;
-    const bassEnd = Math.floor(n * 0.08);
-    const midEnd = Math.floor(n * 0.35);
+    const fftReadAt = performance.now();
+
+    const { bassEnd, midEnd, n, bassDiv, midDiv, highDiv } = this.bandBounds;
+    const inv255 = 1 / 255;
     let bass = 0,
       mid = 0,
-      high = 0;
-    let weighted = 0,
+      high = 0,
+      weighted = 0,
       total = 0;
+
     for (let i = 0; i < n; i++) {
-      const v = this.bins[i] / 255;
+      const v = this.bins[i] * inv255;
       if (i < bassEnd) bass += v;
       else if (i < midEnd) mid += v;
       else high += v;
       weighted += i * v;
       total += v;
     }
-    bass /= bassEnd || 1;
-    mid /= midEnd - bassEnd || 1;
-    high /= n - midEnd || 1;
+    bass /= bassDiv;
+    mid /= midDiv;
+    high /= highDiv;
     const centroid = total > 0 ? weighted / total / n : 0;
 
-    // beat detect
-    this.bassHistory.push(bass);
-    if (this.bassHistory.length > 43) this.bassHistory.shift();
-    const avg = this.bassHistory.reduce((s, x) => s + x, 0) / this.bassHistory.length;
-    const now = performance.now();
-    let beat = false;
-    if (bass > avg * beatThreshold && bass > 0.35 && now - this.lastBeat > 180) {
-      beat = true;
-      this.lastBeat = now;
-    }
+    const match = this.beatMatcher.detect(bass, mid, high, centroid, beatThreshold, fftReadAt);
 
-    // BPM detection
-    this.bpmDetector.feed(bass, now);
-    const bpm = this.bpmDetector.getBPM();
-    const bpmConfidence = this.bpmDetector.getConfidence();
+    this.bpmDetector.feedBands(
+      {
+        bass,
+        mid,
+        high,
+        bassDelta: match.bassDelta,
+        midDelta: match.midDelta,
+      },
+      fftReadAt,
+    );
+    const { bpm, confidence: bpmConfidence, beatPhase, bpmLocked } = this.bpmDetector.tick(
+      clockTime ?? fftReadAt,
+    );
 
-    return { bass, mid, high, centroid, beat, bpm, bpmConfidence, bins: this.bins };
+    const sr = this.ctx?.sampleRate ?? 48000;
+    const fftSize = this.analyser.fftSize;
+    const readCpuMs = performance.now() - t0;
+
+    return {
+      bass,
+      mid,
+      high,
+      centroid,
+      beat: match.beat,
+      bpm,
+      bpmConfidence,
+      beatPhase,
+      onsetStrength: match.onsetStrength,
+      signalSwing: match.signalSwing,
+      bpmLocked,
+      bins: this.bins,
+      fftReadAt,
+      timing: {
+        readCpuMs,
+        audioToRenderMs: 0,
+        baseLatencyMs: (this.ctx?.baseLatency ?? 0) * 1000,
+        outputLatencyMs: (this.ctx?.outputLatency ?? 0) * 1000,
+        fftWindowMs: (fftSize / sr) * 1000,
+        bassDelta: match.bassDelta,
+        signalChangeAt: this.beatMatcher.signalChangeAt,
+      },
+    };
+  }
+
+  hintBeat(time: number, downbeat = false): void {
+    this.bpmDetector.hintBeat(time, downbeat);
   }
 
   stop() {
@@ -140,6 +250,7 @@ export class AudioEngine {
     this.source = null;
     this.gain = null;
     this.stream = null;
+    this.beatMatcher.reset();
     this.bpmDetector.reset();
   }
 

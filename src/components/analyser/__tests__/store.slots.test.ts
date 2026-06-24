@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { installStorageMock } from "./test-helpers";
+import { installStorageMock } from "./helpers/test-helpers";
 
 const SLOTS_KEY = "analyser-slots-v1";
 
@@ -11,7 +11,7 @@ describe("settingsStore slots", () => {
   });
 
   it("seeds deployment default slots for first-time users", async () => {
-    const { settingsStore, SLOT_COUNT } = await import("./store");
+    const { settingsStore, SLOT_COUNT } = await import("../store");
 
     const slots = settingsStore.getSlots();
 
@@ -28,7 +28,7 @@ describe("settingsStore slots", () => {
       JSON.stringify([{ name: "My Override", settings: { view: "classic", barCount: 72 } }, null]),
     );
 
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     const [slot1, slot2] = settingsStore.getSlots();
     expect(settingsStore.getSlots()).toHaveLength(1);
@@ -52,7 +52,7 @@ describe("settingsStore slots", () => {
       ]),
     );
 
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.loadSlot(0);
     const state = settingsStore.get();
@@ -62,7 +62,7 @@ describe("settingsStore slots", () => {
   });
 
   it("preserves slot cycling flags when loading a slot", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.set({
       slotCycleMode: true,
@@ -87,7 +87,7 @@ describe("settingsStore slots", () => {
   });
 
   it("appends new saves beyond the deployment defaults", async () => {
-    const { settingsStore, SLOT_COUNT } = await import("./store");
+    const { settingsStore, SLOT_COUNT } = await import("../store");
 
     settingsStore.saveSlot(SLOT_COUNT, "Save 6");
 
@@ -97,7 +97,7 @@ describe("settingsStore slots", () => {
   });
 
   it("removes cleared saves instead of leaving empty placeholders", async () => {
-    const { settingsStore, SLOT_COUNT } = await import("./store");
+    const { settingsStore, SLOT_COUNT } = await import("../store");
 
     settingsStore.clearSlot(1);
 
@@ -107,7 +107,7 @@ describe("settingsStore slots", () => {
   });
 
   it("reindexes auto-generated slot names after deleting a slot", async () => {
-    const { settingsStore } = await import("./store");
+    const { settingsStore } = await import("../store");
 
     settingsStore.clearSlot(1);
 
@@ -119,7 +119,7 @@ describe("settingsStore slots", () => {
   });
 
   it("keeps custom save names while reindexing generated save names", async () => {
-    const { settingsStore, SLOT_COUNT } = await import("./store");
+    const { settingsStore, SLOT_COUNT } = await import("../store");
 
     settingsStore.saveSlot(0, "My Favorite");
     settingsStore.saveSlot(SLOT_COUNT, "Save 6");

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import {
+  LayoutGrid,
   Maximize2,
   Mic,
   Play,
+  Repeat,
   Save,
   Settings2,
   Shuffle,
@@ -12,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { settingsStore, useSettings, useSlots, type Settings } from "./store";
+import { dispatchBeatHint } from "./engine/beat-hint";
 import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "./engine/xr";
 import { getVisualDefinition, VISUALS } from "./visuals";
 
@@ -122,6 +125,10 @@ export function Shortcuts() {
     settingsStore.set({ postFxEnabled: next });
     showFlash(next ? "Post FX ON" : "Post FX OFF");
   };
+  const doBeatHint = (downbeat: boolean) => {
+    dispatchBeatHint({ downbeat });
+    showFlash(downbeat ? "Downbeat ⇧T" : "Beat tap T");
+  };
   const doToggleView = (direction: 1 | -1 = 1) => {
     const order = VISUALS.flatMap((visual) =>
       visual.fullscreenKey ? [visual.id, `${visual.id}2d`] : [visual.id],
@@ -159,9 +166,24 @@ export function Shortcuts() {
     settingsStore.set({ slotCycleMode: on });
     showFlash(on ? "Save cycle ON" : "Save cycle OFF");
   };
+  const doToggleViewCycle = () => {
+    const on = !settingsStore.get().viewCycleMode;
+    settingsStore.set({ viewCycleMode: on });
+    showFlash(on ? "View cycle ON" : "View cycle OFF");
+  };
   const doToggleStats = () => {
     window.dispatchEvent(new Event(TOGGLE_STATS_PANEL_EVENT));
     showFlash("Stats for nerds");
+  };
+  const doToggleLatency = () => {
+    const next = !settingsStore.get().showLatency;
+    settingsStore.set({ showLatency: next });
+    showFlash(next ? "Latency HUD ON" : "Latency HUD OFF");
+  };
+  const doToggleBpmGrid = () => {
+    const next = !settingsStore.get().showBPM;
+    settingsStore.set({ showBPM: next });
+    showFlash(next ? "BPM grid ON" : "BPM grid OFF");
   };
   const doToggleSettings = () => {
     window.dispatchEvent(new Event(TOGGLE_SETTINGS_PANEL_EVENT));
@@ -243,6 +265,8 @@ export function Shortcuts() {
     doRandomize,
     doToggleView,
     doToggleSlotCycle,
+    doToggleViewCycle,
+    doBeatHint,
     doCycleSave,
     doRandomSave,
     doFullscreen,
@@ -256,12 +280,16 @@ export function Shortcuts() {
     doRandomize,
     doToggleView,
     doToggleSlotCycle,
+    doToggleViewCycle,
+    doBeatHint,
     doCycleSave,
     doRandomSave,
     doFullscreen,
     doToggleSettings,
     doStopAudio,
     doToggleHints,
+    doToggleLatency,
+    doToggleBpmGrid,
     doSaveSlot,
     doSlot,
   };
@@ -312,6 +340,14 @@ export function Shortcuts() {
         actionsRef.current.doToggleSlotCycle();
         e.preventDefault();
         e.stopPropagation();
+      } else if (k === "c") {
+        actionsRef.current.doToggleViewCycle();
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (k === "t") {
+        actionsRef.current.doBeatHint(e.shiftKey);
+        e.preventDefault();
+        e.stopPropagation();
       } else if (e.key === "[") {
         actionsRef.current.doCycleSave(-1);
         e.preventDefault();
@@ -338,6 +374,14 @@ export function Shortcuts() {
         e.stopPropagation();
       } else if (k === "g") {
         actionsRef.current.doToggleHints();
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (k === "l") {
+        actionsRef.current.doToggleLatency();
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (k === "m") {
+        actionsRef.current.doToggleBpmGrid();
         e.preventDefault();
         e.stopPropagation();
       }
@@ -434,6 +478,39 @@ export function Shortcuts() {
       title: "Stats for nerds",
     },
     {
+      key: "L",
+      label: "Latency",
+      active: settings.showLatency,
+      tooltip: (
+        <TooltipBlock
+          title="Latency HUD"
+          hint="L"
+          detail="Toggles the bottom-right audio→UI latency overlay."
+        />
+      ),
+      onClick: () => {
+        doToggleLatency();
+      },
+      title: "Toggle latency HUD",
+    },
+    {
+      key: "M",
+      label: "BPM Grid",
+      icon: <LayoutGrid />,
+      active: settings.showBPM,
+      tooltip: (
+        <TooltipBlock
+          title="BPM & Bar Grid"
+          hint="M"
+          detail="Toggles the sync grid and BPM readout on canvas and in Audio settings."
+        />
+      ),
+      onClick: () => {
+        doToggleBpmGrid();
+      },
+      title: "Toggle BPM & bar grid",
+    },
+    {
       key: "G",
       label: "Hide hints",
       tooltip: (
@@ -490,6 +567,22 @@ export function Shortcuts() {
     ),
     onClick: () => {
       doToggleSlotCycle();
+    },
+  };
+  const viewCycleHint: Hint = {
+    key: "C",
+    label: "View Cycle",
+    icon: <Repeat />,
+    active: settings.viewCycleMode,
+    tooltip: (
+      <TooltipBlock
+        title="View Cycle"
+        hint="C"
+        detail="Randomly switches visuals every 4 bars (16 beats in 4/4)."
+      />
+    ),
+    onClick: () => {
+      doToggleViewCycle();
     },
   };
   const prevSaveHint: Hint = {
@@ -674,6 +767,7 @@ export function Shortcuts() {
                       </span>
                       <Btn h={prevVisualHint} />
                       <Btn h={hints[0]!} />
+                      <Btn h={viewCycleHint} />
                       <MiniToggle
                         label="inc"
                         active={settings.randomizeViewSettings}

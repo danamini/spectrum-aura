@@ -7,6 +7,7 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { sphereVertexShader, sphereFragmentShader } from "./shaders";
 import type { AudioBands } from "./audio";
+import type { SceneUpdateOpts } from "./scene-update-opts";
 import { settingsStore } from "../store";
 import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS, type ViewMode } from "../visuals";
 
@@ -65,6 +66,9 @@ export class Scene {
   private barCount = 0;
   private dummy = new THREE.Object3D();
   private tmpColor = new THREE.Color();
+  private torusAccentScratch = new THREE.Color();
+  private rippleColorScratch = new THREE.Color();
+  private lastSceneBgColor = "";
   private white = new THREE.Color(1, 1, 1);
   private dsColorA = new THREE.Color("#7fd9ff");
   private dsColorB = new THREE.Color("#d4ffff");
@@ -391,8 +395,11 @@ export class Scene {
   }
 
   setPalette(p: Palette) {
+    if (p[0] === this.palette[0] && p[1] === this.palette[1] && p[2] === this.palette[2]) return;
     this.palette = p;
-    this.paletteThree = [new THREE.Color(p[0]), new THREE.Color(p[1]), new THREE.Color(p[2])];
+    this.paletteThree[0].set(p[0]);
+    this.paletteThree[1].set(p[1]);
+    this.paletteThree[2].set(p[2]);
     this.sphereMat.uniforms.uColorA.value.copy(this.paletteThree[0]);
     this.sphereMat.uniforms.uColorB.value.copy(this.paletteThree[1]);
     this.sphereMat.uniforms.uColorC.value.copy(this.paletteThree[2]);
@@ -506,7 +513,7 @@ export class Scene {
       if (this.torusColorMode === "individual") {
         const t = count <= 1 ? 0 : i / (count - 1);
         const body = this.colorAtInto(t, this.tmpColor);
-        const accent = this.colorAtInto(Math.min(1, t + 0.18), new THREE.Color());
+        const accent = this.colorAtInto(Math.min(1, t + 0.18), this.torusAccentScratch);
         cell.meshMat.color.copy(body).multiplyScalar(0.9);
         cell.meshMat.emissive.copy(body).lerp(this.paletteThree[2], 0.2);
         cell.particleMat.color.copy(accent);
@@ -2522,126 +2529,7 @@ export class Scene {
     this.postFxBoost.glitch = 0;
   }
 
-  update(
-    dt: number,
-    time: number,
-    audio: AudioBands,
-    opts: {
-      sphereDisp: number;
-      orbitSpeed: number;
-      peakDecay: number;
-      peakHold: number;
-      colorBands: boolean;
-      blocky: boolean;
-      segments: number;
-      grid: boolean;
-      gridOpacity: number;
-      cameraDrift: boolean;
-      cameraDriftAmount: number;
-      cameraBeat: boolean;
-      cameraBeatAmount: number;
-      cameraMouse: boolean;
-      xrMode: boolean;
-      xrBackgroundHidden: boolean;
-      classicSpin: boolean;
-      classicSpinSpeed: number;
-      classicWireframe: boolean;
-      classicFullscreen: boolean;
-      peakColor: string;
-      peakStyle: "bar" | "thin" | "glow" | "none";
-      rippleRingCount: number;
-      rippleColumns: number;
-      rippleMaxRadius: number;
-      rippleSpeed: number;
-      rippleAmplitude: number;
-      rippleWaveCycles: number;
-      rippleThickness: number;
-      rippleRotationSpeed: number;
-      rippleOpacity: number;
-      rippleWireframe: boolean;
-      datastreamUsePalette: boolean;
-      datastreamAmplitude: number;
-      datastreamItemCount: number;
-      nebulaUsePalette: boolean;
-      nebulaAmplitude: number;
-      nebulaDetail: number;
-      nebulaWireframe: boolean;
-      monolithUsePalette: boolean;
-      monolithAmplitude: number;
-      monolithBrightness: number;
-      monolithGridSize: number;
-      monolithWireframe: boolean;
-      mandalaUsePalette: boolean;
-      mandalaAmplitude: number;
-      mandalaLineCount: number;
-      mandalaLineWidth: number;
-      terrainUsePalette: boolean;
-      terrainAmplitude: number;
-      terrainColumns: number;
-      terrainWireframe: boolean;
-      comboSphereSize: number;
-      comboSphereSpinSpeed: number;
-      comboSphereBassPunch: number;
-      comboBarRadius: number;
-      comboBarHeightScale: number;
-      comboParticleSize: number;
-      comboLevelMeter: boolean;
-      comboWireframe: boolean;
-      comboFullscreen: boolean;
-      rippleFullscreen: boolean;
-      datastreamFullscreen: boolean;
-      nebulaFullscreen: boolean;
-      monolithFullscreen: boolean;
-      mandalaFullscreen: boolean;
-      terrainFullscreen: boolean;
-      obsidianFullscreen: boolean;
-      obsidianUsePalette: boolean;
-      obsidianAmplitude: number;
-      obsidianShardDetail: number;
-      torusFullscreen: boolean;
-      torusUsePalette: boolean;
-      torusAmplitude: number;
-      torusParticleCount: number;
-      torusSpeed: number;
-      torusCount: number;
-      torusSpacing: number;
-      torusSize: number;
-      torusParticleSize: number;
-      torusColorMode: "shared" | "individual";
-      torusRotationMode: "flat" | "odd-upright" | "alternating-x" | "alternating-z" | "fan";
-      torusOddUpright: boolean;
-      soundwallFullscreen: boolean;
-      soundwallUsePalette: boolean;
-      soundwallAmplitude: number;
-      soundwallColumns: number;
-      soundwallRows: number;
-      geometrynebulaFullscreen: boolean;
-      geometrynebulaUsePalette: boolean;
-      geometrynebulaAmplitude: number;
-      geometrynebulaCount: number;
-      reztubeFullscreen: boolean;
-      reztubeUsePalette: boolean;
-      reztubeAmplitude: number;
-      reztubeSpeed: number;
-      reztubeTwist: number;
-      reztubeRadius: number;
-      reztubeSegments: number;
-      reztubeLineWidth: number;
-      assetflowFullscreen: boolean;
-      assetflowUsePalette: boolean;
-      assetflowIncludeShapes: boolean;
-      assetflowAmplitude: number;
-      assetflowModelScale: number;
-      assetflowSpriteAmount: number;
-      assetflowModelCount: number;
-      assetflowSpread: number;
-      assetflowSpin: number;
-      assetflowMovement: number;
-      assetflowBackgroundDrift: number;
-      bgColor: string;
-      view: ViewMode;
-    },
-  ) {
+  update(dt: number, time: number, audio: AudioBands, opts: SceneUpdateOpts) {
     // Keep scene visibility + branch view in lockstep with React settings every frame.
     this.setView(opts.view);
 
@@ -2650,28 +2538,34 @@ export class Scene {
     const xrBackgroundHidden = xrMode && Boolean(opts.xrBackgroundHidden);
     if (xrBackgroundHidden) {
       this.scene.background = null;
-    } else {
+      this.lastSceneBgColor = "";
+    } else if (opts.bgColor !== this.lastSceneBgColor) {
+      this.lastSceneBgColor = opts.bgColor;
       if (!(this.scene.background instanceof THREE.Color)) {
         this.scene.background = new THREE.Color(opts.bgColor);
+      } else {
+        (this.scene.background as THREE.Color).set(opts.bgColor);
       }
-      (this.scene.background as THREE.Color).set(opts.bgColor);
     }
     if (this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.color.set(opts.bgColor);
     }
-    // BPM phase — one full 0→1 cycle per beat
+    // BPM phase — authoritative song clock beat phase when synced, else 0
     const bpmConfident = audio.bpm > 0 && audio.bpmConfidence > 0.45;
-    const bpmPhase = bpmConfident ? (time * (audio.bpm / 60)) % 1 : 0;
+    const bpmPhase = bpmConfident ? audio.beatPhase : 0;
     this.xrHudViewLabel = opts.view;
     this.xrHudTempo = Math.round(audio.bpm);
     this.xrHudTempoConfidence = audio.bpmConfidence;
-    this.xrHudBands = { bass: audio.bass, mid: audio.mid, high: audio.high };
+    this.xrHudBands.bass = audio.bass;
+    this.xrHudBands.mid = audio.mid;
+    this.xrHudBands.high = audio.high;
     this.xrHudBackgroundNote = xrBackgroundHidden
       ? "Transparent clear requested; Quest passthrough unsupported"
       : "Quest Browser passthrough unsupported in immersive-vr";
+    const hudRedrawInterval = opts.performance ? 320 : 160;
     if (
       this.xrSessionActive &&
-      (this.xrHudNeedsRedraw || performance.now() - this.xrHudLastDrawAt > 160)
+      (this.xrHudNeedsRedraw || performance.now() - this.xrHudLastDrawAt > hudRedrawInterval)
     ) {
       this.redrawXrHud();
     }
@@ -3989,7 +3883,7 @@ export class Scene {
     const colA = this.paletteThree[0];
     const colB = this.paletteThree[1];
     const colC = this.paletteThree[2];
-    const _c = new THREE.Color();
+    const _c = this.rippleColorScratch;
 
     for (let c = 0; c < C; c++) {
       const sliceV = this.rippleSliceScratch[c]!;

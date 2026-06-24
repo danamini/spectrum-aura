@@ -1,7 +1,7 @@
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Shortcuts } from "./Shortcuts";
+import { Shortcuts } from "../Shortcuts";
 
 type Slot = { name: string; settings: Record<string, unknown> } | null;
 
@@ -9,8 +9,11 @@ type MockState = {
   view: "combo";
   comboFullscreen: boolean;
   slotCycleMode: boolean;
+  viewCycleMode: boolean;
   randomizeViewSettings: boolean;
   postFxEnabled: boolean;
+  showBPM: boolean;
+  showLatency: boolean;
 };
 
 const mocks = vi.hoisted(() => {
@@ -18,8 +21,11 @@ const mocks = vi.hoisted(() => {
     view: "combo",
     comboFullscreen: false,
     slotCycleMode: false,
+    viewCycleMode: false,
     randomizeViewSettings: false,
     postFxEnabled: true,
+    showBPM: true,
+    showLatency: false,
   };
 
   const slots: Slot[] = [{ name: "Slot 1", settings: { view: "combo" } }, null, null, null, null];
@@ -41,7 +47,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("./store", () => ({
+vi.mock("../store", () => ({
   settingsStore: mocks.settingsStore,
   useSettings: () => mocks.state,
   useSlots: () => mocks.slots,
@@ -57,8 +63,11 @@ describe("Shortcuts", () => {
     mocks.state.view = "combo";
     mocks.state.comboFullscreen = false;
     mocks.state.slotCycleMode = false;
+    mocks.state.viewCycleMode = false;
     mocks.state.randomizeViewSettings = false;
     mocks.state.postFxEnabled = true;
+    mocks.state.showBPM = true;
+    mocks.state.showLatency = false;
 
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -190,6 +199,30 @@ describe("Shortcuts", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
 
     expect(mocks.settingsStore.set).toHaveBeenCalledWith({ slotCycleMode: true });
+  });
+
+  it("uses C key for View Cycle", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ viewCycleMode: true });
+  });
+
+  it("uses M key for BPM grid toggle", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "m", bubbles: true }));
+
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ showBPM: false });
+  });
+
+  it("marks View Cycle as active when view cycling is enabled", async () => {
+    mocks.state.viewCycleMode = true;
+
+    flushSync(() => {
+      root.render(<Shortcuts />);
+    });
+    await tick();
+
+    const viewCycleButton = container.querySelector("button[aria-label='View Cycle']");
+    expect(viewCycleButton?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("marks Play Saves as active when save cycling is enabled", async () => {

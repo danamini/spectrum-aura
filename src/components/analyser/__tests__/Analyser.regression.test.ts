@@ -18,4 +18,14 @@ describe("Analyser TDZ regression", () => {
     expect(resetKeyInit).not.toBeNull();
     expect(displayedViewDecl?.index ?? -1).toBeLessThan(resetKeyInit?.index ?? -1);
   });
+
+  it("does not call removed barTiming React setters from the render loop", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/components/analyser/Analyser.tsx"),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(/\bsetBarTiming\b/);
+    expect(source).toMatch(/\bdispatchLiveTempo\b/);
+  });
 });

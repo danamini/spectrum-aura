@@ -23,6 +23,8 @@ import {
   setWebXrBackgroundHidden,
   type WebXrState,
 } from "./engine/xr";
+import { BarTimingHud, ExperimentalBadge } from "./BarTimingHud";
+import { EMPTY_LIVE_TEMPO, LIVE_TEMPO_EVENT, type LiveTempoState } from "./engine/live-tempo";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
   PALETTES,
@@ -225,6 +227,7 @@ export function ControlPanel() {
     backgroundHidden: false,
   });
   const [ui, setUi] = useState<UIState>(loadUI);
+  const [liveTempo, setLiveTempo] = useState<LiveTempoState>(EMPTY_LIVE_TEMPO);
   const flyoutPanelRef = React.useRef<HTMLDivElement | null>(null);
   const updateUi = (patch: Partial<UIState>) => {
     setUi((prev) => {
@@ -390,6 +393,16 @@ export function ControlPanel() {
     return () => window.removeEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
   }, []);
 
+  React.useEffect(() => {
+    const onLiveTempo = (event: Event) => {
+      const detail = (event as CustomEvent<LiveTempoState>).detail;
+      if (!detail) return;
+      setLiveTempo(detail);
+    };
+    window.addEventListener(LIVE_TEMPO_EVENT, onLiveTempo);
+    return () => window.removeEventListener(LIVE_TEMPO_EVENT, onLiveTempo);
+  }, []);
+
   const xrOverlay = xrState.active ? (
     <div className="pointer-events-none fixed left-4 top-4 z-50 flex max-w-[280px] items-start">
       <div className="pointer-events-auto rounded-md border border-emerald-400/30 bg-black/80 px-3 py-2 text-white shadow-[0_0_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
@@ -495,6 +508,26 @@ export function ControlPanel() {
                   disabled={!hasGlobalWireframe}
                 />
               </div>
+              <ToggleRow
+                label="Music-reactive view cycle"
+                enabled={s.viewCycleMode}
+                onToggle={(v) => set({ viewCycleMode: v })}
+              >
+                <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                  Randomly switches visuals every 4 bars (16 beats in 4/4). Shortcut: C.
+                  Tap <span className="text-white/50">T</span> on beats to sync;{" "}
+                  <span className="text-white/50">⇧T</span> on downbeat for bar 1.
+                </p>
+              </ToggleRow>
+              <ToggleRow
+                label="Randomize FX on view switch"
+                enabled={s.viewCycleRandomize}
+                onToggle={(v) => set({ viewCycleRandomize: v })}
+              >
+                <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                  Applies randomize when the view cycle picks a new visual.
+                </p>
+              </ToggleRow>
             </Row>
 
             {hasViewSettings && (
@@ -1524,10 +1557,69 @@ export function ControlPanel() {
                       </div>
                     </Row>
                     <ToggleRow
-                      label="Show BPM overlay (exp.)"
+                      label="Show BPM & bar grid"
                       enabled={s.showBPM}
                       onToggle={(v) => set({ showBPM: v })}
                     />
+                    <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                      Shortcut: <span className="text-emerald-300/80">M</span> · tap{" "}
+                      <span className="text-white/50">T</span> on beats,{" "}
+                      <span className="text-white/50">⇧T</span> on downbeat.
+                    </p>
+                    {s.showBPM && (
+                      <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.03] p-3">
+                        <div className="flex items-end justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-white/40">
+                              BPM
+                              <ExperimentalBadge />
+                            </div>
+                            {liveTempo.bpmConfidence > 0.25 && (
+                              <p className="mt-1 font-mono text-[9px] text-white/35">
+                                {Math.round(liveTempo.bpmConfidence * 100)}% confidence
+                                {liveTempo.barTiming.bpmLocked ? " · locked" : ""}
+                              </p>
+                            )}
+                          </div>
+                          <div
+                            className="font-mono text-3xl font-bold tabular-nums text-white/70"
+                            style={{
+                              textShadow:
+                                liveTempo.bpm > 0 && liveTempo.bpmConfidence > 0.4
+                                  ? `0 0 ${Math.max(8, liveTempo.bpmConfidence * 20)}px rgba(52, 211, 153, ${liveTempo.bpmConfidence * 0.6})`
+                                  : undefined,
+                              opacity:
+                                liveTempo.bpm > 0
+                                  ? 0.3 + liveTempo.bpmConfidence * 0.4
+                                  : 0.35,
+                            }}
+                          >
+                            {liveTempo.audioRunning && liveTempo.bpm > 0
+                              ? liveTempo.bpm
+                              : "—"}
+                          </div>
+                        </div>
+                        {liveTempo.audioRunning &&
+                        (liveTempo.barTiming.totalBeats > 0 ||
+                          liveTempo.bpmConfidence > 0.25) ? (
+                          <BarTimingHud compact />
+                        ) : (
+                          <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                            Start audio to detect tempo. Tap{" "}
+                            <span className="text-white/50">T</span> on beats,{" "}
+                            <span className="text-white/50">⇧T</span> on downbeat.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <ToggleRow
+                      label="Show latency HUD"
+                      enabled={s.showLatency}
+                      onToggle={(v) => set({ showLatency: v })}
+                    />
+                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                      Shortcut: <span className="text-emerald-300/80">L</span>
+                    </p>
                   </div>
                 )}
 
@@ -1616,10 +1708,14 @@ export function ControlPanel() {
                       onToggle={(v) => set({ cameraMouse: v })}
                     />
                     <ToggleRow
-                      label="Performance mode (lower DPR)"
+                      label="Performance mode (low latency)"
                       enabled={s.performance}
                       onToggle={(v) => set({ performance: v })}
                     />
+                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                      Caps pixel ratio (0.85×), skips post-FX pipeline, disables heavy GPU passes,
+                      and lowers ring/line counts for faster audio→screen updates.
+                    </p>
                   </div>
                 )}
 
@@ -2170,7 +2266,7 @@ export function ControlPanel() {
                         label="Curvature"
                         value={s.crtCurvature}
                         min={0}
-                        max={0.8}
+                        max={0.1}
                         step={0.01}
                         onChange={(v) => set({ crtCurvature: v })}
                       />

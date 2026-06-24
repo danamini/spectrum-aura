@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { probeWebXrSupport } from "./xr";
+import { probeWebXrSupport } from "../xr";
 
 describe("WebXR support probe", () => {
   beforeEach(() => {
