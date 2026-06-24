@@ -158,4 +158,8 @@ t_{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T_{\text{beat}})
 | `T` | Beat tap |
 | `⇧T` | Downbeat (1/16) |
 | `M` | Toggle BPM & bar grid HUD |
+| `L` | Toggle latency HUD |
+| `G` | Hide/show shortcut bar |
 | `C` | Toggle music-reactive view cycle (phrase boundaries) |
+
+All sync/HUD shortcuts appear in the bottom utility cluster (`Shortcuts.tsx`).

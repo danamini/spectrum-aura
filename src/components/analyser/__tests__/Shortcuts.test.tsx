@@ -89,6 +89,10 @@ describe("Shortcuts", () => {
     expect(container.textContent).toContain("Play Saves");
     expect(container.textContent).toContain("Stats");
     expect(container.textContent).toContain("Audio Source");
+    expect(container.textContent).toContain("BPM Grid");
+    expect(container.textContent).toContain("Latency");
+    expect(container.textContent).toContain("Beat Tap");
+    expect(container.textContent).toContain("Hide All");
   });
 
   it("shows the current visual name in the header and a view count in the visual cluster", () => {
@@ -211,6 +215,54 @@ describe("Shortcuts", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "m", bubbles: true }));
 
     expect(mocks.settingsStore.set).toHaveBeenCalledWith({ showBPM: false });
+  });
+
+  it("toggles BPM grid from the shortcut bar", () => {
+    const bpmButton = container.querySelector("button[aria-label='BPM Grid']");
+    expect(bpmButton).not.toBeNull();
+
+    bpmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ showBPM: false });
+  });
+
+  it("toggles latency HUD from the shortcut bar", () => {
+    const latencyButton = container.querySelector("button[aria-label='Latency']");
+    expect(latencyButton).not.toBeNull();
+
+    latencyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ showLatency: true });
+  });
+
+  it("uses L key for latency HUD toggle", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "l", bubbles: true }));
+
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ showLatency: true });
+  });
+
+  it("uses N key for stats panel", () => {
+    const onToggleStats = vi.fn();
+    window.addEventListener("spectrum-aura:toggle-stats-panel", onToggleStats);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true }));
+
+    expect(onToggleStats).toHaveBeenCalledTimes(1);
+    window.removeEventListener("spectrum-aura:toggle-stats-panel", onToggleStats);
+  });
+
+  it("hides the shortcut bar with G and shows the restore pill", async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "g", bubbles: true }));
+    await tick();
+
+    expect(container.textContent).not.toContain("BPM Grid");
+    expect(container.textContent).toContain("shortcuts");
+
+    const restore = container.querySelector("button[title='Show shortcuts (G)']");
+    restore?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await tick();
+
+    expect(container.textContent).toContain("BPM Grid");
   });
 
   it("marks View Cycle as active when view cycling is enabled", async () => {

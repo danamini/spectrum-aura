@@ -130,9 +130,11 @@ Shortcut reliability note:
 - Keyboard shortcut handlers in `Shortcuts.tsx` dispatch through a live `actionsRef` so keys like `R`/`B` always execute the latest callbacks and don't drift when React state changes.
 
 Shortcut rail clusters:
-- Visual cluster: view count, Prev Visual (B), Randomize, `inc`, `fx`, Next Visual (V)
+- Visual cluster: view count, Prev Visual (B), Randomize, View Cycle (C), `inc`, `fx`, Next Visual (V)
 - Save cluster: save count, Prev, Play Saves, Next, Random, Save, Delete
-- Utility cluster: Audio Source, Fullscreen, Stats, Hide hints, Settings
+- Utility cluster: Audio Source (X), Fullscreen (F), Stats (N), Latency (L), BPM Grid (M), Beat Tap (T), Settings (S), Hide All (G)
+
+When hidden (`G`), a **shortcuts · g** pill at the bottom restores the bar (or press `G` again).
 
 Tooltip behavior:
 - Shortcut buttons use a shared styled tooltip treatment rather than native browser `title` hovers.

@@ -74,13 +74,13 @@ For shared tab/system audio in Chrome:
 - `V` next visual
 - `A` play saved looks in rotation
 - `F` toggle fullscreen
-- `G` show/hide hint bar
 - `S` toggle settings panel
 - `X` reset the current audio source selection
 - `N` toggle stats panel
-- `T` beat tap (sync bar grid to music)
+- `G` show/hide shortcut bar (restores via `G` or the bottom pill)
+- `T` beat tap (lock sync grid)
 - `⇧T` downbeat tap (align phrase to 1/16)
-- `M` toggle BPM & bar grid overlay
+- `M` toggle BPM & bar sync grid
 - `L` toggle latency HUD
 - `C` toggle music-reactive view cycle (every 4 bars)
 
@@ -90,6 +90,7 @@ Bottom shortcut rail:
 - `inc` toggles whether randomize touches view settings in addition to post FX.
 - `fx` toggles the post-processing pipeline.
 - Save controls are grouped like a transport cluster: previous, play saves, next, random, save, delete.
+- Utility cluster: audio source, fullscreen, stats, latency, BPM grid, beat tap, settings, hide all (`G`).
 - Every shortcut button and toggle has an in-app styled tooltip with usage details.
 
 Control panel additions:

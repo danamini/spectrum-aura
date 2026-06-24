@@ -92,10 +92,14 @@ Vitest config: `include: ["src/**/__tests__/**/*.{test,spec}.{ts,tsx}"]`
 | `T` | Beat tap (manual sync) |
 | `⇧T` | Downbeat / phrase reset |
 | `M` | Toggle BPM & bar grid HUD |
-| `C` | Toggle music-reactive view cycle |
-| `R` `B` `V` | Randomize / prev / next visual |
-| `N` | Stats panel |
 | `L` | Latency HUD |
+| `G` | Hide/show shortcut bar |
+| `C` | Toggle music-reactive view cycle |
+| `N` | Stats panel |
+| `R` `B` `V` | Randomize / prev / next visual |
+| `S` | Settings panel |
+
+Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcuts.tsx` utility cluster.
 
 ## Making changes safely
 
@@ -112,6 +116,12 @@ Vitest config: `include: ["src/**/__tests__/**/*.{test,spec}.{ts,tsx}"]`
 2. Pass through `Analyser.tsx` → `Scene.update()` opts
 3. `ControlPanel.tsx` if user-facing
 4. Test in `__tests__/store.*.test.ts`
+
+### New shortcut
+
+1. Keyboard handler in `Shortcuts.tsx` `onKey` (via `actionsRef`)
+2. Button in the appropriate rail cluster (utility row for HUD/sync tools)
+3. `Shortcuts.test.tsx` — key binding + bar button if user-facing
 
 ### New visual
 

@@ -193,7 +193,13 @@ export function Shortcuts() {
     window.dispatchEvent(new Event(STOP_AUDIO_EVENT));
     showFlash("Audio stopped");
   };
-  const doToggleHints = () => setVisible((v) => !v);
+  const doToggleHints = () => {
+    setVisible((v) => {
+      const next = !v;
+      showFlash(next ? "Shortcuts ON" : "Shortcuts OFF");
+      return next;
+    });
+  };
   const loadSaveAtIndex = (index: number) => {
     const slot = settingsStore.getSlots()[index];
     if (!slot) {
@@ -273,6 +279,9 @@ export function Shortcuts() {
     doToggleSettings,
     doStopAudio,
     doToggleHints,
+    doToggleLatency,
+    doToggleBpmGrid,
+    doToggleStats,
     doSaveSlot,
     doSlot,
   });
@@ -290,6 +299,7 @@ export function Shortcuts() {
     doToggleHints,
     doToggleLatency,
     doToggleBpmGrid,
+    doToggleStats,
     doSaveSlot,
     doSlot,
   };
@@ -374,6 +384,10 @@ export function Shortcuts() {
         e.stopPropagation();
       } else if (k === "g") {
         actionsRef.current.doToggleHints();
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (k === "n") {
+        actionsRef.current.doToggleStats();
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "l") {
@@ -512,12 +526,12 @@ export function Shortcuts() {
     },
     {
       key: "G",
-      label: "Hide hints",
+      label: "Hide All",
       tooltip: (
         <TooltipBlock
-          title="Hide Hints"
+          title="Hide Shortcuts"
           hint="G"
-          detail="Collapses the shortcut strip until you bring it back again."
+          detail="Collapses the shortcut strip. Press G again or click the shortcuts pill to restore."
         />
       ),
       onClick: () => {
@@ -525,6 +539,21 @@ export function Shortcuts() {
       },
     },
   ];
+  const beatTapHint: Hint = {
+    key: "T",
+    label: "Beat Tap",
+    tooltip: (
+      <TooltipBlock
+        title="Beat Tap"
+        hint="T"
+        detail="Tap on the beat to lock the sync grid. Shift+T sets the downbeat (1/16)."
+      />
+    ),
+    onClick: () => {
+      doBeatHint(false);
+    },
+    title: "Tap beat for manual sync",
+  };
   const xrHint: Hint = {
     key: "VR",
     label: "Exit VR",
@@ -810,7 +839,10 @@ export function Shortcuts() {
                       <Btn h={hints[2]!} />
                       <Btn h={hints[3]!} />
                       <Btn h={hints[4]!} />
+                      <Btn h={hints[5]!} />
+                      <Btn h={beatTapHint} />
                       <Btn h={settingsHint} />
+                      <Btn h={hints[6]!} />
                     </div>
                   </div>
                 </div>
@@ -823,9 +855,9 @@ export function Shortcuts() {
           type="button"
           onClick={doToggleHints}
           title={xrActive ? "Show shortcuts" : "Show shortcuts (G)"}
-          className="pointer-events-auto fixed inset-x-0 bottom-1 z-[100] mx-auto block w-fit rounded-full border border-white/5 bg-black/30 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.3em] text-white/30 backdrop-blur hover:text-white/70"
+          className="pointer-events-auto fixed inset-x-0 bottom-1 z-[100] mx-auto block w-fit rounded-full border border-white/10 bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.22em] text-white/45 backdrop-blur hover:border-white/20 hover:text-white/80"
         >
-          shortcuts
+          shortcuts · g
         </button>
       )}
     </>
