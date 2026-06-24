@@ -26,6 +26,10 @@ export type BPMBandSample = {
   highDelta?: number;
 };
 
+function isValidBpm(bpm: number): boolean {
+  return bpm >= 65 && bpm <= 195;
+}
+
 export class BPMDetector {
   private energyHistory: Array<{ energy: number; time: number }> = [];
   private windowSizeMs = 8000;
@@ -136,13 +140,49 @@ export class BPMDetector {
    * Manual beat tap — aligns phase and refines BPM from tap spacing.
    * Use `downbeat` to mark bar 1 beat 1.
    */
-  hintBeat(time: number, downbeat = false): void {
+  hintBeat(time: number, downbeat = false, fallbackBpm = 0): void {
     this.tapTimes.push(time);
     if (this.tapTimes.length > 8) this.tapTimes.shift();
 
     this.phaseAnchorTime = time;
     this.cachedBeatPhase = 0;
     this.lastPeakTime = time;
+
+    if (downbeat) {
+      if (this.tapTimes.length >= 2) {
+        const intervals: number[] = [];
+        for (let i = 1; i < this.tapTimes.length; i++) {
+          intervals.push(this.tapTimes[i]! - this.tapTimes[i - 1]!);
+        }
+        intervals.sort((a, b) => a - b);
+        const medianInterval = intervals[Math.floor(intervals.length / 2)]!;
+        if (medianInterval >= 250 && medianInterval <= 1200) {
+          const tappedBpm = BPMDetector.clampBpm(60000 / medianInterval);
+          this.lockedBpm = tappedBpm;
+          this.lastBPM = tappedBpm;
+          this.bpmLocked = true;
+          this.tapLocked = true;
+          this.cachedConfidence = Math.max(this.cachedConfidence, 0.88);
+          this.highConfidenceStreak = 0;
+          this.driftRejectStreak = 0;
+          return;
+        }
+      }
+      const bpm =
+        this.lastBPM > 0
+          ? this.lastBPM
+          : isValidBpm(fallbackBpm)
+            ? BPMDetector.clampBpm(fallbackBpm)
+            : 0;
+      if (bpm > 0) {
+        this.lockedBpm = bpm;
+        this.lastBPM = bpm;
+        this.bpmLocked = true;
+        this.tapLocked = true;
+        this.cachedConfidence = Math.max(this.cachedConfidence, 0.82);
+      }
+      return;
+    }
 
     if (this.tapTimes.length >= 2) {
       const intervals: number[] = [];
@@ -161,10 +201,6 @@ export class BPMDetector {
         this.highConfidenceStreak = 0;
         this.driftRejectStreak = 0;
       }
-    } else if (downbeat && this.lastBPM > 0) {
-      this.bpmLocked = true;
-      this.lockedBpm = this.lastBPM;
-      this.cachedConfidence = Math.max(this.cachedConfidence, 0.75);
     }
   }
 

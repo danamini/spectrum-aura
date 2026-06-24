@@ -561,6 +561,11 @@ export function Analyser() {
         estimatedBpm: bands.bpm,
         bpmConfidence: bands.bpmConfidence,
         bpmLocked: bands.bpmLocked,
+        audioBeat: bands.beat,
+        onsetStrength: bands.onsetStrength,
+        bass: bands.bass,
+        mid: bands.mid,
+        centroid: bands.centroid,
       });
       const clockBpm = barTimingFrame.clockBpm || bands.bpm;
       const clockBeatPhase = barTimingFrame.synced ? barTimingFrame.beatPhase : bands.beatPhase;
@@ -841,21 +846,29 @@ export function Analyser() {
     const onBeatHint = (event: Event) => {
       const detail = ((event as CustomEvent<BeatHintDetail>).detail ?? {}) as BeatHintDetail;
       const now = performance.now();
+      const s = settingsRef.current;
+      const running = audioRef.current?.isRunning();
+      const bands = running ? audioRef.current!.read(s.beatSensitivity, now) : null;
+
       if (detail.downbeat) {
-        songClockRef.current.hintDownbeat(now);
+        songClockRef.current.hintDownbeat(now, bands?.bpm ?? 0);
       } else {
         songClockRef.current.hintBeat(now);
       }
-      audioRef.current?.hintBeat(now, detail.downbeat);
-      const s = settingsRef.current;
-      if (audioRef.current?.isRunning()) {
-        const bands = audioRef.current.read(s.beatSensitivity, now);
+      audioRef.current?.hintBeat(now, detail.downbeat, bands?.bpm ?? 0);
+
+      if (running && bands) {
         beatHintFlashRef.current = detail.downbeat ? "Downbeat" : "Beat";
         const barTiming = songClockRef.current.tick({
           now,
           estimatedBpm: bands.bpm,
           bpmConfidence: bands.bpmConfidence,
           bpmLocked: bands.bpmLocked,
+          audioBeat: bands.beat,
+          onsetStrength: bands.onsetStrength,
+          bass: bands.bass,
+          mid: bands.mid,
+          centroid: bands.centroid,
         });
         const tempoFrame = {
           audioRunning: true,

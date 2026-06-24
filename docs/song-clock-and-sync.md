@@ -9,7 +9,7 @@
 
 ## Design principle
 
-> One clock owns bar/beat position. Audio analysis **estimates tempo**; it never skips or double-counts bars after manual sync.
+> One clock owns bar/beat position. Manual taps anchor the grid; aligned audio may nudge phase and resume auto correction.
 
 ```
 BPMDetector  ──estimated BPM/confidence──┐
@@ -25,7 +25,7 @@ Manual taps (T / ⇧T) ──epoch/BPM──────┘
 |------|-------|----------|
 | `idle` | Initial / lost auto confidence | No grid (`EMPTY_BAR_TIMING`) |
 | `auto` | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM drifts 3%/frame toward estimate |
-| `manual` | Any `hintBeat` / `hintDownbeat` | Runs from tap epoch only; ignores audio onsets |
+| `manual` | Any `hintBeat` / `hintDownbeat` | Tap-owned epoch; misaligned audio onsets ignored; aligned onsets may nudge and release to auto |
 
 ---
 
@@ -67,7 +67,7 @@ p = B(t) \bmod 16
 
 - `beatJustTicked`: \(\lfloor B(t) \rfloor > \lfloor B(t_{\text{prev}}) \rfloor\)
 - `barJustStarted`: beat ticked AND `beatInBar === 1`
-- `phraseJustStarted`: beat ticked AND `beatInPhrase === 1` AND `totalBeats > 1`
+- `phraseJustStarted`: beat ticked AND `beatInPhrase === 1` AND (`totalBeats > 1` OR downbeat latch from `⇧T`)
 
 ---
 
@@ -82,7 +82,33 @@ p = B(t) \bmod 16
 
 ### `⇧T` — downbeat (`hintDownbeat`)
 
-Sets \(b_0 = 1\), \(t_0 = \text{now}\) — phrase resets to **1/16**.
+Sets \(b_0 = 1\), \(t_0 = \text{now}\) — phrase resets to **1/16** immediately.
+
+- Fires `phraseJustStarted` on the downbeat frame (even on first sync)
+- Uses tap-learned BPM when available; otherwise accepts estimated BPM from the audio analyser
+- Does not advance the beat counter — the tap instant **is** beat 1
+
+### Manual tap complete → audio override
+
+After manual sync has a BPM (`manualTapComplete`), confident audio onsets may:
+
+1. **Nudge phase** when within 22% of an expected beat boundary
+2. **Blend BPM** slowly toward the audio estimate
+3. **Release to auto** after 8 consecutive aligned audio beats (confidence > 0.68)
+
+Manual mode is not a permanent lock — it is the user's anchor until audio agrees.
+
+### 4-bar phrase change detection (auto / post-tap)
+
+Each completed bar stores a signature \((\bar{b}, \bar{m}, \bar{c})\).
+
+At each bar line, compare the bar that just ended to the mean of recent bars. When:
+
+- At least 4 bar signatures exist
+- Spectral distance \(\geq 0.14\)
+- Strong onset on the new bar (`audioBeat` + `onsetStrength ≥ 0.08`)
+
+…the clock realigns to phrase downbeat (same as `⇧T`) and sets `phraseChangeDetected`.
 
 ---
 
@@ -145,9 +171,11 @@ t_{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T_{\text{beat}})
 
 `engine/__tests__/sync-invariants.test.ts`
 
-1. Manual lock: audio beats cannot change `beatInPhrase`
-2. Scene `bpmPhase` uses `audio.beatPhase` from SongClock injection, not session wall clock
-3. View cycle only on `phraseJustStarted` after 16 beats
+1. Misaligned audio onsets do not skip `beatInPhrase` during manual sync
+2. Aligned audio onsets may release manual mode to auto after 8 consecutive matches
+3. Scene `bpmPhase` uses `audio.beatPhase` from SongClock injection, not session wall clock
+4. View cycle only on `phraseJustStarted` after 16 beats
+5. `⇧T` downbeat sets `beatInPhrase === 1` immediately
 
 ---
 

@@ -9,6 +9,11 @@ export function tickAt(
     estimatedBpm: number;
     bpmConfidence: number;
     bpmLocked: boolean;
+    audioBeat: boolean;
+    onsetStrength: number;
+    bass: number;
+    mid: number;
+    centroid: number;
   }> = {},
 ) {
   return clock.tick({
@@ -16,6 +21,11 @@ export function tickAt(
     estimatedBpm: 120,
     bpmConfidence: 0.8,
     bpmLocked: true,
+    audioBeat: false,
+    onsetStrength: 0,
+    bass: 0,
+    mid: 0,
+    centroid: 0,
     ...overrides,
   });
 }

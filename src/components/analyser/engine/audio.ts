@@ -230,8 +230,8 @@ export class AudioEngine {
     };
   }
 
-  hintBeat(time: number, downbeat = false): void {
-    this.bpmDetector.hintBeat(time, downbeat);
+  hintBeat(time: number, downbeat = false, fallbackBpm = 0): void {
+    this.bpmDetector.hintBeat(time, downbeat, fallbackBpm);
   }
 
   stop() {

@@ -3,10 +3,9 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { SongClock } from "../song-clock";
+import { SongClock, MANUAL_RELEASE_STREAK } from "../song-clock";
 import { ViewCycleController } from "../view-cycle-controller";
-
-const BEAT_MS = 500;
+import { BEAT_MS, startAuto, tickAt } from "./helpers/song-clock.harness";
 
 describe("sync invariants", () => {
   it("scene uses authoritative beatPhase not wall-clock session time", () => {
@@ -18,7 +17,7 @@ describe("sync invariants", () => {
     expect(source).not.toMatch(/time \* \(audio\.bpm \/ 60\)/);
   });
 
-  it("analyser injects song clock phase into scene bands", () => {
+  it("analyser injects song clock phase and audio onset data into tick", () => {
     const source = readFileSync(
       join(process.cwd(), "src/components/analyser/Analyser.tsx"),
       "utf8",
@@ -26,53 +25,61 @@ describe("sync invariants", () => {
     expect(source).toMatch(/bandsForScene/);
     expect(source).toMatch(/clockBeatPhase/);
     expect(source).toMatch(/songClockRef\.current\.tick/);
+    expect(source).toMatch(/audioBeat: bands\.beat/);
+    expect(source).toMatch(/hintDownbeat\(now, bands\?\.bpm/);
   });
 
-  it("manual taps resist audio-driven beat drift", () => {
+  it("misaligned audio beats do not skip beat index during manual sync", () => {
     const clock = new SongClock();
     for (let i = 0; i < 5; i++) clock.hintBeat(i * BEAT_MS);
 
-    const before = clock.tick({
-      now: BEAT_MS * 3 + 100,
-      estimatedBpm: 90,
-      bpmConfidence: 0.95,
-      bpmLocked: true,
-    });
+    const before = tickAt(clock, BEAT_MS * 3 + 100);
 
     for (let t = BEAT_MS * 3 + 120; t < BEAT_MS * 4; t += 30) {
-      clock.tick({
-        now: t,
+      tickAt(clock, t, {
         estimatedBpm: 90,
         bpmConfidence: 0.95,
-        bpmLocked: true,
+        audioBeat: true,
+        onsetStrength: 0.2,
       });
     }
 
-    const after = clock.tick({
-      now: BEAT_MS * 3 + 350,
+    const after = tickAt(clock, BEAT_MS * 3 + 350, {
       estimatedBpm: 90,
       bpmConfidence: 0.95,
-      bpmLocked: true,
+      audioBeat: true,
+      onsetStrength: 0.2,
     });
 
     expect(before.source).toBe("manual");
     expect(after.beatInPhrase).toBe(before.beatInPhrase);
   });
 
+  it("aligned manual audio beats can release to auto mode", () => {
+    const clock = new SongClock();
+    for (let i = 0; i < 4; i++) clock.hintBeat(i * BEAT_MS);
+
+    for (let i = 0; i < MANUAL_RELEASE_STREAK; i++) {
+      tickAt(clock, BEAT_MS * 4 + i * BEAT_MS, {
+        audioBeat: true,
+        onsetStrength: 0.12,
+        bpmConfidence: 0.75,
+      });
+    }
+
+    expect(clock.getSource()).toBe("auto");
+  });
+
   it("view cycle switches only on phraseJustStarted after 4 bars", () => {
     const clock = new SongClock();
     for (let i = 0; i < 4; i++) {
-      clock.tick({ now: 100 + i * 100, estimatedBpm: 120, bpmConfidence: 0.7, bpmLocked: false });
+      tickAt(clock, 100 + i * 100, { bpmConfidence: 0.7, bpmLocked: false });
     }
+    startAuto(clock, 400);
     const ctrl = new ViewCycleController();
     let switched = false;
     for (let i = 0; i <= 16; i++) {
-      const barTiming = clock.tick({
-        now: 400 + i * BEAT_MS,
-        estimatedBpm: 120,
-        bpmConfidence: 0.8,
-        bpmLocked: true,
-      });
+      const barTiming = tickAt(clock, 400 + i * BEAT_MS);
       const result = ctrl.tick({
         now: 400 + i * BEAT_MS,
         barTiming,

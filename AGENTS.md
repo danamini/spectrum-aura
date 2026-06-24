@@ -28,7 +28,7 @@ MediaStream → audio.ts (FFT, BeatMatcher, BPMDetector)
 ### Hard invariants
 
 1. **One authoritative clock** — `SongClock` owns bar/beat index and `beatPhase` for visuals after sync.
-2. **Manual taps win** — After `hintBeat` / `⇧T`, audio onsets must not advance the grid (`source === 'manual'`).
+2. **Manual taps anchor initially** — After `hintBeat` / `⇧T`, misaligned audio must not skip beats; aligned audio may nudge phase and release to auto after 8 matches.
 3. **No wall-clock BPM phase in scene** — `scene.ts` uses `audio.beatPhase` from SongClock injection, not `time * (bpm/60)`.
 4. **View cycle on phrase** — Switch views on `phraseJustStarted && totalBeats > 16` (4 bars), not every bar.
 5. **Render loop TDZ** — In `Analyser.tsx`, declare `displayedView` and related state before any derived keys that reference them.

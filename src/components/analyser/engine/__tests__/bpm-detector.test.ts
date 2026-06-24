@@ -128,6 +128,16 @@ describe("BPMDetector", () => {
     expect(b - a).toBeGreaterThan(0.01);
   });
 
+  it("locks tempo from downbeat hint using fallback BPM", () => {
+    const detector = new BPMDetector();
+    detector.hintBeat(1000, true, 120);
+    expect(detector.isLocked()).toBe(true);
+    expect(detector.isTapLocked()).toBe(true);
+    expect(detector.getBPM()).toBeGreaterThanOrEqual(115);
+    expect(detector.getBPM()).toBeLessThanOrEqual(125);
+    expect(detector.tick(1000).beatPhase).toBe(0);
+  });
+
   it("keeps tap-locked tempo after manual taps stop", () => {
     const detector = new BPMDetector();
     const interval = 500;

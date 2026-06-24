@@ -203,7 +203,7 @@ Shared fixtures: `__tests__/helpers/test-helpers.ts`, `engine/__tests__/helpers/
 
 ### Test coverage highlights
 
-- **sync-invariants.test.ts** — manual tap lock, phrase view cycle, no audio-driven grid drift
+- **sync-invariants.test.ts** — manual anchor, misaligned audio drift guard, manual→auto release, phrase view cycle
 - **Analyser.regression.test.ts** — render-loop TDZ guard
 - **song-clock.test.ts** — tap/auto modes, beat index math
 - **store.*** — normalization, slots, randomize

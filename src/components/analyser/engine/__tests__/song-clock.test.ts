@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SongClock, BEATS_PER_BAR, BEATS_PER_PHRASE, TAP_TIMEOUT_MS } from "../song-clock";
+import { SongClock, BEATS_PER_BAR, BEATS_PER_PHRASE, TAP_TIMEOUT_MS, MANUAL_RELEASE_STREAK } from "../song-clock";
 import { BEAT_MS, startAuto, tickAt } from "./helpers/song-clock.harness";
 
 describe("SongClock", () => {
@@ -64,6 +64,69 @@ describe("SongClock", () => {
     expect(timing.source).toBe("manual");
     expect(timing.beatInPhrase).toBe(1);
     expect(timing.beatInBar).toBe(1);
+    expect(timing.phraseJustStarted).toBe(true);
+  });
+
+  it("downbeat resets mid-phrase grid to beat 1 immediately", () => {
+    const clock = new SongClock();
+    for (let i = 0; i < 8; i++) clock.hintBeat(i * BEAT_MS);
+    const midPhrase = tickAt(clock, BEAT_MS * 7 + 100);
+    expect(midPhrase.beatInPhrase).toBe(8);
+
+    clock.hintDownbeat(BEAT_MS * 7 + 200);
+    const down = tickAt(clock, BEAT_MS * 7 + 210);
+    expect(down.beatInPhrase).toBe(1);
+    expect(down.beatInBar).toBe(1);
+    expect(down.phraseJustStarted).toBe(true);
+  });
+
+  it("downbeat accepts estimated BPM when taps have not learned tempo", () => {
+    const clock = new SongClock();
+    clock.hintDownbeat(1000, 120);
+    const timing = tickAt(clock, 1050, { estimatedBpm: 120, bpmConfidence: 0.8 });
+    expect(timing.beatInPhrase).toBe(1);
+    expect(timing.synced).toBe(true);
+    expect(clock.getClockBpm()).toBe(120);
+  });
+
+  it("releases manual mode after sustained aligned audio beats", () => {
+    const clock = new SongClock();
+    for (let i = 0; i < 4; i++) clock.hintBeat(i * BEAT_MS);
+    expect(clock.getSource()).toBe("manual");
+    expect(clock.isManualTapComplete()).toBe(true);
+
+    for (let i = 0; i < MANUAL_RELEASE_STREAK; i++) {
+      tickAt(clock, BEAT_MS * 4 + i * BEAT_MS, {
+        audioBeat: true,
+        onsetStrength: 0.12,
+        bpmConfidence: 0.75,
+      });
+    }
+    expect(clock.getSource()).toBe("auto");
+  });
+
+  it("detects phrase change after four bars with spectral shift", () => {
+    const clock = new SongClock();
+    startAuto(clock, 0);
+    const stable = { bass: 0.2, mid: 0.18, centroid: 0.3 };
+    const shifted = { bass: 0.65, mid: 0.55, centroid: 0.72 };
+    const atBeat = (beat1: number) => (beat1 - 1) * BEAT_MS + 40;
+
+    for (let beat = 1; beat <= 17; beat++) {
+      tickAt(clock, atBeat(beat), stable);
+    }
+    for (let beat = 18; beat <= 20; beat++) {
+      tickAt(clock, atBeat(beat), shifted);
+    }
+
+    const detected = tickAt(clock, atBeat(21), {
+      ...shifted,
+      audioBeat: true,
+      onsetStrength: 0.15,
+    });
+
+    expect(detected.phraseChangeDetected).toBe(true);
+    expect(detected.beatInPhrase).toBe(1);
   });
 
   it("learns BPM from manual taps and holds tempo", () => {
