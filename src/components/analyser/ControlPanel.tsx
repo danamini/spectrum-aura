@@ -20,7 +20,6 @@ import {
   WEBXR_STATE_EVENT,
   probeWebXrSupport,
   requestWebXrToggle,
-  setWebXrBackgroundHidden,
   type WebXrState,
 } from "./engine/xr";
 import { TempoReadout } from "./TempoReadout";

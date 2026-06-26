@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "test": "vitest",
     "test:run": "vitest run",
-    "check": "npm run lint && npm run test:run"
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm run test:run"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

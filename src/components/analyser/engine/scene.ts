@@ -1018,7 +1018,6 @@ export class Scene {
     const n = this.dataStreamCount;
     const bass = Math.max(0, Math.min(1, audio.bass));
     const high = Math.max(0, Math.min(1, audio.high));
-    const mid = Math.max(0, Math.min(1, audio.mid));
     const amp = Math.max(0.05, opts.datastreamAmplitude);
     const size = (2.4 + bass * 12) * Math.max(0.1, amp);
     this.dataStreamMat.uniforms.uSize.value = size;
@@ -1207,7 +1206,7 @@ export class Scene {
   private updateMonolith(
     dt: number,
     audio: AudioBands,
-    time: number,
+    _time: number,
     opts: {
       monolithAmplitude: number;
       monolithBrightness: number;
@@ -1932,9 +1931,10 @@ export class Scene {
       const particleSize =
         Math.max(0.005, opts.torusParticleSize) * (0.8 + bass * 0.5) * Math.max(0.5, amp);
       this.torusParticleMat.size = particleSize;
+      const torusOpacity = this.torusMat?.opacity;
       for (const cell of this.torusCells) {
         cell.particleMat.size = particleSize;
-        cell.meshMat.opacity = this.torusMat.opacity;
+        if (torusOpacity !== undefined) cell.meshMat.opacity = torusOpacity;
       }
     }
 
@@ -3928,7 +3928,9 @@ export class Scene {
     this.assetflowAssetsRequested = false;
     for (const actor of this.assetflowActors) {
       actor.placeholder.geometry.dispose();
-      actor.placeholder.material.dispose();
+      const placeholderMat = actor.placeholder.material;
+      if (Array.isArray(placeholderMat)) placeholderMat.forEach((m) => m.dispose());
+      else placeholderMat.dispose();
       actor.root.clear();
     }
     for (const layer of this.assetflowSprites) {
