@@ -23,7 +23,7 @@ import {
   setWebXrBackgroundHidden,
   type WebXrState,
 } from "./engine/xr";
-import { BarTimingHud, ExperimentalBadge } from "./BarTimingHud";
+import { TempoReadout } from "./TempoReadout";
 import { EMPTY_LIVE_TEMPO, LIVE_TEMPO_EVENT, type LiveTempoState } from "./engine/live-tempo";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
@@ -526,47 +526,7 @@ export function ControlPanel() {
                       <span className="text-white/50">T</span> on beats,{" "}
                       <span className="text-white/50">⇧T</span> on downbeat.
                     </p>
-                    {s.showBPM && (
-                      <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.03] p-3">
-                        <div className="flex items-end justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-white/40">
-                              BPM
-                              <ExperimentalBadge />
-                            </div>
-                            {liveTempo.bpmConfidence > 0.25 && (
-                              <p className="mt-1 font-mono text-[9px] text-white/35">
-                                {Math.round(liveTempo.bpmConfidence * 100)}% confidence
-                                {liveTempo.barTiming.bpmLocked ? " · locked" : ""}
-                              </p>
-                            )}
-                          </div>
-                          <div
-                            className="font-mono text-3xl font-bold tabular-nums text-white/70"
-                            style={{
-                              textShadow:
-                                liveTempo.bpm > 0 && liveTempo.bpmConfidence > 0.4
-                                  ? `0 0 ${Math.max(8, liveTempo.bpmConfidence * 20)}px rgba(52, 211, 153, ${liveTempo.bpmConfidence * 0.6})`
-                                  : undefined,
-                              opacity:
-                                liveTempo.bpm > 0 ? 0.3 + liveTempo.bpmConfidence * 0.4 : 0.35,
-                            }}
-                          >
-                            {liveTempo.audioRunning && liveTempo.bpm > 0 ? liveTempo.bpm : "—"}
-                          </div>
-                        </div>
-                        {liveTempo.audioRunning &&
-                        (liveTempo.barTiming.totalBeats > 0 || liveTempo.bpmConfidence > 0.25) ? (
-                          <BarTimingHud compact />
-                        ) : (
-                          <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                            Start audio to detect tempo. Tap{" "}
-                            <span className="text-white/50">T</span> on beats,{" "}
-                            <span className="text-white/50">⇧T</span> on downbeat.
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    {s.showBPM && <TempoReadout variant="panel" tempo={liveTempo} />}
                     <ToggleRow
                       label="Show latency HUD"
                       enabled={s.showLatency}
