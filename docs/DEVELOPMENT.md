@@ -10,9 +10,25 @@ src/
 ├── main.tsx
 ├── components/
 │   └── analyser/
-│       ├── Analyser.tsx              # Canvas orchestrator, rAF loop, SongClock wiring
+│       ├── Analyser.tsx              # Thin orchestrator (overlays + hook wiring)
 │       ├── BarTimingHud.tsx          # BPM / bar grid overlay (M toggle)
-│       ├── ControlPanel.tsx
+│       ├── TempoReadout.tsx          # Shared BPM + grid (overlay + panel)
+│       ├── theme.ts                  # Colors, swatches, bpmGlowStyle, LOCAL_DEV_URL
+│       ├── ControlPanel.tsx          # Settings sheet + flyout tabs
+│       ├── control-panel/
+│       │   ├── primitives.tsx        # Sw, Bn, Row, ToggleRow, S
+│       │   └── ViewSettings.tsx      # Per-view slider/toggle blocks (14 views)
+│       ├── hooks/
+│       │   ├── useAnalyserEngine.ts  # rAF/XR loop, audio, SongClock, scene
+│       │   ├── useBeatHintBridge.ts  # T / ⇧T manual sync bridge
+│       │   ├── useAnalyserCommandEvents.ts
+│       │   └── usePresetActions.ts   # Shared preset load/save/cursor
+│       ├── overlays/
+│       │   ├── AudioSourcePrompt.tsx
+│       │   ├── FreqLabels.tsx
+│       │   ├── LatencyHud.tsx
+│       │   ├── StatsPanel.tsx
+│       │   └── stats-types.ts
 │       ├── Shortcuts.tsx
 │       ├── store.ts
 │       ├── visuals.ts
@@ -20,6 +36,9 @@ src/
 │       ├── __tests__/                # Component + store + UI tests
 │       │   ├── helpers/test-helpers.ts
 │       │   ├── Analyser.regression.test.ts
+│       │   ├── ControlPanel.regression.test.ts
+│       │   ├── usePresetActions.test.ts
+│       │   ├── theme.test.ts
 │       │   ├── Shortcuts.test.tsx
 │       │   └── store.*.test.ts
 │       └── engine/
@@ -39,7 +58,7 @@ src/
 │               ├── song-clock.test.ts
 │               ├── sync-invariants.test.ts
 │               └── …
-│   └── ui/
+│   └── ui/                           # label, sheet, slider, switch only
 AGENTS.md                             # Agent guide (Cursor / Claude)
 docs/
 ├── README.md                         # Documentation index
@@ -66,6 +85,7 @@ Deep dive: [audio-analysis-pipeline.md](./audio-analysis-pipeline.md), [song-clo
 ### Visualization Architecture
 
 **Three.js Scene** (`engine/scene.ts`):
+
 - **14 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
@@ -73,6 +93,7 @@ Deep dive: [audio-analysis-pipeline.md](./audio-analysis-pipeline.md), [song-clo
 - **Fat lines**: `Line2`/`LineGeometry`/`LineMaterial` (mandala ribbons) and `LineSegments2`/`LineSegmentsGeometry`/`LineMaterial` (On-rails Tube) from `three/examples/jsm/lines/` for screen-space pixel-width lines that respect `linewidth` in WebGL
 
 **Each View Has**:
+
 - `buildXXX(size)`: Initialize geometry/materials
 - `updateXXX(dt, audio, opts)`: Per-frame animation driven by audio + settings
 
@@ -84,6 +105,7 @@ Deep dive: [audio-analysis-pipeline.md](./audio-analysis-pipeline.md), [song-clo
 - **Randomization**: Smart background picker using WCAG contrast scoring
 
 Recent controls:
+
 - `postFxEnabled`: Master switch that bypasses the post-processing pipeline at render time.
 - Global Wireframe control in the View panel: writes to the active view-specific wireframe setting.
 - `randomizeViewSettings`: Keeps randomize constrained to post FX by default; when enabled it also touches view-specific geometry and palette controls.
@@ -100,6 +122,7 @@ Recent controls:
 - `projectorFilmFx` / `projectorFilmAmount` / `projectorFilmJitter` / `projectorFilmFlicker`: random film projector artifact pass.
 
 **Key Settings Limits**:
+
 - Amplitude floor: 0.5 (MIN_VIEW_AMPLITUDE)
 - Vignette amount: [0.5, 1.25]
 - Bloom strength: ≤ 0.25 (unless bloomExtreme)
@@ -127,9 +150,11 @@ Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bo
 - `Shift+1` to `Shift+5`: Save to slot
 
 Shortcut reliability note:
+
 - Keyboard shortcut handlers in `Shortcuts.tsx` dispatch through a live `actionsRef` so keys like `R`/`B` always execute the latest callbacks and don't drift when React state changes.
 
 Shortcut rail clusters:
+
 - Visual cluster: view count, Prev Visual (B), Randomize, View Cycle (C), `inc`, `fx`, Next Visual (V)
 - Save cluster: save count, Prev, Play Saves, Next, Random, Save, Delete
 - Utility cluster: Audio Source (X), Fullscreen (F), Stats (N), Latency (L), BPM Grid (M), Beat Tap (T), Settings (S), Hide All (G)
@@ -137,11 +162,13 @@ Shortcut rail clusters:
 When hidden (`G`), a **shortcuts · g** pill at the bottom restores the bar (or press `G` again).
 
 Tooltip behavior:
+
 - Shortcut buttons use a shared styled tooltip treatment rather than native browser `title` hovers.
 - `inc` explains randomize scope: post FX only vs post FX + view settings.
 - `fx` explains the post-processing master pipeline state.
 
 Settings panel and flyout behavior:
+
 - The `S` shortcut toggles the panel even when focus is inside a text input/slider control.
 - Clicking the `S` shortcut button toggles open/close (no immediate re-open).
 - Flyout tabs (`Audio`, `Scene`, `Post FX`) delay slightly on open and slide from the sheet edge.
@@ -153,10 +180,11 @@ Settings panel and flyout behavior:
 1. Add a visual manifest to `src/components/analyser/visuals.ts` or a new `src/components/analyser/visuals/*.visual.ts` file.
 2. Create `buildXXX()` and `updateXXX()` in `scene.ts` and bind the manifest `sceneGroupKey` to the owning `THREE.Group`.
 3. Add settings in `store.ts` for customization, including the `...Fullscreen` or `...Wireframe` keys referenced by the manifest when needed.
-4. Add UI controls in `ControlPanel.tsx` only for view-specific settings. View labels, cycle order, and fullscreen wiring now come from the visual registry automatically.
+4. Add per-view controls in `control-panel/ViewSettings.tsx`. Shell layout and flyout tabs stay in `ControlPanel.tsx`. View labels, cycle order, and fullscreen wiring come from the visual registry automatically.
 5. Verify the shortcut rail still reads correctly: current label, `3D/2D` state, and visual cycling all depend on the registry metadata.
 
 Runtime registry notes:
+
 - `src/components/analyser/visuals.ts` is the canonical visual registry used by the control panel, shortcuts, and XR view cycle.
 - Any `src/components/analyser/visuals/*.visual.ts` module exporting `visual` or a default object with an `id` is loaded at startup via `import.meta.glob(..., { eager: true })`.
 - Runtime manifests can override labels, settings labels, fullscreen keys, wireframe keys, scene group keys, and order without re-editing the UI lists.
@@ -172,14 +200,15 @@ Runtime registry notes:
 
 ### Adding UI Controls
 
-1. Create slider in `ControlPanel.tsx` using `<S>` component
+1. Create slider in `control-panel/ViewSettings.tsx` or a flyout tab in `ControlPanel.tsx` using `<S>` from `control-panel/primitives`
 2. Bind to store setting: `set({ settingName: value })`
 3. Ensure setting has entry in `DEFAULT_SETTINGS` in `store.ts`
 4. Test in dev mode with `npm run dev`
 
 Notes for mapped/global controls:
+
 - For global controls that map to view-specific settings (for example wireframe), keep UI mapping logic in `ControlPanel.tsx` and preserve underlying per-view keys in `Settings`.
-- For master bypass toggles (for example post FX), apply the bypass in `Analyser.tsx` render flow so individual effect settings remain unchanged.
+- For master bypass toggles (for example post FX), apply the bypass in `hooks/useAnalyserEngine.ts` render flow so individual effect settings remain unchanged.
 
 ## Testing
 
@@ -194,9 +223,9 @@ npm run test                   # Watch mode
 
 All tests live under `__tests__/` (see `vitest.config.ts`):
 
-| Location | Suites |
-|----------|--------|
-| `analyser/__tests__/` | `Analyser.regression`, `Shortcuts`, `store.*`, `visuals` |
+| Location                     | Suites                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `analyser/__tests__/`        | `Analyser.regression`, `ControlPanel.regression`, `usePresetActions`, `theme`, `Shortcuts`, `store.*`, `visuals`                       |
 | `analyser/engine/__tests__/` | `song-clock`, `sync-invariants`, `bpm-detector`, `beat-matcher`, `latency-metrics`, `view-cycle-controller`, `latency-benchmark`, `xr` |
 
 Shared fixtures: `__tests__/helpers/test-helpers.ts`, `engine/__tests__/helpers/song-clock.harness.ts`.
@@ -204,15 +233,18 @@ Shared fixtures: `__tests__/helpers/test-helpers.ts`, `engine/__tests__/helpers/
 ### Test coverage highlights
 
 - **sync-invariants.test.ts** — manual anchor, misaligned audio drift guard, manual→auto release, phrase view cycle
-- **Analyser.regression.test.ts** — render-loop TDZ guard
+- **Analyser.regression.test.ts** — render-loop TDZ guard (`useAnalyserEngine`)
+- **ControlPanel.regression.test.ts** — ViewSettings delegation, per-view keys, theme swatches
+- **usePresetActions.test.ts** — wrap/random helpers, slot cursor rules
 - **song-clock.test.ts** — tap/auto modes, beat index math
-- **store.*** — normalization, slots, randomize
+- **store.\*** — normalization, slots, randomize
 - **Shortcuts.test.tsx** — rail UI and keyboard behavior
 - **latency-metrics.test.ts** — signal latency only on transient frames; no stale timestamp growth
 
 Asset documentation:
-  - Keep `docs/THIRD_PARTY_ASSETS.md` in sync whenever adding/removing runtime files under `public/assets/`.
-  - Validate third-party model URLs and licenses before wiring new `model-xx.glb` paths in `scene.ts`.
+
+- Keep `docs/THIRD_PARTY_ASSETS.md` in sync whenever adding/removing runtime files under `public/assets/`.
+- Validate third-party model URLs and licenses before wiring new `model-xx.glb` paths in `scene.ts`.
 
 ### Adding Tests
 
@@ -223,6 +255,7 @@ Asset documentation:
 5. For sync changes, extend `sync-invariants.test.ts` and `song-clock.test.ts`
 
 Example:
+
 ```typescript
 it("enforces constraint X", async () => {
   const { settingsStore } = await import("./store");
@@ -277,8 +310,8 @@ npm run preview               # Preview production build locally
 - Prefer concern-specific test files (`store.normalization.test.ts`, `store.slots.test.ts`) over catch-all files.
 - When adding a new setting, update all required layers in one change set:
   1. `Settings` type + `DEFAULT_SETTINGS` in `store.ts`
-  2. pass-through in `Analyser.tsx` and `Scene.update()` options
-  3. controls in `ControlPanel.tsx` (if user-facing)
+  2. pass-through in `hooks/useAnalyserEngine.ts` and `Scene.update()` options
+  3. controls in `control-panel/ViewSettings.tsx` or `ControlPanel.tsx` flyouts (if user-facing)
   4. at least one targeted test
 - When changing shortcut-bar behavior, update all three together:
   1. keyboard handling + rail UI in `Shortcuts.tsx`
@@ -301,7 +334,8 @@ npm run preview               # Preview production build locally
 5. **Performance**: Use DevTools Performance tab, look for GPU bottleneck vs CPU
 
 Render-loop safety note:
-- In `Analyser.tsx`, initialize render-loop state variables before deriving values from them. A prior TDZ bug (`Cannot access 'displayedView' before initialization`) occurred when a composer reset key was built before `displayedView` was declared.
+
+- In `hooks/useAnalyserEngine.ts`, initialize render-loop state variables before deriving values from them. A prior TDZ bug (`Cannot access 'displayedView' before initialization`) occurred when a composer reset key was built before `displayedView` was declared.
 
 ## Contributing
 

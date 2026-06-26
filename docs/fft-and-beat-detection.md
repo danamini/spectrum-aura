@@ -23,18 +23,18 @@ Capture → AnalyserNode (FFT) → bands (bass/mid/high/centroid)
 Web Audio returns byte magnitudes per bin. Window duration:
 
 \[
-T_{\text{window}} = N / f_s
+T\_{\text{window}} = N / f_s
 \]
 
 Bands are proportional bin slices (bass 0–8%, mid to 35%, high remainder). See [audio-analysis-pipeline.md §2](./audio-analysis-pipeline.md#2-band-aggregation).
 
 ## Beat detection (two layers)
 
-| Layer | Module | Role |
-|-------|--------|------|
-| Onsets | `BeatMatcher` | Transient spikes; camera kick, signal-change timing |
-| Tempo | `BPMDetector` | Median peak intervals + autocorrelation tempogram |
-| Grid | `SongClock` | **Owns** bar/beat position; manual taps override audio |
+| Layer  | Module        | Role                                                   |
+| ------ | ------------- | ------------------------------------------------------ |
+| Onsets | `BeatMatcher` | Transient spikes; camera kick, signal-change timing    |
+| Tempo  | `BPMDetector` | Median peak intervals + autocorrelation tempogram      |
+| Grid   | `SongClock`   | **Owns** bar/beat position; manual taps override audio |
 
 **Important:** After manual tap sync (`T`), the bar grid follows `SongClock` only — not raw `bands.beat`.
 
@@ -42,18 +42,18 @@ Bands are proportional bin slices (bass 0–8%, mid to 35%, high remainder). See
 
 **Legacy (removed):** wall-clock \(\phi = (t \cdot \text{BPM}/60) \bmod 1\)
 
-**Current:** SongClock \(\phi_{\text{beat}} = B(t) \bmod 1\) injected as `audio.beatPhase` in `Analyser.tsx`.
+**Current:** SongClock \(\phi\_{\text{beat}} = B(t) \bmod 1\) injected as `audio.beatPhase` in `hooks/useAnalyserEngine.ts` (`bandsForScene`).
 
-Post-FX pulse: \(\max(0, \sin(\pi \cdot \phi_{\text{beat}}))\).
+Post-FX pulse: \(\max(0, \sin(\pi \cdot \phi\_{\text{beat}}))\).
 
 ## User tuning
 
-| Goal | Action |
-|------|--------|
-| Lock grid to music | Tap `T` on beats; `⇧T` on downbeat |
-| Show grid | `M` |
-| Cycle views every 4 bars | `C` |
-| Fewer false beats | Increase beat sensitivity / smoothing |
+| Goal                     | Action                                |
+| ------------------------ | ------------------------------------- |
+| Lock grid to music       | Tap `T` on beats; `⇧T` on downbeat    |
+| Show grid                | `M`                                   |
+| Cycle views every 4 bars | `C`                                   |
+| Fewer false beats        | Increase beat sensitivity / smoothing |
 
 ## Tests
 

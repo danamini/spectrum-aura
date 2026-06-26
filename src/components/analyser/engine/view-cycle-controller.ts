@@ -41,8 +41,7 @@ export class ViewCycleController {
       return { shouldSwitch: false };
     }
 
-    const shouldSwitch =
-      barTiming.phraseJustStarted && barTiming.totalBeats > BEATS_PER_PHRASE;
+    const shouldSwitch = barTiming.phraseJustStarted && barTiming.totalBeats > BEATS_PER_PHRASE;
 
     if (shouldSwitch) {
       this.lastSwitchAt = now;

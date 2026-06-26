@@ -26,11 +26,7 @@ function BeatDots({ timing }: { timing: BarTiming }) {
               <div
                 key={beatNumber}
                 className={`h-2 w-2 rounded-full ${
-                  isCurrent
-                    ? "bg-emerald-300"
-                    : isPast
-                      ? "bg-white/30"
-                      : "bg-white/10"
+                  isCurrent ? "bg-emerald-300" : isPast ? "bg-white/30" : "bg-white/10"
                 }`}
                 style={
                   isCurrent
@@ -51,16 +47,17 @@ function BeatDots({ timing }: { timing: BarTiming }) {
 }
 
 export function BarTimingHud({ compact = false }: { compact?: boolean }) {
-  const { barTiming: timing, bpmConfidence: confidence, beatHintFlash: hintFlash } =
-    useLiveTempoFrame();
+  const {
+    barTiming: timing,
+    bpmConfidence: confidence,
+    beatHintFlash: hintFlash,
+  } = useLiveTempoFrame();
   const glow = timing.synced ? Math.max(6, confidence * 16) : 4;
 
   return (
     <div
       className={`rounded-lg border backdrop-blur-sm ${
-        hintFlash
-          ? "border-emerald-300/50 bg-emerald-400/10"
-          : "border-white/10 bg-black/20"
+        hintFlash ? "border-emerald-300/50 bg-emerald-400/10" : "border-white/10 bg-black/20"
       } ${compact ? "px-2.5 py-2" : "mb-3 px-3 py-2 bg-black/35"}`}
       style={{
         boxShadow: timing.synced

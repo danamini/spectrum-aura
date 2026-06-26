@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SongClock, BEATS_PER_BAR, BEATS_PER_PHRASE, TAP_TIMEOUT_MS, MANUAL_RELEASE_STREAK } from "../song-clock";
+import { SongClock, BEATS_PER_PHRASE, TAP_TIMEOUT_MS, MANUAL_RELEASE_STREAK } from "../song-clock";
 import { BEAT_MS, startAuto, tickAt } from "./helpers/song-clock.harness";
 
 describe("SongClock", () => {

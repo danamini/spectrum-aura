@@ -18,15 +18,20 @@ describe("sync invariants", () => {
   });
 
   it("analyser injects song clock phase and audio onset data into tick", () => {
-    const source = readFileSync(
-      join(process.cwd(), "src/components/analyser/Analyser.tsx"),
+    const engine = readFileSync(
+      join(process.cwd(), "src/components/analyser/hooks/useAnalyserEngine.ts"),
       "utf8",
     );
-    expect(source).toMatch(/bandsForScene/);
-    expect(source).toMatch(/clockBeatPhase/);
-    expect(source).toMatch(/songClockRef\.current\.tick/);
-    expect(source).toMatch(/audioBeat: bands\.beat/);
-    expect(source).toMatch(/hintDownbeat\(now, bands\?\.bpm/);
+    expect(engine).toMatch(/bandsForScene/);
+    expect(engine).toMatch(/clockBeatPhase/);
+    expect(engine).toMatch(/songClockRef\.current\.tick/);
+    expect(engine).toMatch(/audioBeat: bands\.beat/);
+
+    const beatBridge = readFileSync(
+      join(process.cwd(), "src/components/analyser/hooks/useBeatHintBridge.ts"),
+      "utf8",
+    );
+    expect(beatBridge).toMatch(/hintDownbeat\(now, bands\?\.bpm/);
   });
 
   it("misaligned audio beats do not skip beat index during manual sync", () => {

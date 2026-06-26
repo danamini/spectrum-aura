@@ -8,12 +8,12 @@ Browser-only React + Three.js audio visualizer. No backend. Real-time FFT → fe
 
 ## Read first
 
-| Priority | Document |
-|----------|----------|
-| 1 | [docs/song-clock-and-sync.md](docs/song-clock-and-sync.md) — timing invariants |
-| 2 | [docs/audio-analysis-pipeline.md](docs/audio-analysis-pipeline.md) — BeatMatcher, BPMDetector |
-| 3 | [docs/rendering-and-latency.md](docs/rendering-and-latency.md) — rAF loop, latency HUD |
-| 4 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — structure, tests, conventions |
+| Priority | Document                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------- |
+| 1        | [docs/song-clock-and-sync.md](docs/song-clock-and-sync.md) — timing invariants                |
+| 2        | [docs/audio-analysis-pipeline.md](docs/audio-analysis-pipeline.md) — BeatMatcher, BPMDetector |
+| 3        | [docs/rendering-and-latency.md](docs/rendering-and-latency.md) — rAF loop, latency HUD        |
+| 4        | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — structure, tests, conventions                    |
 
 ## Architecture (do not break)
 
@@ -22,7 +22,13 @@ MediaStream → audio.ts (FFT, BeatMatcher, BPMDetector)
                     ↓ estimated BPM/confidence
               song-clock.ts (idle | auto | manual)
                     ↓ BarTiming
-    Analyser.tsx → scene.ts, composer.ts, BarTimingHud, view-cycle-controller
+Analyser.tsx (orchestrator)
+  ├─ hooks/useAnalyserEngine   — rAF/XR loop, SongClock tick, scene/composer
+  ├─ hooks/useBeatHintBridge   — manual T / ⇧T → SongClock
+  ├─ hooks/useAnalyserCommandEvents — N, stats/fullscreen/stop-audio events
+  └─ overlays/*                — latency HUD, stats, freq labels, audio prompt
+        ↓
+  scene.ts, composer.ts, BarTimingHud, view-cycle-controller
 ```
 
 ### Hard invariants
@@ -31,42 +37,54 @@ MediaStream → audio.ts (FFT, BeatMatcher, BPMDetector)
 2. **Manual taps anchor initially** — After `hintBeat` / `⇧T`, misaligned audio must not skip beats; aligned audio may nudge phase and release to auto after 8 matches.
 3. **No wall-clock BPM phase in scene** — `scene.ts` uses `audio.beatPhase` from SongClock injection, not `time * (bpm/60)`.
 4. **View cycle on phrase** — Switch views on `phraseJustStarted && totalBeats > 16` (4 bars), not every bar.
-5. **Render loop TDZ** — In `Analyser.tsx`, declare `displayedView` and related state before any derived keys that reference them.
+5. **Render loop TDZ** — In `hooks/useAnalyserEngine.ts`, declare `displayedView` and related state before any derived keys that reference them.
 
 ### Common pitfalls
 
-| Mistake | Symptom | Fix |
-|---------|---------|-----|
-| Calling removed `setBarTiming` in render loop | Runtime crash | Use `setLiveTempoFrame()` only |
-| Driving grid from `bands.beat` | Double/skipped beats after tap | Route through `SongClock.tick()` |
-| BPM phase only in 250ms analysis | Choppy HUD dots | Phase in `BPMDetector.tick()` every frame |
-| `epochMs === 0` as “unset” | Manual sync fails at t=0 | Use `epochSet` flag in SongClock |
-| Measuring signal latency every frame | HUD shows tens of seconds | Only on `signalSwing` frames; see `latency-metrics.ts` |
-| Tests beside modules | Vitest won't find them | Put under `__tests__/` |
+| Mistake                                       | Symptom                        | Fix                                                    |
+| --------------------------------------------- | ------------------------------ | ------------------------------------------------------ |
+| Calling removed `setBarTiming` in render loop | Runtime crash                  | Use `setLiveTempoFrame()` only                         |
+| Driving grid from `bands.beat`                | Double/skipped beats after tap | Route through `SongClock.tick()`                       |
+| BPM phase only in 250ms analysis              | Choppy HUD dots                | Phase in `BPMDetector.tick()` every frame              |
+| `epochMs === 0` as “unset”                    | Manual sync fails at t=0       | Use `epochSet` flag in SongClock                       |
+| Measuring signal latency every frame          | HUD shows tens of seconds      | Only on `signalSwing` frames; see `latency-metrics.ts` |
+| Tests beside modules                          | Vitest won't find them         | Put under `__tests__/`                                 |
+| Duplicating preset cursor logic               | Shortcuts/panel drift          | Use `hooks/usePresetActions`                           |
+| Duplicating BPM HUD markup                    | Overlay/panel mismatch         | Use `TempoReadout` + `theme.bpmGlowStyle`              |
 
 ## Key files
 
-| Area | Path |
-|------|------|
-| Orchestrator | `src/components/analyser/Analyser.tsx` |
-| Song clock | `src/components/analyser/engine/song-clock.ts` |
-| Bar types alias | `src/components/analyser/engine/bar-clock.ts` |
-| BPM estimate | `src/components/analyser/engine/bpm-detector.ts` |
-| Onsets | `src/components/analyser/engine/beat-matcher.ts` |
-| Audio read | `src/components/analyser/engine/audio.ts` |
-| View cycle | `src/components/analyser/engine/view-cycle-controller.ts` |
-| HUD | `src/components/analyser/BarTimingHud.tsx` |
-| Live tempo bus | `src/components/analyser/engine/live-tempo.ts` |
-| Latency metrics | `src/components/analyser/engine/latency-metrics.ts` |
-| Shortcuts | `src/components/analyser/Shortcuts.tsx` |
-| Settings | `src/components/analyser/store.ts` |
+| Area                   | Path                                                             |
+| ---------------------- | ---------------------------------------------------------------- |
+| Orchestrator           | `src/components/analyser/Analyser.tsx`                           |
+| Render loop            | `src/components/analyser/hooks/useAnalyserEngine.ts`             |
+| Beat taps              | `src/components/analyser/hooks/useBeatHintBridge.ts`             |
+| Overlay commands       | `src/components/analyser/hooks/useAnalyserCommandEvents.ts`      |
+| Preset workflow        | `src/components/analyser/hooks/usePresetActions.ts`              |
+| Settings UI shell      | `src/components/analyser/ControlPanel.tsx`                       |
+| Per-view settings      | `src/components/analyser/control-panel/ViewSettings.tsx`         |
+| Panel primitives       | `src/components/analyser/control-panel/primitives.tsx`           |
+| BPM readout            | `src/components/analyser/TempoReadout.tsx`                       |
+| Design tokens          | `src/components/analyser/theme.ts`                               |
+| Song clock             | `src/components/analyser/engine/song-clock.ts`                   |
+| Bar types alias        | `src/components/analyser/engine/bar-clock.ts`                    |
+| BPM estimate           | `src/components/analyser/engine/bpm-detector.ts`                 |
+| Onsets                 | `src/components/analyser/engine/beat-matcher.ts`                 |
+| Audio read             | `src/components/analyser/engine/audio.ts`                        |
+| View cycle             | `src/components/analyser/engine/view-cycle-controller.ts`        |
+| HUD                    | `src/components/analyser/BarTimingHud.tsx`                       |
+| Live tempo bus         | `src/components/analyser/engine/live-tempo.ts`                   |
+| Latency metrics        | `src/components/analyser/engine/latency-metrics.ts`              |
+| Shortcuts              | `src/components/analyser/Shortcuts.tsx`                          |
+| Settings               | `src/components/analyser/store.ts`                               |
+| UI primitives (shadcn) | `src/components/ui/` — `label`, `sheet`, `slider`, `switch` only |
 
 ## Tests
 
 ```bash
 npm run test:run    # must pass before PR
 npm run build
-npm run check       # lint + test
+npm run check       # typecheck + lint + test
 ```
 
 **Layout:** all tests live in `__tests__/` folders:
@@ -77,7 +95,9 @@ npm run check       # lint + test
 **Critical suites:**
 
 - `sync-invariants.test.ts` — manual lock, phrase cycle, phase routing
-- `Analyser.regression.test.ts` — render-loop initialization order
+- `Analyser.regression.test.ts` — render-loop initialization order (`useAnalyserEngine`)
+- `ControlPanel.regression.test.ts` — ViewSettings delegation + per-view keys
+- `usePresetActions.test.ts` — preset cursor helpers + store integration
 - `song-clock.test.ts` — tap/auto modes, beat math
 - `latency-metrics.test.ts` — signal latency must not grow from stale timestamps
 
@@ -87,17 +107,17 @@ Vitest config: `include: ["src/**/__tests__/**/*.{test,spec}.{ts,tsx}"]`
 
 ## Shortcuts (user-facing)
 
-| Key | Action |
-|-----|--------|
-| `T` | Beat tap (manual sync) |
-| `⇧T` | Downbeat / phrase reset |
-| `M` | Toggle BPM & bar grid HUD |
-| `L` | Latency HUD |
-| `G` | Hide/show shortcut bar |
-| `C` | Toggle music-reactive view cycle |
-| `N` | Stats panel |
-| `R` `B` `V` | Randomize / prev / next visual |
-| `S` | Settings panel |
+| Key         | Action                           |
+| ----------- | -------------------------------- |
+| `T`         | Beat tap (manual sync)           |
+| `⇧T`        | Downbeat / phrase reset          |
+| `M`         | Toggle BPM & bar grid HUD        |
+| `L`         | Latency HUD                      |
+| `G`         | Hide/show shortcut bar           |
+| `C`         | Toggle music-reactive view cycle |
+| `N`         | Stats panel                      |
+| `R` `B` `V` | Randomize / prev / next visual   |
+| `S`         | Settings panel                   |
 
 Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcuts.tsx` utility cluster.
 
@@ -107,15 +127,15 @@ Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcu
 
 1. Change `song-clock.ts` logic
 2. Update `sync-invariants.test.ts` and `song-clock.test.ts`
-3. Verify `Analyser.tsx` still injects `beatPhase` / `clockBpm` into `bandsForScene`
+3. Verify `useAnalyserEngine.ts` still injects `beatPhase` / `clockBpm` into `bandsForScene`
 4. Do not reintroduce parallel `BarClock` advancement from raw beats
 
 ### New settings
 
 1. `Settings` + `DEFAULT_SETTINGS` in `store.ts`
-2. Pass through `Analyser.tsx` → `Scene.update()` opts
-3. `ControlPanel.tsx` if user-facing
-4. Test in `__tests__/store.*.test.ts`
+2. Pass through `useAnalyserEngine.ts` → `Scene.update()` opts
+3. `ControlPanel.tsx` flyout and/or `control-panel/ViewSettings.tsx` if user-facing
+4. Test in `__tests__/store.*.test.ts` and extend `ControlPanel.regression.test.ts` when per-view
 
 ### New shortcut
 
@@ -128,23 +148,29 @@ Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcu
 1. Manifest in `visuals.ts` or `visuals/*.visual.ts`
 2. `build*` / `update*` in `scene.ts`
 3. Registry drives shortcuts — update `Shortcuts.test.tsx` if rail changes
+4. Add view block in `control-panel/ViewSettings.tsx`
+
+### Preset save/load
+
+1. Use `hooks/usePresetActions` from Shortcuts and ControlPanel — do not duplicate cursor logic
+2. Extend `usePresetActions.test.ts` for new workflow rules
 
 ## Code style
 
 - Minimal diff; match existing patterns
-- TypeScript strict; no `any` without reason
+- TypeScript strict; `noUnusedLocals` / `noUnusedParameters` enabled
 - Comments only for non-obvious timing/math
 - Do not commit unless user asks
 - Do not edit `.cursor/plans/` plan files
 
 ## Equations quick reference
 
-Beat period: \(T_{\text{beat}} = 60000/\text{BPM}\)
+Beat period: \(T\_{\text{beat}} = 60000/\text{BPM}\)
 
 Continuous beat index from epoch \((t_0, b_0)\):
 
 \[
-B(t) = (b_0 - 1) + \frac{t - t_0}{T_{\text{beat}}}
+B(t) = (b*0 - 1) + \frac{t - t_0}{T*{\text{beat}}}
 \]
 
 Beat phase: \(\phi = B(t) \bmod 1\)

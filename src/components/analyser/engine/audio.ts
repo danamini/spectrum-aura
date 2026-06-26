@@ -196,9 +196,12 @@ export class AudioEngine {
       },
       fftReadAt,
     );
-    const { bpm, confidence: bpmConfidence, beatPhase, bpmLocked } = this.bpmDetector.tick(
-      clockTime ?? fftReadAt,
-    );
+    const {
+      bpm,
+      confidence: bpmConfidence,
+      beatPhase,
+      bpmLocked,
+    } = this.bpmDetector.tick(clockTime ?? fftReadAt);
 
     const sr = this.ctx?.sampleRate ?? 48000;
     const fftSize = this.analyser.fftSize;

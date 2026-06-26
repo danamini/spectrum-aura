@@ -94,8 +94,7 @@ function timingFromBeatFloat(
   prevTotalBeats: number,
   downbeatLatch: boolean,
 ): BarTiming {
-  const phraseBeatFloat =
-    ((beatFloat % BEATS_PER_PHRASE) + BEATS_PER_PHRASE) % BEATS_PER_PHRASE;
+  const phraseBeatFloat = ((beatFloat % BEATS_PER_PHRASE) + BEATS_PER_PHRASE) % BEATS_PER_PHRASE;
   const beatInPhrase = Math.floor(phraseBeatFloat) + 1;
   const beatPhase = phraseBeatFloat - Math.floor(phraseBeatFloat);
   const beatInBar = ((beatInPhrase - 1) % BEATS_PER_BAR) + 1;

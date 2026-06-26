@@ -8,4 +8,4 @@ Quick links:
 - [docs/README.md](./docs/README.md) — technical documentation index
 - [docs/song-clock-and-sync.md](./docs/song-clock-and-sync.md) — SongClock math and modes
 
-Run `npm run test:run` after any engine or Analyser changes.
+Run `npm run check` after any engine, Analyser, or ControlPanel changes.
