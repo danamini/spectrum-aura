@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { APP_BACKGROUND } from "@/components/analyser/theme";
 
 const Analyser = lazy(() =>
   import("@/components/analyser/Analyser").then((m) => ({ default: m.Analyser })),
@@ -16,7 +17,10 @@ export function App() {
   useEffect(() => setMounted(true), []);
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-[#05060a] text-white">
+    <main
+      className="relative h-screen w-screen overflow-hidden text-white"
+      style={{ backgroundColor: APP_BACKGROUND }}
+    >
       {mounted && (
         <Suspense fallback={null}>
           <Analyser />

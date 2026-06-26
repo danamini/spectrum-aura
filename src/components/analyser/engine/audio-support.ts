@@ -1,3 +1,5 @@
+import { LOCAL_DEV_URL } from "../theme";
+
 export type AudioCaptureSupport = {
   ok: boolean;
   reason?: string;
@@ -14,7 +16,7 @@ function formatMediaError(error: unknown): string {
     return "No microphone was found. Connect an input device or choose a different audio source.";
   }
   if (error.name === "NotSupportedError" || error.name === "SecurityError") {
-    return "This page cannot access audio input. Open http://localhost:6789 in Chrome via Run and Debug, not an embedded IDE preview or LAN IP.";
+    return `This page cannot access audio input. Open ${LOCAL_DEV_URL} in Chrome via Run and Debug, not an embedded IDE preview or LAN IP.`;
   }
   return error.message;
 }
@@ -27,8 +29,7 @@ export function getAudioCaptureSupport(): AudioCaptureSupport {
   if (!window.isSecureContext) {
     return {
       ok: false,
-      reason:
-        'Audio capture needs a secure context. Open http://localhost:6789 in Chrome (not a LAN IP like 192.168.x.x, file://, or an embedded IDE preview).',
+      reason: `Audio capture needs a secure context. Open ${LOCAL_DEV_URL} in Chrome (not a LAN IP like 192.168.x.x, file://, or an embedded IDE preview).`,
     };
   }
 

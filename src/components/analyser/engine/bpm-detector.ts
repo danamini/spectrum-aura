@@ -86,9 +86,7 @@ export class BPMDetector {
     this.lastHigh = bands.high;
 
     const onset =
-      Math.max(0, bassDelta) * 1 +
-      Math.max(0, midDelta) * 0.55 +
-      Math.max(0, highDelta) * 0.28;
+      Math.max(0, bassDelta) * 1 + Math.max(0, midDelta) * 0.55 + Math.max(0, highDelta) * 0.28;
     const energy = bands.bass * 0.68 + bands.mid * 0.24 + bands.high * 0.08 + onset * 0.35;
 
     this.energyHistory.push({ energy, time });
@@ -300,8 +298,7 @@ export class BPMDetector {
     if (this.tapLocked) return;
     if (!this.bpmLocked || this.lastBPM <= 0 || this.phaseAnchorTime <= 0) return;
     const periodMs = 60000 / this.lastBPM;
-    const beatsSince =
-      Math.round((peakTime - this.phaseAnchorTime) / periodMs) || 0;
+    const beatsSince = Math.round((peakTime - this.phaseAnchorTime) / periodMs) || 0;
     const expected = this.phaseAnchorTime + beatsSince * periodMs;
     if (Math.abs(peakTime - expected) < periodMs * 0.18) {
       this.phaseAnchorTime = expected * 0.35 + peakTime * 0.65;
@@ -315,9 +312,7 @@ export class BPMDetector {
 
     const diff = Math.abs(peakBpm - autoBpm);
     const harmonicMatch =
-      diff < 8 ||
-      Math.abs(peakBpm - autoBpm * 2) < 10 ||
-      Math.abs(peakBpm * 2 - autoBpm) < 10;
+      diff < 8 || Math.abs(peakBpm - autoBpm * 2) < 10 || Math.abs(peakBpm * 2 - autoBpm) < 10;
     if (!harmonicMatch) return peakBpm;
 
     const autoWeight = Math.min(0.35, autoStrength * 0.45);
@@ -381,7 +376,7 @@ export class BPMDetector {
       const y2 = scores[lagIdx + 1]!;
       const denom = y0 - 2 * y1 + y2;
       if (Math.abs(denom) > 1e-9) {
-        refinedLag = bestLag + 0.5 * (y0 - y2) / denom;
+        refinedLag = bestLag + (0.5 * (y0 - y2)) / denom;
       }
     }
 
@@ -429,7 +424,7 @@ export class BPMDetector {
 
   private refinePeakTime(peak: { energy: number; time: number }): number {
     const history = this.energyHistory;
-    let idx = history.findIndex((s) => s.time === peak.time);
+    const idx = history.findIndex((s) => s.time === peak.time);
     if (idx <= 0 || idx >= history.length - 1) return peak.time;
 
     const prev = history[idx - 1]!;
@@ -438,7 +433,7 @@ export class BPMDetector {
     const denom = prev.energy - 2 * curr.energy + next.energy;
     if (Math.abs(denom) < 1e-9) return peak.time;
 
-    const offset = 0.5 * (prev.energy - next.energy) / denom;
+    const offset = (0.5 * (prev.energy - next.energy)) / denom;
     const clamped = Math.max(-0.5, Math.min(0.5, offset));
     return curr.time + clamped * (next.time - prev.time);
   }

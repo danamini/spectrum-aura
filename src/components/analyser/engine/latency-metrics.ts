@@ -29,9 +29,7 @@ export function measureFrameLatency(input: FrameLatencyInput): FrameLatencyInsta
   const sceneToRenderMs = input.tAfterRender - input.tAfterScene;
   const audioToRenderMs = input.tAfterRender - input.fftReadAt;
   const signalToRenderMs =
-    input.signalSwing && input.signalChangeAt > 0
-      ? input.tAfterRender - input.signalChangeAt
-      : 0;
+    input.signalSwing && input.signalChangeAt > 0 ? input.tAfterRender - input.signalChangeAt : 0;
   return { audioToSceneMs, sceneToRenderMs, audioToRenderMs, signalToRenderMs };
 }
 

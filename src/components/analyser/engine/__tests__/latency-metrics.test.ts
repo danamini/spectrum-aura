@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  isSignalLatencyVisible,
-  measureFrameLatency,
-  smoothLatency,
-} from "../latency-metrics";
+import { isSignalLatencyVisible, measureFrameLatency, smoothLatency } from "../latency-metrics";
 
 describe("measureFrameLatency", () => {
   it("computes pipeline segments from frame timestamps", () => {

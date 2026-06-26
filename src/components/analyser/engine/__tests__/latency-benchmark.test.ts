@@ -285,7 +285,9 @@ function logBenchComparison(label: string, legacy: BenchResult, optimized: Bench
   console.log(
     `  AFTER:  ${optimized.ms.toFixed(2)} ms total | ${optimized.msPerIter.toFixed(4)} ms/iter | ${optimized.opsPerSec.toFixed(0)} ops/sec`,
   );
-  console.log(`  IMPROVEMENT: ${improvement.toFixed(1)}% faster (${(legacy.ms / optimized.ms).toFixed(2)}×)`);
+  console.log(
+    `  IMPROVEMENT: ${improvement.toFixed(1)}% faster (${(legacy.ms / optimized.ms).toFixed(2)}×)`,
+  );
   return improvement;
 }
 
@@ -310,89 +312,81 @@ function warmupBpm(detector: LegacyBPMDetector | BPMDetector) {
 }
 
 describe("latency micro-benchmark", () => {
-  it(
-    "audio.read() hot path: legacy vs optimized",
-    () => {
-      const legacy = new LegacyAudioHotPath();
-      const optimized = new OptimizedAudioHotPath();
-      const beatThreshold = 1.35;
-      warmupAudio(legacy, beatThreshold);
-      warmupAudio(optimized, beatThreshold);
-      let frame = 300;
+  it("audio.read() hot path: legacy vs optimized", () => {
+    const legacy = new LegacyAudioHotPath();
+    const optimized = new OptimizedAudioHotPath();
+    const beatThreshold = 1.35;
+    warmupAudio(legacy, beatThreshold);
+    warmupAudio(optimized, beatThreshold);
+    let frame = 300;
 
-      const legacyPerFrame = bench("legacy per-frame", () => {
-        synthBins(frame, legacy.bins);
-        legacy.processFrame(beatThreshold, frame * FRAME_MS);
-        frame += 1;
-      });
+    const legacyPerFrame = bench("legacy per-frame", () => {
+      synthBins(frame, legacy.bins);
+      legacy.processFrame(beatThreshold, frame * FRAME_MS);
+      frame += 1;
+    });
 
-      frame = 300;
-      const optimizedPerFrame = bench("optimized per-frame", () => {
-        synthBins(frame, optimized.bins);
-        optimized.processFrame(beatThreshold, frame * FRAME_MS);
-        frame += 1;
-      });
+    frame = 300;
+    const optimizedPerFrame = bench("optimized per-frame", () => {
+      synthBins(frame, optimized.bins);
+      optimized.processFrame(beatThreshold, frame * FRAME_MS);
+      frame += 1;
+    });
 
-      const improvement = logBenchComparison(
-        "audio.read() hot path",
-        legacyPerFrame,
-        optimizedPerFrame,
-      );
+    const improvement = logBenchComparison(
+      "audio.read() hot path",
+      legacyPerFrame,
+      optimizedPerFrame,
+    );
 
-      expect(optimizedPerFrame.ms).toBeLessThan(legacyPerFrame.ms);
-      expect(improvement).toBeGreaterThan(15);
+    expect(optimizedPerFrame.ms).toBeLessThan(legacyPerFrame.ms);
+    expect(improvement).toBeGreaterThan(15);
 
-      // Sanity: outputs in same ballpark after warmup
-      for (let f = 0; f < 200; f++) {
-        synthBins(f, legacy.bins);
-        legacy.processFrame(beatThreshold, f * FRAME_MS);
-        synthBins(f, optimized.bins);
-        optimized.processFrame(beatThreshold, f * FRAME_MS);
-      }
-      synthBins(500, legacy.bins);
-      synthBins(500, optimized.bins);
-      const l = legacy.processFrame(beatThreshold, 500 * FRAME_MS);
-      const o = optimized.processFrame(beatThreshold, 500 * FRAME_MS);
-      expect(Math.abs(l.bass - o.bass)).toBeLessThan(0.15);
-      expect(Math.abs(l.mid - o.mid)).toBeLessThan(0.15);
-    },
-    60_000,
-  );
+    // Sanity: outputs in same ballpark after warmup
+    for (let f = 0; f < 200; f++) {
+      synthBins(f, legacy.bins);
+      legacy.processFrame(beatThreshold, f * FRAME_MS);
+      synthBins(f, optimized.bins);
+      optimized.processFrame(beatThreshold, f * FRAME_MS);
+    }
+    synthBins(500, legacy.bins);
+    synthBins(500, optimized.bins);
+    const l = legacy.processFrame(beatThreshold, 500 * FRAME_MS);
+    const o = optimized.processFrame(beatThreshold, 500 * FRAME_MS);
+    expect(Math.abs(l.bass - o.bass)).toBeLessThan(0.15);
+    expect(Math.abs(l.mid - o.mid)).toBeLessThan(0.15);
+  }, 60_000);
 
-  it(
-    "BPM detector: legacy dual-analysis vs cached tick",
-    () => {
-      const legacy = new LegacyBPMDetector();
-      const optimized = new BPMDetector();
-      warmupBpm(legacy);
-      warmupBpm(optimized);
-      let frame = 300;
+  it("BPM detector: legacy dual-analysis vs cached tick", () => {
+    const legacy = new LegacyBPMDetector();
+    const optimized = new BPMDetector();
+    warmupBpm(legacy);
+    warmupBpm(optimized);
+    let frame = 300;
 
-      const legacyPerFrame = bench("BPM legacy per-frame", () => {
-        const t = frame * FRAME_MS;
-        const energy = 0.3 + Math.sin(t * 0.012) * 0.25 + (t % 500 < 80 ? 0.4 : 0);
-        legacy.feed(energy, t);
-        legacy.getBPM();
-        legacy.getConfidence();
-        frame += 1;
-      });
+    const legacyPerFrame = bench("BPM legacy per-frame", () => {
+      const t = frame * FRAME_MS;
+      const energy = 0.3 + Math.sin(t * 0.012) * 0.25 + (t % 500 < 80 ? 0.4 : 0);
+      legacy.feed(energy, t);
+      legacy.getBPM();
+      legacy.getConfidence();
+      frame += 1;
+    });
 
-      frame = 300;
-      const optimizedPerFrame = bench("BPM optimized per-frame", () => {
-        const t = frame * FRAME_MS;
-        const energy = 0.3 + Math.sin(t * 0.012) * 0.25 + (t % 500 < 80 ? 0.4 : 0);
-        optimized.feed(energy, t);
-        optimized.tick(t);
-        frame += 1;
-      });
+    frame = 300;
+    const optimizedPerFrame = bench("BPM optimized per-frame", () => {
+      const t = frame * FRAME_MS;
+      const energy = 0.3 + Math.sin(t * 0.012) * 0.25 + (t % 500 < 80 ? 0.4 : 0);
+      optimized.feed(energy, t);
+      optimized.tick(t);
+      frame += 1;
+    });
 
-      const improvement = logBenchComparison("BPM detector", legacyPerFrame, optimizedPerFrame);
+    const improvement = logBenchComparison("BPM detector", legacyPerFrame, optimizedPerFrame);
 
-      expect(optimizedPerFrame.ms).toBeLessThan(legacyPerFrame.ms);
-      expect(improvement).toBeGreaterThan(55);
-    },
-    60_000,
-  );
+    expect(optimizedPerFrame.ms).toBeLessThan(legacyPerFrame.ms);
+    expect(improvement).toBeGreaterThan(55);
+  }, 60_000);
 
   it("BPM detector forced analysis: legacy dual findPeaks vs getBPM+getConfidence (no throttling win)", () => {
     const legacy = new LegacyBPMDetector();

@@ -514,8 +514,8 @@ export function ControlPanel() {
                 onToggle={(v) => set({ viewCycleMode: v })}
               >
                 <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                  Randomly switches visuals every 4 bars (16 beats in 4/4). Shortcut: C.
-                  Tap <span className="text-white/50">T</span> on beats to sync;{" "}
+                  Randomly switches visuals every 4 bars (16 beats in 4/4). Shortcut: C. Tap{" "}
+                  <span className="text-white/50">T</span> on beats to sync;{" "}
                   <span className="text-white/50">⇧T</span> on downbeat for bar 1.
                 </p>
               </ToggleRow>
@@ -1589,19 +1589,14 @@ export function ControlPanel() {
                                   ? `0 0 ${Math.max(8, liveTempo.bpmConfidence * 20)}px rgba(52, 211, 153, ${liveTempo.bpmConfidence * 0.6})`
                                   : undefined,
                               opacity:
-                                liveTempo.bpm > 0
-                                  ? 0.3 + liveTempo.bpmConfidence * 0.4
-                                  : 0.35,
+                                liveTempo.bpm > 0 ? 0.3 + liveTempo.bpmConfidence * 0.4 : 0.35,
                             }}
                           >
-                            {liveTempo.audioRunning && liveTempo.bpm > 0
-                              ? liveTempo.bpm
-                              : "—"}
+                            {liveTempo.audioRunning && liveTempo.bpm > 0 ? liveTempo.bpm : "—"}
                           </div>
                         </div>
                         {liveTempo.audioRunning &&
-                        (liveTempo.barTiming.totalBeats > 0 ||
-                          liveTempo.bpmConfidence > 0.25) ? (
+                        (liveTempo.barTiming.totalBeats > 0 || liveTempo.bpmConfidence > 0.25) ? (
                           <BarTimingHud compact />
                         ) : (
                           <p className="font-mono text-[9px] leading-relaxed text-white/35">
