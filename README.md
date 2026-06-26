@@ -1,6 +1,6 @@
 <div align="center">
 
-![Spectrum Aura banner](https://capsule-render.vercel.app/api?type=waving&color=0:05060a,50:0d2820,100:34d399&height=130&section=header&text=Spectrum%20Aura&fontSize=46&fontColor=e6fff5&animation=twinkling&desc=Real-time%20browser%20audio%20visualiser&descSize=14&descAlignY=62&descAlign=50)
+![Spectrum Aura banner](https://capsule-render.vercel.app/api?type=waving&color=0:05060a,50:0d2820,100:34d399&height=180&section=header&text=Spectrum%20Aura&fontSize=46&fontColor=e6fff5&fontAlignY=38&animation=twinkling&desc=Real-time%20browser%20audio%20visualiser&descSize=14&descAlignY=58&descAlign=50)
 
 [![Live demo](https://img.shields.io/website?down_message=offline&label=demo&up_color=34d399&up_message=online&url=https%3A%2F%2Fdanamini.github.io%2Fspectrum-aura%2F)](https://danamini.github.io/spectrum-aura/)
 [![Release](https://img.shields.io/github/v/release/danamini/spectrum-aura?color=34d399&label=release)](https://github.com/danamini/spectrum-aura/releases)
@@ -13,13 +13,15 @@
 
 <img src="docs/readme-spectrum-hero.svg" alt="Animated spectrum bars — Spectrum Aura" width="900"/>
 
-<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=700&lines=14+visual+engines+%E2%80%A2+beat-synced+3D;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat;No+install.+No+backend.+Just+sound." alt="14 visual engines • beat-synced 3D — Tap T on beats, ⇧T on downbeat — No install. No backend. Just sound."/>
+<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=14+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="14 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
 
 **[Open live demo](https://danamini.github.io/spectrum-aura/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [Docs](docs/README.md)
 
-### Built with
+<p><strong>Built with</strong></p>
 
-[![Tech stack](https://skillicons.dev/icons?i=ts,react,vite,tailwind,githubactions,eslint&perline=6)](https://skillicons.dev)
+<p>
+  <a href="https://skillicons.dev"><img src="https://skillicons.dev/icons?i=ts,react,vite,tailwind,githubactions,eslint&perline=6" alt="Built with TypeScript, React, Vite, Tailwind, GitHub Actions, ESLint"/></a>
+</p>
 
 </div>
 
@@ -280,12 +282,6 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
 - `AGENTS.md`: Guide for Cursor / Claude coding agents
 - `docs/`: Technical documentation (see [docs/README.md](docs/README.md))
 - `docs/DEVELOPMENT.md`: Architecture and contribution guide
-
-## Project pulse
-
-[![Star History Chart](https://api.star-history.com/svg?repos=danamini/spectrum-aura&type=Date)](https://star-history.com/#danamini/spectrum-aura&Date)
-
-The chart above updates as the repository grows. CI status, release version, demo uptime, and the **tests** badge in the header are also live — they refresh from GitHub Actions and the deployed site.
 
 ## Releases
 
