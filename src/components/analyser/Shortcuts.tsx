@@ -13,10 +13,11 @@ import {
   SkipForward,
   Trash2,
 } from "lucide-react";
-import { settingsStore, useSettings, useSlots, type Settings } from "./store";
+import { settingsStore, useSettings, type Settings } from "./store";
 import { dispatchBeatHint } from "./engine/beat-hint";
 import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "./engine/xr";
 import { getVisualDefinition, VISUALS } from "./visuals";
+import { usePresetActions } from "./hooks/usePresetActions";
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
@@ -66,13 +67,13 @@ function TooltipBlock({ title, hint, detail }: { title: string; hint?: string; d
 }
 
 export function Shortcuts() {
-  const slots = useSlots();
+  const preset = usePresetActions();
+  const slots = preset.slots;
   const settings = useSettings();
   const [visible, setVisible] = useState(true);
   const [xrActive, setXrActive] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
-  const saveCursorRef = useRef(0);
 
   const currentVisual = getVisualDefinition(settings.view);
   const fullscreenKey = currentVisual?.fullscreenKey as keyof Settings | undefined;
@@ -92,14 +93,6 @@ export function Shortcuts() {
       if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (slots.length === 0) {
-      saveCursorRef.current = 0;
-      return;
-    }
-    saveCursorRef.current = Math.min(saveCursorRef.current, slots.length - 1);
-  }, [slots]);
 
   useEffect(() => {
     const onWebXrState = (event: Event) => {
@@ -200,71 +193,34 @@ export function Shortcuts() {
       return next;
     });
   };
-  const loadSaveAtIndex = (index: number) => {
-    const slot = settingsStore.getSlots()[index];
-    if (!slot) {
-      showFlash("No saved presets");
-      return;
-    }
-    saveCursorRef.current = index;
-    settingsStore.loadSlot(index);
-    showFlash(`Loaded ${slot.name}`);
-  };
+  const flashLoaded = (msg: string) => showFlash(msg);
   const doSlot = (i: number) => {
-    const slot = settingsStore.getSlots()[i];
-    if (slot) {
-      loadSaveAtIndex(i);
-    } else showFlash(`Save ${i + 1} not found`);
+    const result = preset.loadAt(i);
+    if (result.status === "ok") flashLoaded(`Loaded ${result.name}`);
+    else showFlash(`Save ${i + 1} not found`);
   };
   const doSaveSlot = (i: number) => {
-    settingsStore.saveSlot(i, `Slot ${i + 1}`);
-    saveCursorRef.current = i;
+    preset.saveAt(i, `Slot ${i + 1}`);
     showFlash(`Saved to slot ${i + 1}`);
   };
   const doSaveCurrent = () => {
-    const nextIndex = settingsStore.getSlots().length;
-    settingsStore.saveSlot(nextIndex, `Save ${nextIndex + 1}`);
-    saveCursorRef.current = nextIndex;
-    showFlash(`Saved as Save ${nextIndex + 1}`);
+    const result = preset.saveNew();
+    showFlash(`Saved as ${result.status === "ok" ? result.name : "save"}`);
   };
   const doDeleteCurrentSave = () => {
-    const list = settingsStore.getSlots();
-    if (list.length === 0) {
-      showFlash("No saved presets");
-      return;
-    }
-    const current = list[saveCursorRef.current];
-    settingsStore.clearSlot(saveCursorRef.current);
-    if (list.length <= 1) saveCursorRef.current = 0;
-    else saveCursorRef.current = Math.min(saveCursorRef.current, list.length - 2);
-    showFlash(`Deleted ${current?.name ?? "save"}`);
+    const result = preset.deleteFocused();
+    if (result.status === "empty") showFlash("No saved presets");
+    else showFlash(`Deleted ${result.status === "ok" ? result.name : "save"}`);
   };
   const doCycleSave = (direction: 1 | -1) => {
-    const list = settingsStore.getSlots();
-    if (list.length === 0) {
-      showFlash("No saved presets");
-      return;
-    }
-    const next = (saveCursorRef.current + direction + list.length) % list.length;
-    loadSaveAtIndex(next);
+    const result = preset.step(direction, { load: true });
+    if (result.status === "ok") flashLoaded(`Loaded ${result.name}`);
+    else showFlash("No saved presets");
   };
   const doRandomSave = () => {
-    const list = settingsStore.getSlots();
-    if (list.length === 0) {
-      showFlash("No saved presets");
-      return;
-    }
-    const next =
-      list.length === 1
-        ? 0
-        : (() => {
-            let index = saveCursorRef.current;
-            while (index === saveCursorRef.current) {
-              index = Math.floor(Math.random() * list.length);
-            }
-            return index;
-          })();
-    loadSaveAtIndex(next);
+    const result = preset.random({ load: true });
+    if (result.status === "ok") flashLoaded(`Loaded ${result.name}`);
+    else showFlash("No saved presets");
   };
 
   const actionsRef = useRef({
