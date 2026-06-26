@@ -1,0 +1,70 @@
+name: Update README badges
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: readme-badges
+  cancel-in-progress: true
+
+jobs:
+  tests-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests and regenerate badge
+        run: |
+          set -euo pipefail
+          OUT=$(npm run test:run 2>&1 | tee /dev/stderr)
+          PASSED=$(echo "$OUT" | rg 'Tests\s+[0-9]+ passed' -o | rg -o '[0-9]+' | head -1)
+          if [ -z "$PASSED" ]; then
+            echo "Could not parse test count from vitest output"
+            exit 1
+          fi
+          LABEL_WIDTH=48
+          VALUE="tests"
+          TEXT="${PASSED} passing"
+          VALUE_WIDTH=$(( ${#TEXT} * 7 + 14 ))
+          TOTAL=$((LABEL_WIDTH + VALUE_WIDTH))
+          mkdir -p docs/badges
+          cat > docs/badges/tests.svg <<EOF
+          <svg xmlns="http://www.w3.org/2000/svg" width="${TOTAL}" height="20" role="img" aria-label="tests: ${TEXT}">
+            <linearGradient id="b" x2="0" y2="100%">
+              <stop offset="0" stop-color="#555" stop-opacity=".1"/>
+              <stop offset="1" stop-opacity=".1"/>
+            </linearGradient>
+            <mask id="a"><rect width="${TOTAL}" height="20" rx="3" fill="#fff"/></mask>
+            <g mask="url(#a)">
+              <rect width="${LABEL_WIDTH}" height="20" fill="#555"/>
+              <rect x="${LABEL_WIDTH}" width="${VALUE_WIDTH}" height="20" fill="#34d399"/>
+              <rect width="${TOTAL}" height="20" fill="url(#b)"/>
+            </g>
+            <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+              <text x="$((LABEL_WIDTH / 2))" y="14">${VALUE}</text>
+              <text x="$((LABEL_WIDTH + VALUE_WIDTH / 2))" y="14">${TEXT}</text>
+            </g>
+          </svg>
+          EOF
+          echo "Badge updated: ${PASSED} passing"
+
+      - name: Commit badge if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update test count badge [skip ci]"
+          file_pattern: docs/badges/tests.svg

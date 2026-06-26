@@ -1,4 +1,27 @@
-# Spectrum Aura
+<div align="center">
+
+![Spectrum Aura banner](https://capsule-render.vercel.app/api?type=waving&color=0:05060a,50:0d2820,100:34d399&height=130&section=header&text=Spectrum%20Aura&fontSize=46&fontColor=e6fff5&animation=twinkling&desc=Real-time%20browser%20audio%20visualiser&descSize=14&descAlignY=62&descAlign=50)
+
+[![Live demo](https://img.shields.io/website?down_message=offline&label=demo&up_color=34d399&up_message=online&url=https%3A%2F%2Fdanamini.github.io%2Fspectrum-aura%2F)](https://danamini.github.io/spectrum-aura/)
+[![Release](https://img.shields.io/github/v/release/danamini/spectrum-aura?color=34d399&label=release)](https://github.com/danamini/spectrum-aura/releases)
+[![CI](https://github.com/danamini/spectrum-aura/actions/workflows/ci.yml/badge.svg)](https://github.com/danamini/spectrum-aura/actions/workflows/ci.yml)
+[![Deploy](https://github.com/danamini/spectrum-aura/actions/workflows/deploy.yml/badge.svg)](https://github.com/danamini/spectrum-aura/actions/workflows/deploy.yml)
+[![tests](docs/badges/tests.svg)](https://github.com/danamini/spectrum-aura/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/danamini/spectrum-aura)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](docs/DEVELOPMENT.md)
+[![Three.js](https://img.shields.io/badge/Three.js-real--time%203D-black?logo=threedotjs)](https://threejs.org/)
+
+<img src="docs/readme-spectrum-hero.svg" alt="Animated spectrum bars — Spectrum Aura" width="900"/>
+
+<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=700&lines=14+visual+engines+%E2%80%A2+beat-synced+3D;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat;No+install.+No+backend.+Just+sound." alt="14 visual engines • beat-synced 3D — Tap T on beats, ⇧T on downbeat — No install. No backend. Just sound."/>
+
+**[Open live demo](https://danamini.github.io/spectrum-aura/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [Docs](docs/README.md)
+
+### Built with
+
+[![Tech stack](https://skillicons.dev/icons?i=ts,react,vite,tailwind,githubactions,eslint&perline=6)](https://skillicons.dev)
+
+</div>
 
 Spectrum Aura is a dynamic, real-time visual analyser that turns live sound into motion, light, depth, and rhythm directly in your browser.
 
@@ -10,7 +33,7 @@ It is not designed to be used for any formal audio analysis, it's intended purel
 
 ## Live Demo
 
-- GitHub Pages: [https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)
+**[https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)** — deployed automatically from `main` on every merge.
 
 Depending on your hardware you may need to tune performance via the options in settings.
 
@@ -257,6 +280,12 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
 - `AGENTS.md`: Guide for Cursor / Claude coding agents
 - `docs/`: Technical documentation (see [docs/README.md](docs/README.md))
 - `docs/DEVELOPMENT.md`: Architecture and contribution guide
+
+## Project pulse
+
+[![Star History Chart](https://api.star-history.com/svg?repos=danamini/spectrum-aura&type=Date)](https://star-history.com/#danamini/spectrum-aura&Date)
+
+The chart above updates as the repository grows. CI status, release version, demo uptime, and the **tests** badge in the header are also live — they refresh from GitHub Actions and the deployed site.
 
 ## Releases
 
