@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](docs/DEVELOPMENT.md)
 [![Three.js](https://img.shields.io/badge/Three.js-real--time%203D-black?logo=threedotjs)](https://threejs.org/)
 
-<img src="docs/readme-spectrum-hero.svg" alt="Animated spectrum bars — Spectrum Aura" width="900"/>
+<img src="docs/readme-hero.svg" alt="Animated spectrum bars — Spectrum Aura" width="900"/>
 
 <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=14+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="14 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
 

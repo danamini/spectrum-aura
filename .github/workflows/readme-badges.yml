@@ -31,8 +31,10 @@ jobs:
       - name: Run tests and regenerate badge
         run: |
           set -euo pipefail
-          OUT=$(npm run test:run 2>&1 | tee /dev/stderr)
-          PASSED=$(echo "$OUT" | rg 'Tests\s+[0-9]+ passed' -o | rg -o '[0-9]+' | head -1)
+          OUT=$(NO_COLOR=1 npm run test:run 2>&1 | tee /dev/stderr)
+          # Strip any ANSI colour codes, then read the "Tests  N passed" summary line.
+          CLEAN=$(printf '%s' "$OUT" | sed -E 's/\x1b\[[0-9;]*m//g')
+          PASSED=$(printf '%s' "$CLEAN" | grep -oE 'Tests[[:space:]]+[0-9]+ passed' | grep -oE '[0-9]+' | head -1)
           if [ -z "$PASSED" ]; then
             echo "Could not parse test count from vitest output"
             exit 1
