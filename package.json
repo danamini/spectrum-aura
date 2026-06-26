@@ -1,6 +1,7 @@
 {
   "name": "spectrum-aura",
   "private": true,
+  "version": "0.0.1",
   "sideEffects": false,
   "type": "module",
   "scripts": {
@@ -13,7 +14,13 @@
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run lint && npm run test:run"
+    "check": "npm run typecheck && npm run lint && npm run test:run",
+    "preversion": "npm run check",
+    "version": "npm run build",
+    "postversion": "git push --follow-tags",
+    "release:patch": "npm version patch -m \"Release v%s\"",
+    "release:minor": "npm version minor -m \"Release v%s\"",
+    "release:major": "npm version major -m \"Release v%s\""
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

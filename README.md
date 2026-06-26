@@ -25,8 +25,9 @@ Depending on your hardware you may need to tune performance via the options in s
 
 - Browser-native real-time rendering with animated 3D scenes and post-processing.
 - Designed for live sessions: quick mode switching, keyboard-first controls, and preset slots.
+- **Musical sync:** experimental BPM detection, a 4/4 bar grid, manual beat/downbeat taps, and phrase-aware view cycling.
 - Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, and Asset-Flow.
-- Beat-aware motion and camera behavior that reacts to energy, not just raw levels.
+- Beat-aware motion and camera behavior that reacts to energy and musical phase, not just raw levels.
 - Works with microphone input or shared tab/system audio.
 - Retro post FX options including CRT scanline emulation and projector-film artifacts.
 
@@ -68,6 +69,51 @@ For shared tab/system audio in Chrome:
 - On-rails Tube: fly-through wire tunnel with beat-reactive pulse and twist.
 - Asset-Flow: music-reactive 3D model choreography over drifting layered 2D backgrounds.
 
+### Beat, bars, and musical sync
+
+Spectrum Aura treats rhythm as a first-class input — not just loudness. A **SongClock** keeps an authoritative 4/4 grid (4 beats per bar, 16 beats per phrase) that drives the BPM HUD, visual pulse, and optional view cycling.
+
+**How it works**
+
+1. **Audio analysis** estimates tempo (BPM) and detects transients from the FFT signal.
+2. **SongClock** turns that into a continuous beat index: which beat you're on, where you are in the bar, and where you are in a 4-bar phrase.
+3. **Visuals** use injected beat phase for pulses, kicks, and post-FX — not a naive wall-clock timer.
+
+This is tuned for fun, live visuals — not DAW-grade beat tracking — but manual taps make it surprisingly tight for DJ sets, streams, and browser playback.
+
+**Manual sync (recommended for live use)**
+
+| Key  | What it does                                                                                                                                                                                    |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `T`  | **Beat tap** — tap on each beat. After a couple of taps the app learns your tempo and locks the grid. Keep tapping if the track drifts.                                                         |
+| `⇧T` | **Downbeat tap** — tap on the **first beat of a bar** (the "one"). Resets the phrase to **beat 1 of 16** immediately — use this when a new section starts or the auto grid feels off by a beat. |
+| `M`  | Toggle the **BPM readout and bar grid** overlay (confidence %, locked state, 16-beat dots).                                                                                                     |
+
+**Tap behaviour in plain terms**
+
+- **`T` on beats:** learns BPM from your tap spacing and anchors the running grid to your timing.
+- **`⇧T` on the downbeat:** says "this moment is beat 1" — the phrase counter resets to 1/16, not just the next beat in the current bar.
+- **After you tap:** the grid stays on your tempo. If the analyser later detects beats that line up with your grid, it can gently nudge phase and hand control back to auto detection.
+- **Misaligned audio** after a manual lock will not skip or jump beats — the clock waits for agreement rather than fighting your taps.
+
+**Auto detection**
+
+When audio confidence is high enough, SongClock can enter **auto** mode without taps. The BPM readout shows a confidence percentage; **locked** means the detector is fairly sure.
+
+The app can also watch for **musical changes every four bars** (spectral shift + strong onset) and realign the phrase downbeat — useful when a drop or new section lands on a bar line.
+
+**Phrase-aware view cycling**
+
+Press `C` to enable **music-reactive view cycle**. Views switch at the start of each **4-bar phrase** (16 beats), not every single bar — so changes feel musical rather than frantic. A short warm-up applies before the first switch.
+
+**Where to see it**
+
+- **Canvas overlay** (`M`): large BPM digits + 16-beat grid when audio is running.
+- **Settings → Audio** (`S`): same tempo readout, plus toggles for the latency HUD (`L`) and beat sensitivity.
+- **Latency HUD** (`L`): frame timing breakdown (audio → scene → render) for tuning on slower hardware.
+
+Technical deep dive: [Song clock and sync](docs/song-clock-and-sync.md).
+
 ### Live controls
 
 - `R` randomize look
@@ -78,11 +124,11 @@ For shared tab/system audio in Chrome:
 - `X` reset the current audio source selection
 - `N` toggle stats panel
 - `G` show/hide shortcut bar (restores via `G` or the bottom pill)
-- `T` beat tap (lock sync grid)
-- `⇧T` downbeat tap (align phrase to 1/16)
+- `T` beat tap (learn tempo + lock grid)
+- `⇧T` downbeat tap (reset phrase to beat 1/16)
 - `M` toggle BPM & bar sync grid
 - `L` toggle latency HUD
-- `C` toggle music-reactive view cycle (every 4 bars)
+- `C` toggle music-reactive view cycle (every 4-bar phrase)
 
 Bottom shortcut rail:
 
@@ -111,12 +157,13 @@ Asset sources and licensing:
 
 ### Tunable signal + render pipeline
 
-- FFT size, smoothing, gain, beat sensitivity
+- FFT size, smoothing, gain, **beat sensitivity** (onset detection for sync)
 - Camera drift and beat response controls
 - Post FX controls: bloom, chroma, grain, vignette, DOF, glitch, god rays, grading, kaleidoscope, mirror, CRT, projector film
 - Post FX master pipeline bypass toggle
 - View-specific wireframe controls, plus a global wireframe toggle bound to the current view
 - Dedicated monolith brightness control
+- **Show BPM & bar grid** and **Show latency HUD** in Settings → Audio
 
 ## Presets
 
@@ -211,6 +258,17 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
 - `docs/`: Technical documentation (see [docs/README.md](docs/README.md))
 - `docs/DEVELOPMENT.md`: Architecture and contribution guide
 
+## Releases
+
+- Current version: **0.0.1** (see [`CHANGELOG.md`](CHANGELOG.md)).
+- Versioning follows [Semantic Versioning](https://semver.org/); each release is a Git tag `v<version>`.
+- A push of a `v*` tag triggers the **Release** workflow, which runs checks, builds, and publishes a GitHub Release (with notes from the changelog and a packaged `dist`).
+- Full process and commands: [`docs/RELEASING.md`](docs/RELEASING.md).
+
+```bash
+npm run release:patch   # bump, tag, and push (also: release:minor / release:major)
+```
+
 ## Deploy
 
 Build static assets and publish `dist/` to any static host:
@@ -219,7 +277,15 @@ Build static assets and publish `dist/` to any static host:
 npm run build
 ```
 
+Pushes to `main` auto-deploy to GitHub Pages via `.github/workflows/deploy.yml`.
+
 ## Signal Processing and Sync
+
+Spectrum Aura runs a real-time pipeline: **FFT → band features → BeatMatcher (onsets) + BPMDetector (tempo estimate) → SongClock (bar/beat grid) → visuals**.
+
+- **Beats and bars:** 4 beats per bar, 16 beats per phrase (4 bars in 4/4).
+- **Manual taps** (`T`, `⇧T`) anchor the grid; audio estimates tempo but does not fight misaligned taps.
+- **View cycle** (`C`) advances on phrase boundaries after a short warm-up.
 
 Technical documentation (equations, algorithms, latency):
 
