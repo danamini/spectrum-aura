@@ -3,7 +3,7 @@
 **Authoritative timing for bar grid, view cycling, and visual beat phase.**
 
 **Source:** `engine/song-clock.ts`  
-**Consumers:** `Analyser.tsx`, `BarTimingHud.tsx`, `view-cycle-controller.ts`, `scene.ts` (via injected `beatPhase`)
+**Consumers:** `hooks/useAnalyserEngine.ts`, `BarTimingHud.tsx`, `view-cycle-controller.ts`, `scene.ts` (via injected `beatPhase`)
 
 ---
 
@@ -21,24 +21,24 @@ Manual taps (T / ⇧T) ──epoch/BPM──────┘
 
 ## Clock modes (`ClockSource`)
 
-| Mode | Entry | Behavior |
-|------|-------|----------|
-| `idle` | Initial / lost auto confidence | No grid (`EMPTY_BAR_TIMING`) |
-| `auto` | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM drifts 3%/frame toward estimate |
-| `manual` | Any `hintBeat` / `hintDownbeat` | Tap-owned epoch; misaligned audio onsets ignored; aligned onsets may nudge and release to auto |
+| Mode     | Entry                                                       | Behavior                                                                                       |
+| -------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `idle`   | Initial / lost auto confidence                              | No grid (`EMPTY_BAR_TIMING`)                                                                   |
+| `auto`   | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM drifts 3%/frame toward estimate                                             |
+| `manual` | Any `hintBeat` / `hintDownbeat`                             | Tap-owned epoch; misaligned audio onsets ignored; aligned onsets may nudge and release to auto |
 
 ---
 
 ## Continuous beat index
 
-Given epoch \((t_0, b_0)\) where \(b_0\) is the 1-based beat number at \(t_0\), and clock BPM \(\text{BPM}_c\):
+Given epoch \((t_0, b_0)\) where \(b_0\) is the 1-based beat number at \(t_0\), and clock BPM \(\text{BPM}\_c\):
 
 \[
-T_{\text{beat}} = \frac{60000}{\text{BPM}_c}
+T\_{\text{beat}} = \frac{60000}{\text{BPM}\_c}
 \]
 
 \[
-B(t) = (b_0 - 1) + \frac{\max(0,\; t - t_0)}{T_{\text{beat}}}
+B(t) = (b*0 - 1) + \frac{\max(0,\; t - t_0)}{T*{\text{beat}}}
 \]
 
 Phrase position (16 beats in 4/4):
@@ -52,7 +52,7 @@ p = B(t) \bmod 16
 \]
 
 \[
-\phi_{\text{beat}} = p - \lfloor p \rfloor
+\phi\_{\text{beat}} = p - \lfloor p \rfloor
 \]
 
 \[
@@ -60,12 +60,12 @@ p = B(t) \bmod 16
 \]
 
 \[
-\phi_{\text{phrase}} = \frac{p}{16}
+\phi\_{\text{phrase}} = \frac{p}{16}
 \]
 
 ### Boundary flags
 
-- `beatJustTicked`: \(\lfloor B(t) \rfloor > \lfloor B(t_{\text{prev}}) \rfloor\)
+- `beatJustTicked`: \(\lfloor B(t) \rfloor > \lfloor B(t\_{\text{prev}}) \rfloor\)
 - `barJustStarted`: beat ticked AND `beatInBar === 1`
 - `phraseJustStarted`: beat ticked AND `beatInPhrase === 1` AND (`totalBeats > 1` OR downbeat latch from `⇧T`)
 
@@ -76,9 +76,9 @@ p = B(t) \bmod 16
 ### `T` — beat tap (`hintBeat`)
 
 1. Record tap time; reset tap list if gap \(> 2000\,\text{ms}\) (`TAP_TIMEOUT_MS`)
-2. If ≥2 taps in window: \(\text{BPM}_c = 60000 / \text{median}(\Delta t_i)\), clamped \([60,200]\)
+2. If ≥2 taps in window: \(\text{BPM}\_c = 60000 / \text{median}(\Delta t_i)\), clamped \([60,200]\)
 3. Set `source = manual`
-4. If consecutive tap within \(1.6 \cdot T_{\text{beat}}\): increment epoch beat; else resync phase
+4. If consecutive tap within \(1.6 \cdot T\_{\text{beat}}\): increment epoch beat; else resync phase
 
 ### `⇧T` — downbeat (`hintDownbeat`)
 
@@ -123,13 +123,13 @@ Requires:
 After 4 consecutive qualifying frames (or immediate if `bpmLocked`):
 
 \[
-t_0 = \text{now},\quad b_0 = 1,\quad \text{BPM}_c = \text{BPM}_{\text{est}}
+t*0 = \text{now},\quad b_0 = 1,\quad \text{BPM}\_c = \text{BPM}*{\text{est}}
 \]
 
 While auto and not detector-locked:
 
 \[
-\text{BPM}_c \leftarrow 0.97\,\text{BPM}_c + 0.03\,\text{BPM}_{\text{est}}
+\text{BPM}_c \leftarrow 0.97\,\text{BPM}\_c + 0.03\,\text{BPM}_{\text{est}}
 \]
 
 No beat index jumps — only tempo slowly corrects.
@@ -143,13 +143,13 @@ No beat index jumps — only tempo slowly corrects.
 Switches visual on **phrase boundary** (start of beat 1 after first full 16-beat phrase):
 
 ```typescript
-phraseJustStarted && totalBeats > 16
+phraseJustStarted && totalBeats > 16;
 ```
 
 Cooldown:
 
 \[
-t_{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T_{\text{beat}})
+t*{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T*{\text{beat}})
 \]
 
 ---
@@ -158,10 +158,10 @@ t_{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T_{\text{beat}})
 
 **File:** `engine/live-tempo.ts`
 
-| API | Rate | Use |
-|-----|------|-----|
+| API                   | Rate               | Use                       |
+| --------------------- | ------------------ | ------------------------- |
 | `setLiveTempoFrame()` | Every engine frame | `BarTimingHud` rAF reader |
-| `dispatchLiveTempo()` | ~8 Hz | Control panel BPM label |
+| `dispatchLiveTempo()` | ~8 Hz              | Control panel BPM label   |
 
 `BarTiming` in frame bus is the same struct `SongClock.tick()` returns.
 
@@ -181,13 +181,13 @@ t_{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T_{\text{beat}})
 
 ## Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `T` | Beat tap |
-| `⇧T` | Downbeat (1/16) |
-| `M` | Toggle BPM & bar grid HUD |
-| `L` | Toggle latency HUD |
-| `G` | Hide/show shortcut bar |
-| `C` | Toggle music-reactive view cycle (phrase boundaries) |
+| Key  | Action                                               |
+| ---- | ---------------------------------------------------- |
+| `T`  | Beat tap                                             |
+| `⇧T` | Downbeat (1/16)                                      |
+| `M`  | Toggle BPM & bar grid HUD                            |
+| `L`  | Toggle latency HUD                                   |
+| `G`  | Hide/show shortcut bar                               |
+| `C`  | Toggle music-reactive view cycle (phrase boundaries) |
 
 All sync/HUD shortcuts appear in the bottom utility cluster (`Shortcuts.tsx`).

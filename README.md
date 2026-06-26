@@ -176,7 +176,7 @@ npm run lint        # ESLint validation
 npm run format      # Prettier formatting
 npm run test:run    # Vitest (single run)
 npm run test        # Vitest (watch mode)
-npm run check       # Project check script (lint + test:run)
+npm run check       # typecheck + lint + test:run
 ```
 
 For a fuller local gate before pushing, run `npm run format` and `npm run build` in addition to `npm run check`.
@@ -194,14 +194,19 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
 - `src/App.tsx`: Single-page shell
 - `src/main.tsx`: Browser entry point
 - `src/components/analyser/`: UI and interaction layer
+  - `Analyser.tsx`: Thin orchestrator (overlays + hooks)
+  - `hooks/`: Render loop (`useAnalyserEngine`), beat taps, commands, presets
+  - `control-panel/`: Shared primitives + per-view `ViewSettings`
+  - `overlays/`: Latency HUD, stats, freq labels, audio prompt
+  - `TempoReadout.tsx` + `theme.ts`: Shared BPM display and design tokens
   - `store.ts`: Settings state management
-  - `Analyser.tsx`: Canvas orchestration + SongClock wiring
   - `BarTimingHud.tsx`: BPM / bar grid HUD
-  - `ControlPanel.tsx`: Settings UI
+  - `ControlPanel.tsx`: Settings sheet and flyout tabs
   - `visuals.ts`: Canonical visual registry
-  - `__tests__/`: Store, shortcuts, regression tests
+  - `__tests__/`: Store, shortcuts, regression, preset/theme tests
   - `engine/`: Audio, SongClock, scene, post-processing
   - `engine/__tests__/`: Engine and sync invariant tests
+- `src/components/ui/`: Minimal shadcn surface (`label`, `sheet`, `slider`, `switch`)
 - `AGENTS.md`: Guide for Cursor / Claude coding agents
 - `docs/`: Technical documentation (see [docs/README.md](docs/README.md))
 - `docs/DEVELOPMENT.md`: Architecture and contribution guide

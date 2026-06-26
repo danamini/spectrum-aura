@@ -2,7 +2,8 @@
 
 How frames flow from audio read to pixels, and where delay accumulates.
 
-**Primary files:** `Analyser.tsx`, `engine/latency-metrics.ts`  
+**Primary files:** `hooks/useAnalyserEngine.ts`, `engine/latency-metrics.ts`  
+**Orchestrator:** `Analyser.tsx`  
 **Scene:** `engine/scene.ts`  
 **Post-FX:** `engine/composer.ts`
 
@@ -28,12 +29,12 @@ requestAnimationFrame(desktopLoop)
 
 ## Timing budget (typical 60 FPS)
 
-| Stage | Target | Notes |
-|-------|--------|-------|
-| `audio.read()` CPU | < 2 ms | FFT + BeatMatcher + BPMDetector |
-| `scene.update()` | < 8 ms | View-dependent |
-| Post-FX chain | 2–15 ms | Bloom/glitch costly |
-| **Total frame** | < 16.7 ms | 60 FPS |
+| Stage              | Target    | Notes                           |
+| ------------------ | --------- | ------------------------------- |
+| `audio.read()` CPU | < 2 ms    | FFT + BeatMatcher + BPMDetector |
+| `scene.update()`   | < 8 ms    | View-dependent                  |
+| Post-FX chain      | 2–15 ms   | Bloom/glitch costly             |
+| **Total frame**    | < 16.7 ms | 60 FPS                          |
 
 Performance mode reduces pixel ratio and skips post-FX in XR.
 
@@ -44,7 +45,7 @@ Performance mode reduces pixel ratio and skips post-FX in XR.
 ### 1. FFT analysis window
 
 \[
-L_{\text{FFT}} \approx \frac{N}{f_s}
+L\_{\text{FFT}} \approx \frac{N}{f_s}
 \]
 
 Reported in `bands.timing.fftWindowMs`.
@@ -58,23 +59,23 @@ Exponential across frames — effective attack slowed by `smoothingTimeConstant`
 Web Audio reports:
 
 \[
-L_{\text{out}} = \texttt{baseLatency} + \texttt{outputLatency}
+L\_{\text{out}} = \texttt{baseLatency} + \texttt{outputLatency}
 \]
 
 Exposed in `bands.timing` (seconds → ms in HUD).
 
 ### 4. Render pipeline
 
-Measured each frame in `Analyser.tsx`:
+Measured each frame in `hooks/useAnalyserEngine.ts`:
 
 \[
-L_{\text{audio→scene}} = t_{\text{afterScene}} - t_{\text{fftRead}}
+L*{\text{audio→scene}} = t*{\text{afterScene}} - t*{\text{fftRead}}
 \]
 \[
-L_{\text{scene→render}} = t_{\text{afterRender}} - t_{\text{afterScene}}
+L*{\text{scene→render}} = t*{\text{afterRender}} - t*{\text{afterScene}}
 \]
 \[
-L_{\text{audio→render}} = t_{\text{afterRender}} - t_{\text{fftRead}}
+L*{\text{audio→render}} = t*{\text{afterRender}} - t\_{\text{fftRead}}
 \]
 
 Smoothed with EMA in `latency-metrics.ts` (\(\alpha = 0.15\); signal line decays when idle).
@@ -84,7 +85,7 @@ Smoothed with EMA in `latency-metrics.ts` (\(\alpha = 0.15\); signal line decays
 When `BeatMatcher` fires `signalSwing` **on that frame only**:
 
 \[
-L_{\text{signal→render}} = t_{\text{afterRender}} - t_{\text{signalChange}}
+L*{\text{signal→render}} = t*{\text{afterRender}} - t\_{\text{signalChange}}
 \]
 
 `signalChangeAt` is a timestamp of the last transient, not a per-frame anchor — measuring every frame against it would grow linearly since the last swing (bogus tens-of-seconds readings). The HUD primary metric is always **audio→UI**; **signal→ui** appears as a secondary line when a fresh transient measurement exists.
@@ -96,22 +97,22 @@ L_{\text{signal→render}} = t_{\text{afterRender}} - t_{\text{signalChange}}
 **Before SongClock:** scene used wall-clock \(t\) (session seconds):
 
 \[
-\phi_{\text{wall}} = \left(t \cdot \frac{\text{BPM}}{60}\right) \bmod 1
+\phi\_{\text{wall}} = \left(t \cdot \frac{\text{BPM}}{60}\right) \bmod 1
 \]
 
 **Current (correct):** injected SongClock phase:
 
 \[
-\phi_{\text{visual}} = \phi_{\text{beat}} \quad \text{from SongClock}
+\phi*{\text{visual}} = \phi*{\text{beat}} \quad \text{from SongClock}
 \]
 
-Post-FX pulse in `Analyser.tsx`:
+Post-FX pulse in `hooks/useAnalyserEngine.ts`:
 
 \[
-\text{pulse} = \max\left(0,\; \sin(\pi \cdot \phi_{\text{beat}})\right)
+\text{pulse} = \max\left(0,\; \sin(\pi \cdot \phi\_{\text{beat}})\right)
 \]
 
-Scene kick uses phase wrap detection on \(\phi_{\text{beat}}\) when BPM confident.
+Scene kick uses phase wrap detection on \(\phi\_{\text{beat}}\) when BPM confident.
 
 ---
 
@@ -137,11 +138,11 @@ WebXR uses `renderer.setAnimationLoop(loop)` — same `loop()` body, `xrRuntime.
 
 ## HUD layout
 
-| Display | Meaning |
-|---------|---------|
-| **Large value** | Smoothed audio→UI (per-frame pipeline) |
-| audio→scene / scene→render | Instantaneous segment timings |
-| signal→ui (when visible) | Last transient→pixel latency (only measured on `signalSwing` frames) |
+| Display                    | Meaning                                                              |
+| -------------------------- | -------------------------------------------------------------------- |
+| **Large value**            | Smoothed audio→UI (per-frame pipeline)                               |
+| audio→scene / scene→render | Instantaneous segment timings                                        |
+| signal→ui (when visible)   | Last transient→pixel latency (only measured on `signalSwing` frames) |
 
 Toggle with `L`. Stats panel (`N`) shows the same metrics under **Timing**.
 
