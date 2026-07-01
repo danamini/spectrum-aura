@@ -23,6 +23,7 @@ import {
   type WebXrState,
 } from "./engine/xr";
 import { TempoReadout } from "./TempoReadout";
+import { usePresetActions } from "./hooks/usePresetActions";
 import { EMPTY_LIVE_TEMPO, LIVE_TEMPO_EVENT, type LiveTempoState } from "./engine/live-tempo";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
@@ -30,7 +31,6 @@ import {
   PRESETS,
   settingsStore,
   useSettings,
-  useSlots,
   type Settings,
 } from "./store";
 import { getVisualDefinition, VISUALS } from "./visuals";
@@ -38,9 +38,9 @@ import { getVisualDefinition, VISUALS } from "./visuals";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 
 const UI_KEY = "analyser-ui-v1";
-type UIState = { viewSettingsOpen: boolean; activeTab: string; slotsOpen: boolean };
+type UIState = { viewSettingsOpen: boolean; activeTab: string };
 const loadUI = (): UIState => {
-  const fallback: UIState = { viewSettingsOpen: true, activeTab: "post", slotsOpen: false };
+  const fallback: UIState = { viewSettingsOpen: true, activeTab: "post" };
   if (typeof window === "undefined") return fallback;
   try {
     const raw = localStorage.getItem(UI_KEY);
@@ -53,10 +53,9 @@ const loadUI = (): UIState => {
 
 export function ControlPanel() {
   const s = useSettings();
-  const slots = useSlots();
+  const preset = usePresetActions();
   const [open, setOpen] = useState(false);
   const [flyoutVisible, setFlyoutVisible] = useState(false);
-  const [selectedSaveIndex, setSelectedSaveIndex] = useState(0);
   const [xrState, setXrState] = useState<WebXrState>({
     available: false,
     active: false,
@@ -106,72 +105,6 @@ export function ControlPanel() {
     return () => window.clearTimeout(id);
   }, [open]);
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
-  const hasSavedPresets = slots.length > 0;
-  const activeSaveIndex = hasSavedPresets ? Math.min(selectedSaveIndex, slots.length - 1) : 0;
-
-  React.useEffect(() => {
-    setSelectedSaveIndex((prev) => {
-      if (slots.length === 0) return 0;
-      return Math.min(prev, slots.length - 1);
-    });
-  }, [slots.length]);
-
-  const loadSavedPreset = (index: number) => {
-    if (index < 0 || index >= slots.length) return;
-    settingsStore.loadSlot(index);
-    setSelectedSaveIndex(index);
-  };
-
-  const loadFocusedPreset = () => {
-    if (!hasSavedPresets) return;
-    loadSavedPreset(activeSaveIndex);
-  };
-
-  const focusSavedPreset = (index: number) => {
-    if (index < 0 || index >= slots.length) return;
-    setSelectedSaveIndex(index);
-  };
-
-  const stepSavedPreset = (direction: 1 | -1) => {
-    if (!hasSavedPresets) return;
-    const next = (activeSaveIndex + direction + slots.length) % slots.length;
-    focusSavedPreset(next);
-  };
-
-  const loadRandomSavedPreset = () => {
-    if (!hasSavedPresets) return;
-    const next =
-      slots.length === 1
-        ? 0
-        : (() => {
-            let index = activeSaveIndex;
-            while (index === activeSaveIndex) {
-              index = Math.floor(Math.random() * slots.length);
-            }
-            return index;
-          })();
-    focusSavedPreset(next);
-  };
-
-  const saveCurrentPreset = () => {
-    const nextIndex = slots.length;
-    settingsStore.saveSlot(nextIndex, `Save ${nextIndex + 1}`);
-    setSelectedSaveIndex(nextIndex);
-  };
-
-  const saveFocusedPreset = () => {
-    if (!hasSavedPresets) {
-      saveCurrentPreset();
-      return;
-    }
-    const focusedSave = slots[activeSaveIndex];
-    settingsStore.saveSlot(activeSaveIndex, focusedSave?.name ?? `Save ${activeSaveIndex + 1}`);
-  };
-
-  const deleteSavedPreset = () => {
-    if (!hasSavedPresets) return;
-    settingsStore.clearSlot(activeSaveIndex);
-  };
 
   const hasViewSettings = true;
   const currentVisual = getVisualDefinition(s.view);
@@ -404,6 +337,7 @@ export function ControlPanel() {
                   { id: "audio", label: "Audio" },
                   { id: "scene", label: "Scene" },
                   { id: "post", label: "Post FX" },
+                  { id: "saves", label: "Saves" },
                 ] as const
               ).map((t) => {
                 const active = ui.activeTab === t.id;
@@ -454,7 +388,9 @@ export function ControlPanel() {
                         ? "Scene"
                         : ui.activeTab === "post"
                           ? "Post FX"
-                          : ""}
+                          : ui.activeTab === "saves"
+                            ? "Saves"
+                            : ""}
                   </span>
                   <button
                     onClick={closeFlyout}
@@ -673,166 +609,10 @@ export function ControlPanel() {
                       </div>
                     </Row>
 
-                    <div className="rounded-md border border-white/10 bg-white/[0.03]">
-                      <button
-                        onClick={() => updateUi({ slotsOpen: !ui.slotsOpen })}
-                        className="flex w-full items-center justify-between px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-white/60 hover:text-white"
-                      >
-                        <span>My presets (saved locally)</span>
-                        <ChevronDown
-                          className={`h-3.5 w-3.5 transition-transform ${ui.slotsOpen ? "rotate-180" : ""}`}
-                        />
-                      </button>
-                      {ui.slotsOpen && (
-                        <div className="space-y-3 border-t border-white/10 p-3">
-                          <div className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/[0.02] px-3 py-3">
-                            <div>
-                              <Label className="text-[11px]">Saved presets</Label>
-                              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
-                                {slots.length} saved locally
-                              </div>
-                            </div>
-                            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
-                              Focus a save, then play, step, random, save, add, or delete.
-                            </div>
-                          </div>
-
-                          <div className="rounded-md border border-white/10 bg-black/20 p-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <select
-                                value={hasSavedPresets ? String(activeSaveIndex) : ""}
-                                onChange={(e) => setSelectedSaveIndex(Number(e.target.value))}
-                                disabled={!hasSavedPresets}
-                                aria-label="Focused save"
-                                className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[12px] text-white outline-none transition-colors hover:border-white/20 focus:border-emerald-400/50 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                {hasSavedPresets ? (
-                                  slots.map((slot, index) => (
-                                    <option key={`${slot.name}-${index}`} value={index}>
-                                      {index + 1}. {slot.name}
-                                    </option>
-                                  ))
-                                ) : (
-                                  <option value="">No saved presets yet</option>
-                                )}
-                              </select>
-                              <Bn
-                                variant="primary"
-                                className="h-9 px-2"
-                                onClick={loadFocusedPreset}
-                                disabled={!hasSavedPresets}
-                                title="Load focused save"
-                                aria-label="Load focused save"
-                              >
-                                <Play className="h-4 w-4" />
-                                <span>Load</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={() => stepSavedPreset(-1)}
-                                disabled={!hasSavedPresets}
-                                title="Focus previous save"
-                                aria-label="Focus previous save"
-                              >
-                                <SkipBack className="h-4 w-4" />
-                                <span>Prev</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={() => stepSavedPreset(1)}
-                                disabled={!hasSavedPresets}
-                                title="Focus next save"
-                                aria-label="Focus next save"
-                              >
-                                <SkipForward className="h-4 w-4" />
-                                <span>Next</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={loadRandomSavedPreset}
-                                disabled={!hasSavedPresets}
-                                title="Focus random save"
-                                aria-label="Focus random save"
-                              >
-                                <Shuffle className="h-4 w-4" />
-                                <span>Random</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={saveFocusedPreset}
-                                title={
-                                  hasSavedPresets
-                                    ? "Overwrite focused save"
-                                    : "Save current as first save"
-                                }
-                                aria-label={
-                                  hasSavedPresets
-                                    ? "Overwrite focused save"
-                                    : "Save current as first save"
-                                }
-                              >
-                                <Save className="h-4 w-4" />
-                                <span>Save</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={saveCurrentPreset}
-                                title="Add new save"
-                                aria-label="Add new save"
-                              >
-                                <Plus className="h-4 w-4" />
-                                <span>Add</span>
-                              </Bn>
-                              <Bn
-                                variant="ghost"
-                                className="h-9 px-2"
-                                onClick={deleteSavedPreset}
-                                disabled={!hasSavedPresets}
-                                title="Delete focused save"
-                                aria-label="Delete focused save"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span>Delete</span>
-                              </Bn>
-                            </div>
-                            <div className="mt-2 flex items-center justify-between gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
-                              <span>
-                                {hasSavedPresets
-                                  ? `Focused: ${activeSaveIndex + 1}. ${slots[activeSaveIndex]?.name ?? "Save"}`
-                                  : "Save current setup to start your list."}
-                              </span>
-                              <span>
-                                Play loads. Skip or shuffle changes focus. Save updates focused.
-                              </span>
-                            </div>
-                          </div>
-
-                          <ToggleRow
-                            label="Cycle saves (auto-load each preset)"
-                            enabled={s.slotCycleMode}
-                            onToggle={(v) => set({ slotCycleMode: v })}
-                          >
-                            <S
-                              label="Seconds per slot"
-                              value={s.slotCycleSeconds}
-                              min={10}
-                              max={120}
-                              step={1}
-                              onChange={(v) => set({ slotCycleSeconds: v })}
-                            />
-                            <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                              Turning on loads the first saved preset immediately, then advances in
-                              list order.
-                            </p>
-                          </ToggleRow>
-                        </div>
-                      )}
-                    </div>
+                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                      Looking for your saved looks? They moved to the Saves tab so they're easier to
+                      find.
+                    </p>
 
                     <ToggleRow label="Bloom" enabled={s.bloom} onToggle={(v) => set({ bloom: v })}>
                       <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-2 py-2">
@@ -1312,6 +1092,148 @@ export function ControlPanel() {
                         step={0.05}
                         onChange={(v) => set({ assetOverlaySpeed: v })}
                       />
+                    </ToggleRow>
+                  </div>
+                )}
+
+                {ui.activeTab === "saves" && (
+                  <div className="space-y-3">
+                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                      Captures every setting — view, post FX, and audio — as one saved look. Loaded
+                      and saved from here, the shortcut bar, or number keys 1–5 all share the same
+                      list.
+                    </p>
+                    <Row label="Save current setup">
+                      <div className="flex flex-wrap gap-1.5">
+                        <Bn variant="primary" onClick={() => preset.saveNew()}>
+                          <Plus className="mr-1 h-3.5 w-3.5" /> New save
+                        </Bn>
+                        <Bn
+                          variant="default"
+                          onClick={() => preset.saveFocused()}
+                          disabled={!preset.hasPresets}
+                        >
+                          <Save className="mr-1 h-3.5 w-3.5" /> Overwrite focused
+                        </Bn>
+                      </div>
+                    </Row>
+                    <Row label={`Saved locally (${preset.slots.length})`}>
+                      {preset.hasPresets ? (
+                        <div className="space-y-1.5">
+                          {preset.slots.map((slot, index) => {
+                            const isFocused = index === preset.activeIndex;
+                            return (
+                              <div
+                                key={`${slot.name}-${index}`}
+                                className={`flex items-center gap-2 rounded-md border px-2 py-1.5 transition-colors ${
+                                  isFocused
+                                    ? "border-emerald-300/40 bg-emerald-300/[0.07]"
+                                    : "border-white/10 bg-white/[0.02]"
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => preset.focus(index)}
+                                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                  aria-label={`Focus ${slot.name}`}
+                                  aria-pressed={isFocused}
+                                >
+                                  <span className="shrink-0 font-mono text-[9px] text-white/35">
+                                    {index + 1}
+                                  </span>
+                                  <span className="truncate text-[12px] text-white/85">
+                                    {slot.name}
+                                  </span>
+                                  {isFocused && (
+                                    <span className="shrink-0 rounded border border-emerald-300/30 bg-emerald-300/10 px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider text-emerald-200/90">
+                                      Focused
+                                    </span>
+                                  )}
+                                </button>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <Bn
+                                    variant="ghost"
+                                    className="h-7 px-1.5"
+                                    onClick={() => preset.loadAt(index)}
+                                    title={`Load ${slot.name}`}
+                                    aria-label={`Load ${slot.name}`}
+                                  >
+                                    <Play className="h-3.5 w-3.5" />
+                                  </Bn>
+                                  <Bn
+                                    variant="ghost"
+                                    className="h-7 px-1.5"
+                                    onClick={() => preset.saveAt(index, slot.name)}
+                                    title={`Overwrite ${slot.name}`}
+                                    aria-label={`Overwrite ${slot.name}`}
+                                  >
+                                    <Save className="h-3.5 w-3.5" />
+                                  </Bn>
+                                  <Bn
+                                    variant="ghost"
+                                    className="h-7 px-1.5"
+                                    onClick={() => preset.deleteAt(index)}
+                                    title={`Delete ${slot.name}`}
+                                    aria-label={`Delete ${slot.name}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Bn>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                          No saves yet — capture your current setup above, or press{" "}
+                          <span className="text-white/50">⇧1</span>–
+                          <span className="text-white/50">⇧5</span> to save to a numbered slot.
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <Bn
+                          variant="default"
+                          className="h-8 px-2"
+                          onClick={() => preset.step(-1)}
+                          disabled={!preset.hasPresets}
+                        >
+                          <SkipBack className="mr-1 h-3.5 w-3.5" /> Focus prev
+                        </Bn>
+                        <Bn
+                          variant="default"
+                          className="h-8 px-2"
+                          onClick={() => preset.step(1)}
+                          disabled={!preset.hasPresets}
+                        >
+                          <SkipForward className="mr-1 h-3.5 w-3.5" /> Focus next
+                        </Bn>
+                        <Bn
+                          variant="default"
+                          className="h-8 px-2"
+                          onClick={() => preset.random()}
+                          disabled={!preset.hasPresets}
+                        >
+                          <Shuffle className="mr-1 h-3.5 w-3.5" /> Focus random
+                        </Bn>
+                      </div>
+                    </Row>
+                    <ToggleRow
+                      label="Cycle saves (auto-load each preset)"
+                      enabled={s.slotCycleMode}
+                      onToggle={(v) => set({ slotCycleMode: v })}
+                    >
+                      <S
+                        label="Seconds per slot"
+                        value={s.slotCycleSeconds}
+                        min={10}
+                        max={120}
+                        step={1}
+                        onChange={(v) => set({ slotCycleSeconds: v })}
+                      />
+                      <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                        Turning on loads the first saved preset immediately, then advances in list
+                        order.
+                      </p>
                     </ToggleRow>
                   </div>
                 )}

@@ -71,4 +71,23 @@ describe("usePresetActions store integration", () => {
     expect(list).toHaveLength(3);
     expect(nextCursor).toBe(1);
   });
+
+  it("deleteAt cursor math: deleting before the cursor shifts it back", () => {
+    // Mirrors deleteAt's setCursor logic in usePresetActions.ts.
+    const cursorAfterDelete = (index: number, prevCursor: number, newLength: number) =>
+      newLength <= 0
+        ? 0
+        : index < prevCursor
+          ? prevCursor - 1
+          : Math.min(prevCursor, newLength - 1);
+
+    // Cursor on slot 3, deleting slot 0 (before it) — cursor should follow to slot 2.
+    expect(cursorAfterDelete(0, 3, 3)).toBe(2);
+    // Cursor on slot 1, deleting slot 3 (after it) — cursor stays put.
+    expect(cursorAfterDelete(3, 1, 3)).toBe(1);
+    // Cursor on the deleted slot itself, at the end of the list — clamps to new last index.
+    expect(cursorAfterDelete(3, 3, 3)).toBe(2);
+    // Deleting the only remaining slot — cursor resets to 0.
+    expect(cursorAfterDelete(0, 0, 0)).toBe(0);
+  });
 });

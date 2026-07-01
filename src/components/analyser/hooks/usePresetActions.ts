@@ -46,6 +46,8 @@ export type PresetActions = {
   saveFocused: () => PresetActionResult;
   /** Delete the focused slot and keep the cursor in range. */
   deleteFocused: () => PresetActionResult;
+  /** Delete the slot at `index` regardless of focus, adjusting the cursor to stay valid. */
+  deleteAt: (index: number) => PresetActionResult;
 };
 
 /**
@@ -135,6 +137,20 @@ export function usePresetActions(): PresetActions {
       : { status: "missing", index: activeIndex };
   };
 
+  const deleteAt = (index: number): PresetActionResult => {
+    const list = settingsStore.getSlots();
+    const slot = list[index];
+    if (!slot) return { status: "missing", index };
+    settingsStore.clearSlot(index);
+    const newLength = list.length - 1;
+    setCursor((prev) => {
+      if (newLength <= 0) return 0;
+      if (index < prev) return prev - 1;
+      return Math.min(prev, newLength - 1);
+    });
+    return { status: "ok", index, name: slot.name };
+  };
+
   return {
     slots,
     hasPresets,
@@ -148,5 +164,6 @@ export function usePresetActions(): PresetActions {
     saveNew,
     saveFocused,
     deleteFocused,
+    deleteAt,
   };
 }
