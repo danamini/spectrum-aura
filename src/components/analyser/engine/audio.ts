@@ -72,6 +72,9 @@ export class AudioEngine {
   private beatMatcher = new BeatMatcher();
   private bpmDetector = new BPMDetector();
   private bandBounds = { n: 0, bassEnd: 0, midEnd: 0, bassDiv: 1, midDiv: 1, highDiv: 1 };
+  /** Reused every `read()` call so the hot path doesn't allocate a fresh bands/timing object every frame. */
+  private outTiming: AudioTiming = { ...EMPTY_TIMING };
+  private outBands: AudioBands = { ...EMPTY_BANDS, timing: this.outTiming };
 
   async startMic(options?: { latencyOptimized?: boolean }) {
     try {
@@ -156,7 +159,21 @@ export class AudioEngine {
 
   read(beatThreshold: number, clockTime?: number): AudioBands {
     if (!this.analyser) {
-      return { ...EMPTY_BANDS, bins: this.bins };
+      const out = this.outBands;
+      out.bass = 0;
+      out.mid = 0;
+      out.high = 0;
+      out.centroid = 0;
+      out.beat = false;
+      out.bpm = 0;
+      out.bpmConfidence = 0;
+      out.beatPhase = 0;
+      out.onsetStrength = 0;
+      out.signalSwing = false;
+      out.bpmLocked = false;
+      out.bins = this.bins;
+      out.fftReadAt = 0;
+      return out;
     }
 
     const t0 = performance.now();
@@ -207,30 +224,29 @@ export class AudioEngine {
     const fftSize = this.analyser.fftSize;
     const readCpuMs = performance.now() - t0;
 
-    return {
-      bass,
-      mid,
-      high,
-      centroid,
-      beat: match.beat,
-      bpm,
-      bpmConfidence,
-      beatPhase,
-      onsetStrength: match.onsetStrength,
-      signalSwing: match.signalSwing,
-      bpmLocked,
-      bins: this.bins,
-      fftReadAt,
-      timing: {
-        readCpuMs,
-        audioToRenderMs: 0,
-        baseLatencyMs: (this.ctx?.baseLatency ?? 0) * 1000,
-        outputLatencyMs: (this.ctx?.outputLatency ?? 0) * 1000,
-        fftWindowMs: (fftSize / sr) * 1000,
-        bassDelta: match.bassDelta,
-        signalChangeAt: this.beatMatcher.signalChangeAt,
-      },
-    };
+    const out = this.outBands;
+    out.bass = bass;
+    out.mid = mid;
+    out.high = high;
+    out.centroid = centroid;
+    out.beat = match.beat;
+    out.bpm = bpm;
+    out.bpmConfidence = bpmConfidence;
+    out.beatPhase = beatPhase;
+    out.onsetStrength = match.onsetStrength;
+    out.signalSwing = match.signalSwing;
+    out.bpmLocked = bpmLocked;
+    out.bins = this.bins;
+    out.fftReadAt = fftReadAt;
+    const timing = out.timing;
+    timing.readCpuMs = readCpuMs;
+    timing.audioToRenderMs = 0;
+    timing.baseLatencyMs = (this.ctx?.baseLatency ?? 0) * 1000;
+    timing.outputLatencyMs = (this.ctx?.outputLatency ?? 0) * 1000;
+    timing.fftWindowMs = (fftSize / sr) * 1000;
+    timing.bassDelta = match.bassDelta;
+    timing.signalChangeAt = this.beatMatcher.signalChangeAt;
+    return out;
   }
 
   hintBeat(time: number, downbeat = false, fallbackBpm = 0): void {
