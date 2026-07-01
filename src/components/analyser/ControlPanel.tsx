@@ -24,6 +24,7 @@ import {
 } from "./engine/xr";
 import { TempoReadout } from "./TempoReadout";
 import { usePresetActions } from "./hooks/usePresetActions";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EMPTY_LIVE_TEMPO, LIVE_TEMPO_EVENT, type LiveTempoState } from "./engine/live-tempo";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
@@ -54,6 +55,7 @@ const loadUI = (): UIState => {
 export function ControlPanel() {
   const s = useSettings();
   const preset = usePresetActions();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [flyoutVisible, setFlyoutVisible] = useState(false);
   const [xrState, setXrState] = useState<WebXrState>({
@@ -209,7 +211,7 @@ export function ControlPanel() {
             )
               e.preventDefault();
           }}
-          className="analyser-scroll w-[380px] overflow-y-auto bg-black/85 backdrop-blur-xl border-white/10 text-white text-[12px] sm:max-w-[380px]"
+          className={`analyser-scroll w-full overflow-y-auto bg-black/85 backdrop-blur-xl border-white/10 text-white text-[12px] md:w-[380px] md:max-w-[380px] ${isMobile ? "z-[102]" : ""}`}
         >
           <SheetHeader>
             <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/70">
@@ -318,18 +320,23 @@ export function ControlPanel() {
           </div>
         </SheetContent>
 
-        {/* Vertical tab strip + slide-out panels (only while sheet is open) */}
+        {/* Tab strip + slide-out panels (only while sheet is open). Mobile gets a
+            bottom tab bar + full-screen panel since there's no room beside a
+            full-width sheet for the desktop's side-by-side layout. */}
         {open && (
           <>
-            {/* Vertical tab strip — sits just to the left of the 380px sheet */}
+            {/* Tab strip — vertical rail beside the sheet on desktop, bottom bar on mobile */}
             <div
               data-analyser-flyout
               className={
-                "fixed right-[380px] top-1/2 z-[60] -translate-y-1/2 flex flex-col gap-1 " +
+                (isMobile
+                  ? "fixed inset-x-0 bottom-0 z-[110] flex flex-row gap-1 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] "
+                  : "fixed right-[380px] top-1/2 z-[60] -translate-y-1/2 flex flex-col gap-1 ") +
                 "transition-all duration-[220ms] ease-out " +
                 (flyoutVisible
                   ? "translate-x-0 opacity-100"
-                  : "translate-x-4 opacity-0 pointer-events-none")
+                  : (isMobile ? "translate-y-4" : "translate-x-4") +
+                    " opacity-0 pointer-events-none")
               }
             >
               {(
@@ -346,7 +353,9 @@ export function ControlPanel() {
                     key={t.id}
                     onClick={() => updateUi({ activeTab: active ? "" : t.id })}
                     className={
-                      "group h-24 w-9 rounded-l-md border border-r-0 backdrop-blur-xl transition-all flex items-center justify-center " +
+                      (isMobile
+                        ? "flex-1 h-11 rounded-md border backdrop-blur-xl transition-all flex items-center justify-center "
+                        : "group h-24 w-9 rounded-l-md border border-r-0 backdrop-blur-xl transition-all flex items-center justify-center ") +
                       (active
                         ? "bg-emerald-400 text-black border-emerald-300/60 shadow-[0_0_14px_rgba(52,211,153,0.55)]"
                         : "bg-black/70 text-white/70 border-white/10 hover:text-white hover:bg-black/85")
@@ -354,8 +363,12 @@ export function ControlPanel() {
                     title={t.label}
                   >
                     <span
-                      className="font-mono text-[10px] uppercase tracking-[0.3em]"
-                      style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+                      className="font-mono text-[10px] uppercase tracking-[0.2em]"
+                      style={
+                        isMobile
+                          ? undefined
+                          : { writingMode: "vertical-rl", transform: "rotate(180deg)" }
+                      }
                     >
                       {t.label}
                     </span>
@@ -364,22 +377,25 @@ export function ControlPanel() {
               })}
             </div>
 
-            {/* Slide-out content panel — appears to the left of the tab strip */}
+            {/* Slide-out content panel — beside the tab strip on desktop, full-screen on mobile */}
             <div
               data-analyser-flyout
               ref={flyoutPanelRef}
               aria-hidden={!ui.activeTab}
               inert={!ui.activeTab}
               className={
-                "analyser-scroll fixed right-[416px] top-0 z-[55] h-screen w-[360px] overflow-y-auto " +
-                "bg-black/85 backdrop-blur-xl border-l border-r border-white/10 text-white text-[12px] " +
-                "transition-transform duration-300 ease-out " +
+                "analyser-scroll fixed overflow-y-auto bg-black/85 backdrop-blur-xl text-white text-[12px] " +
+                (isMobile
+                  ? "inset-0 z-[105] h-screen w-full border-white/10 "
+                  : "right-[416px] top-0 z-[55] h-screen w-[360px] border-l border-r border-white/10 ") +
+                "transition-all duration-300 ease-out " +
                 (ui.activeTab && flyoutVisible
-                  ? "translate-x-0 opacity-100"
-                  : "translate-x-[420px] opacity-0 pointer-events-none")
+                  ? "translate-x-0 translate-y-0 opacity-100"
+                  : (isMobile ? "translate-y-6" : "translate-x-[420px]") +
+                    " opacity-0 pointer-events-none")
               }
             >
-              <div className="p-4 pb-12 space-y-4">
+              <div className={`p-4 space-y-4 ${isMobile ? "pb-24" : "pb-12"}`}>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/70">
                     {ui.activeTab === "audio"
