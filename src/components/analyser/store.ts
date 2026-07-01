@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ViewMode } from "./visuals";
-import { VISUALS } from "./visuals";
+import { VISUALS, pickNextView } from "./visuals";
 import defaultSaves from "./default-saves.json";
 
 export type { ViewMode } from "./visuals";
@@ -1209,13 +1209,9 @@ export const settingsStore = {
     emit();
   },
   cycleRandomView: () => {
-    const current = state.view;
-    const ids = VISUALS.map((v) => v.id);
-    if (ids.length <= 1) return;
-    let next = current;
-    while (next === current) {
-      next = ids[Math.floor(Math.random() * ids.length)]!;
-    }
+    if (VISUALS.length <= 1) return;
+    const next = pickNextView(state.view, VISUALS);
+    if (next === state.view) return;
     state = normalizeSettings({ ...state, view: next, activePreset: null });
     emit();
     if (state.viewCycleRandomize) {

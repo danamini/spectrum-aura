@@ -1,5 +1,9 @@
 export const DEFAULT_VISUAL_ID = "combo" as const;
 
+/** Rough visual-intensity tier, used to keep music-reactive view cycling from
+ * feeling arbitrary — see `pickNextView()`. */
+export type ViewEnergy = "calm" | "mid" | "high";
+
 export const BUILTIN_VISUALS = [
   {
     id: "combo",
@@ -9,6 +13,7 @@ export const BUILTIN_VISUALS = [
     wireframeKey: "comboWireframe",
     sceneGroupKey: "group",
     order: 10,
+    energy: "mid",
   },
   {
     id: "classic",
@@ -18,6 +23,7 @@ export const BUILTIN_VISUALS = [
     wireframeKey: "classicWireframe",
     sceneGroupKey: "classicGroup",
     order: 20,
+    energy: "mid",
   },
   {
     id: "ripple",
@@ -27,6 +33,7 @@ export const BUILTIN_VISUALS = [
     wireframeKey: "rippleWireframe",
     sceneGroupKey: "rippleGroup",
     order: 30,
+    energy: "calm",
   },
   {
     id: "datastream",
@@ -35,6 +42,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "datastreamFullscreen",
     sceneGroupKey: "dataStreamGroup",
     order: 40,
+    energy: "high",
   },
   {
     id: "nebula",
@@ -44,6 +52,7 @@ export const BUILTIN_VISUALS = [
     wireframeKey: "nebulaWireframe",
     sceneGroupKey: "nebulaGroup",
     order: 50,
+    energy: "calm",
   },
   {
     id: "monolith",
@@ -53,6 +62,7 @@ export const BUILTIN_VISUALS = [
     wireframeKey: "monolithWireframe",
     sceneGroupKey: "monolithGroup",
     order: 60,
+    energy: "mid",
   },
   {
     id: "mandala",
@@ -61,6 +71,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "mandalaFullscreen",
     sceneGroupKey: "mandalaGroup",
     order: 70,
+    energy: "calm",
   },
   {
     id: "terrain",
@@ -70,6 +81,7 @@ export const BUILTIN_VISUALS = [
     wireframeKey: "terrainWireframe",
     sceneGroupKey: "terrainGroup",
     order: 80,
+    energy: "mid",
   },
   {
     id: "obsidian",
@@ -78,6 +90,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "obsidianFullscreen",
     sceneGroupKey: "obsidianGroup",
     order: 90,
+    energy: "high",
   },
   {
     id: "torus",
@@ -86,6 +99,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "torusFullscreen",
     sceneGroupKey: "torusGroup",
     order: 100,
+    energy: "high",
   },
   {
     id: "soundwall",
@@ -94,6 +108,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "soundwallFullscreen",
     sceneGroupKey: "soundwallGroup",
     order: 110,
+    energy: "high",
   },
   {
     id: "geometrynebula",
@@ -102,6 +117,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "geometrynebulaFullscreen",
     sceneGroupKey: "geometrynebulaGroup",
     order: 120,
+    energy: "mid",
   },
   {
     id: "reztube",
@@ -110,6 +126,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "reztubeFullscreen",
     sceneGroupKey: "reztubeGroup",
     order: 130,
+    energy: "high",
   },
   {
     id: "assetflow",
@@ -118,6 +135,7 @@ export const BUILTIN_VISUALS = [
     fullscreenKey: "assetflowFullscreen",
     sceneGroupKey: "assetflowGroup",
     order: 140,
+    energy: "mid",
   },
 ] as const;
 
@@ -133,6 +151,7 @@ export type VisualDefinition = {
   wireframeKey?: string;
   sceneGroupKey?: string;
   order: number;
+  energy: ViewEnergy;
 };
 
 type RuntimeVisualModule = {
@@ -165,6 +184,7 @@ function normalizeVisualDefinition(
     wireframeKey: visual.wireframeKey ?? fallback?.wireframeKey,
     sceneGroupKey: visual.sceneGroupKey ?? fallback?.sceneGroupKey,
     order: visual.order ?? fallback?.order ?? 1000,
+    energy: visual.energy ?? fallback?.energy ?? "mid",
   };
 }
 
@@ -192,4 +212,25 @@ export const VISUALS: VisualDefinition[] = Array.from(mergedVisuals.values()).so
 
 export function getVisualDefinition(view: string): VisualDefinition | undefined {
   return VISUALS.find((visual) => visual.id === view);
+}
+
+/**
+ * Picks the next view for music-reactive cycling: prefers a different `energy`
+ * tier than the current view so switches feel like a deliberate shift in mood
+ * rather than a coin flip that might land on a near-identical view back to
+ * back. Falls back to any other view if every remaining option shares the
+ * current tier (e.g. a custom visual set with only one energy level).
+ */
+export function pickNextView(
+  currentId: string,
+  visuals: readonly VisualDefinition[],
+  random: () => number = Math.random,
+): string {
+  if (visuals.length <= 1) return currentId;
+  const current = visuals.find((v) => v.id === currentId);
+  const currentEnergy = current?.energy ?? "mid";
+  const others = visuals.filter((v) => v.id !== currentId);
+  const differentEnergy = others.filter((v) => v.energy !== currentEnergy);
+  const pool = differentEnergy.length > 0 ? differentEnergy : others;
+  return pool[Math.floor(random() * pool.length)]!.id;
 }
