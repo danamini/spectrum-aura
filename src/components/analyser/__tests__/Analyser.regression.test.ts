@@ -11,7 +11,9 @@ describe("Analyser engine render-loop regression", () => {
     const displayedViewDecl = source.match(
       /let\s+displayedView\s*:\s*ViewMode\s*=\s*settingsRef\.current\.view\s*;/,
     );
-    const resetKeyInit = source.match(/let\s+lastResetView\s*:\s*ViewMode\s*\|\s*null\s*=\s*null\s*;/);
+    const resetKeyInit = source.match(
+      /let\s+lastResetView\s*:\s*ViewMode\s*\|\s*null\s*=\s*null\s*;/,
+    );
 
     expect(displayedViewDecl).not.toBeNull();
     expect(resetKeyInit).not.toBeNull();
