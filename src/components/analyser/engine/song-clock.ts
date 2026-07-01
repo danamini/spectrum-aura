@@ -86,6 +86,22 @@ function isValidBpm(bpm: number): boolean {
   return bpm >= AUTO_BPM_MIN && bpm <= AUTO_BPM_MAX;
 }
 
+const AUTO_BLEND_BASE_ALPHA = 0.03;
+const AUTO_BLEND_FAST_ALPHA = 0.25;
+const AUTO_BLEND_FAST_WINDOW_FRAMES = 30;
+
+/**
+ * Blend weight for the not-yet-locked auto-mode BPM estimate: converges faster
+ * right after entering auto mode (when clockBpm hasn't settled yet), easing down
+ * to the steady-state rate as the estimate stabilizes. `framesSinceAutoEntry` is
+ * 0 on the frame auto mode is entered.
+ */
+export function autoBpmBlendAlpha(framesSinceAutoEntry: number): number {
+  if (framesSinceAutoEntry >= AUTO_BLEND_FAST_WINDOW_FRAMES) return AUTO_BLEND_BASE_ALPHA;
+  const t = Math.max(0, framesSinceAutoEntry) / AUTO_BLEND_FAST_WINDOW_FRAMES;
+  return AUTO_BLEND_FAST_ALPHA + (AUTO_BLEND_BASE_ALPHA - AUTO_BLEND_FAST_ALPHA) * t;
+}
+
 function timingFromBeatFloat(
   beatFloat: number,
   source: ClockSource,
@@ -143,6 +159,7 @@ export class SongClock {
   private tapTimes: number[] = [];
   private lastTapMs = 0;
   private autoConfidenceStreak = 0;
+  private framesSinceAutoEntry = 0;
   private manualTapComplete = false;
   private downbeatLatch = false;
   private audioAlignStreak = 0;
@@ -160,6 +177,7 @@ export class SongClock {
     this.tapTimes = [];
     this.lastTapMs = 0;
     this.autoConfidenceStreak = 0;
+    this.framesSinceAutoEntry = 0;
     this.manualTapComplete = false;
     this.downbeatLatch = false;
     this.audioAlignStreak = 0;
@@ -280,10 +298,13 @@ export class SongClock {
           this.epochBeatNumber = 1;
           this.epochSet = true;
           this.lastTotalBeats = 0;
+          this.framesSinceAutoEntry = 0;
         }
       } else if (this.source === "auto") {
         if (!bpmLocked) {
-          this.clockBpm = this.clockBpm * 0.97 + estimatedBpm * 0.03;
+          const alpha = autoBpmBlendAlpha(this.framesSinceAutoEntry);
+          this.clockBpm = this.clockBpm * (1 - alpha) + estimatedBpm * alpha;
+          this.framesSinceAutoEntry += 1;
         } else {
           this.clockBpm = estimatedBpm;
         }

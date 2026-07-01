@@ -1,9 +1,56 @@
 import { describe, expect, it } from "vitest";
 
-import { SongClock, BEATS_PER_PHRASE, TAP_TIMEOUT_MS, MANUAL_RELEASE_STREAK } from "../song-clock";
+import {
+  SongClock,
+  BEATS_PER_PHRASE,
+  TAP_TIMEOUT_MS,
+  MANUAL_RELEASE_STREAK,
+  autoBpmBlendAlpha,
+} from "../song-clock";
 import { BEAT_MS, startAuto, tickAt } from "./helpers/song-clock.harness";
 
+describe("autoBpmBlendAlpha", () => {
+  it("starts fast right after entering auto mode", () => {
+    expect(autoBpmBlendAlpha(0)).toBeGreaterThan(0.2);
+  });
+
+  it("eases down to the steady-state rate as auto mode continues", () => {
+    expect(autoBpmBlendAlpha(30)).toBeCloseTo(0.03);
+    expect(autoBpmBlendAlpha(1000)).toBeCloseTo(0.03);
+  });
+
+  it("decreases monotonically between the fast start and steady state", () => {
+    let prev = autoBpmBlendAlpha(0);
+    for (let f = 1; f <= 30; f++) {
+      const next = autoBpmBlendAlpha(f);
+      expect(next).toBeLessThanOrEqual(prev);
+      prev = next;
+    }
+  });
+});
+
 describe("SongClock", () => {
+  it("converges toward a confident auto-mode BPM faster in the frames right after entering auto than steady-state 3%/frame would", () => {
+    const clock = new SongClock();
+    // Enter auto mode locked onto 120 BPM, then feed a steadily different 140 BPM
+    // estimate for a handful of frames — the blended clockBpm should move further
+    // toward 140 than a flat 3%/frame blend would in the same number of frames.
+    startAuto(clock, 400);
+    let lastBpm = 120;
+    for (let i = 0; i < 10; i++) {
+      const frame = tickAt(clock, 400 + BEAT_MS * (i + 1), {
+        estimatedBpm: 140,
+        bpmConfidence: 0.7,
+        bpmLocked: false,
+      });
+      lastBpm = frame.clockBpm;
+    }
+    const flatBlendBpm = Array.from({ length: 10 }).reduce(
+      (bpm: number) => bpm * 0.97 + 140 * 0.03,
+      120,
+    );
+    expect(lastBpm).toBeGreaterThan(flatBlendBpm);
+  });
   it("starts idle until taps or auto confidence", () => {
     const clock = new SongClock();
     const idle = tickAt(clock, 0, { bpmConfidence: 0.1, bpmLocked: false });

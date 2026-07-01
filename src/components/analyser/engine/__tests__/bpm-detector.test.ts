@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BPMDetector } from "../bpm-detector";
+import { BPMDetector, isOctaveMismatch } from "../bpm-detector";
 
 function feedPulseTrain(detector: BPMDetector, intervalMs: number, totalMs: number) {
   for (let t = 0; t <= totalMs; t += 50) {
@@ -10,6 +10,28 @@ function feedPulseTrain(detector: BPMDetector, intervalMs: number, totalMs: numb
     detector.tick(t);
   }
 }
+
+describe("isOctaveMismatch", () => {
+  it("recognizes a clean 2x/0.5x match", () => {
+    expect(isOctaveMismatch(80, 160)).toBe(true);
+    expect(isOctaveMismatch(160, 80)).toBe(true);
+  });
+
+  it("rejects a generic tempo difference", () => {
+    expect(isOctaveMismatch(120, 140)).toBe(false);
+    expect(isOctaveMismatch(120, 90)).toBe(false);
+  });
+
+  it("tolerates small measurement jitter around the exact multiple", () => {
+    expect(isOctaveMismatch(100, 198)).toBe(true);
+    expect(isOctaveMismatch(100, 215)).toBe(false);
+  });
+
+  it("treats non-positive input as no match", () => {
+    expect(isOctaveMismatch(0, 120)).toBe(false);
+    expect(isOctaveMismatch(120, 0)).toBe(false);
+  });
+});
 
 describe("BPMDetector", () => {
   it("stabilizes near a 120 BPM pulse train", () => {
@@ -156,5 +178,70 @@ describe("BPMDetector", () => {
     expect(detector.isLocked()).toBe(true);
     expect(Math.abs(detector.getBPM() - tappedBpm)).toBeLessThan(2);
     expect(detector.getConfidence()).toBeGreaterThan(0.85);
+  });
+
+  it("decays tap-locked confidence during real silence instead of staying pinned", () => {
+    const detector = new BPMDetector();
+    const interval = 500;
+    for (let i = 0; i < 5; i++) {
+      detector.hintBeat(i * interval, i === 0);
+    }
+    expect(detector.getConfidence()).toBeGreaterThanOrEqual(0.88);
+
+    // Feed near-silent bands (below the activity threshold) well past the decay
+    // grace period, advancing time without ever refreshing "last active" state.
+    let time = 2000;
+    for (let i = 0; i < 80; i++) {
+      time += 50;
+      detector.feedBands({ bass: 0.01, mid: 0.005, high: 0.002 }, time);
+      detector.tick(time);
+    }
+
+    expect(detector.getConfidence()).toBeLessThan(0.5);
+    // Silence must not change the lock itself, only the confidence readout.
+    expect(detector.isTapLocked()).toBe(true);
+    expect(detector.isLocked()).toBe(true);
+  });
+
+  it("corrects an auto-locked half-tempo octave error once double-speed audio persists", () => {
+    const detector = new BPMDetector();
+    // Lock onto a slow ~85 BPM pulse train (auto-lock, not tap-lock). Deliberately
+    // inside (80, 90) so neither this nor its double (~170) hits the existing
+    // extreme clampBpm correction (<80 doubles, >180 halves) — isolates the new
+    // mid-range octave-correction path from the pre-existing extreme one.
+    const slowInterval = 706; // ~85 BPM
+    feedPulseTrain(detector, slowInterval, 8000);
+    expect(detector.isLocked()).toBe(true);
+    expect(detector.isTapLocked()).toBe(false);
+    const halfBpm = detector.getBPM();
+    expect(halfBpm).toBeGreaterThan(80);
+    expect(halfBpm).toBeLessThan(90);
+
+    // Now feed genuinely double-speed audio for several seconds.
+    const fastInterval = slowInterval / 2;
+    let time = 8000;
+    let bpm = halfBpm;
+    for (let i = 0; i < 300; i++) {
+      time += 50;
+      const phase = (time % fastInterval) / fastInterval;
+      const energy =
+        phase < 0.2 ? 0.25 + phase * 3.2 : phase < 0.4 ? 0.89 - (phase - 0.2) * 3 : 0.12;
+      detector.feed(energy, time);
+      bpm = detector.tick(time).bpm;
+    }
+
+    expect(Math.abs(bpm - halfBpm * 2)).toBeLessThan(8);
+  });
+
+  it("does not decay confidence while real signal keeps arriving", () => {
+    const detector = new BPMDetector();
+    feedPulseTrain(detector, 500, 10000);
+    const confidenceRightAfterFeed = detector.getConfidence();
+    expect(confidenceRightAfterFeed).toBeGreaterThan(0.5);
+
+    // A few more ticks at the same instant as the last feed — no silence has
+    // elapsed, so confidence should be unchanged (within analysis noise).
+    const { confidence } = detector.tick(10000);
+    expect(confidence).toBeCloseTo(confidenceRightAfterFeed, 1);
   });
 });

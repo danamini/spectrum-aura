@@ -30,6 +30,37 @@ function isValidBpm(bpm: number): boolean {
   return bpm >= 65 && bpm <= 195;
 }
 
+/** Combined band energy below this reads as "no signal" for confidence decay. */
+const SILENCE_ENERGY_THRESHOLD = 0.04;
+/** How long silence must persist before confidence starts decaying. */
+const SILENCE_DECAY_AFTER_MS = 1200;
+/** Per-analysis-pass decay factor once silence has persisted — mirrors the
+ * proven EMA-decay shape in latency-metrics.ts's LATENCY_DECAY. */
+const SILENCE_CONFIDENCE_DECAY = 0.85;
+
+/** Relative tolerance for recognizing a candidate BPM as ~2x or ~0.5x the locked one. */
+const OCTAVE_MATCH_TOLERANCE = 0.04;
+/** Consecutive analysis passes a clean octave mismatch must persist before correcting the
+ * lock in place — a distinctive 2x/0.5x match is a much stronger signal than generic
+ * drift, so this is faster than the generic 12-pass drift-reject/unlock path. */
+const OCTAVE_CORRECTION_STREAK = 6;
+
+/**
+ * True if `candidate` sits close to exactly 2x or 0.5x of `locked` — the classic
+ * octave-detection error (e.g. locking onto every other beat), as opposed to a
+ * generically different tempo estimate.
+ */
+export function isOctaveMismatch(
+  locked: number,
+  candidate: number,
+  tolerance = OCTAVE_MATCH_TOLERANCE,
+): boolean {
+  if (locked <= 0 || candidate <= 0) return false;
+  const doubleDiff = Math.abs(candidate - locked * 2) / (locked * 2);
+  const halfDiff = Math.abs(candidate - locked * 0.5) / (locked * 0.5);
+  return doubleDiff <= tolerance || halfDiff <= tolerance;
+}
+
 export class BPMDetector {
   private energyHistory: Array<{ energy: number; time: number }> = [];
   private windowSizeMs = 8000;
@@ -53,6 +84,7 @@ export class BPMDetector {
   private lastBass = 0;
   private lastMid = 0;
   private lastHigh = 0;
+  private lastActiveAt = 0;
 
   private bpmLocked = false;
   private tapLocked = false;
@@ -61,6 +93,7 @@ export class BPMDetector {
   private highConfidenceStreak = 0;
   private tapTimes: number[] = [];
   private driftRejectStreak = 0;
+  private octaveMismatchStreak = 0;
 
   private static clampBpm(bpm: number): number {
     let v = bpm;
@@ -88,6 +121,10 @@ export class BPMDetector {
     const onset =
       Math.max(0, bassDelta) * 1 + Math.max(0, midDelta) * 0.55 + Math.max(0, highDelta) * 0.28;
     const energy = bands.bass * 0.68 + bands.mid * 0.24 + bands.high * 0.08 + onset * 0.35;
+
+    if (bands.bass + bands.mid + bands.high > SILENCE_ENERGY_THRESHOLD) {
+      this.lastActiveAt = time;
+    }
 
     this.energyHistory.push({ energy, time });
 
@@ -163,6 +200,7 @@ export class BPMDetector {
           this.cachedConfidence = Math.max(this.cachedConfidence, 0.88);
           this.highConfidenceStreak = 0;
           this.driftRejectStreak = 0;
+          this.octaveMismatchStreak = 0;
           return;
         }
       }
@@ -198,6 +236,7 @@ export class BPMDetector {
         this.cachedConfidence = Math.max(this.cachedConfidence, 0.88);
         this.highConfidenceStreak = 0;
         this.driftRejectStreak = 0;
+        this.octaveMismatchStreak = 0;
       }
     }
   }
@@ -215,6 +254,7 @@ export class BPMDetector {
     this.lastBass = 0;
     this.lastMid = 0;
     this.lastHigh = 0;
+    this.lastActiveAt = 0;
     this.bpmLocked = false;
     this.tapLocked = false;
     this.lockedBpm = 0;
@@ -222,6 +262,7 @@ export class BPMDetector {
     this.highConfidenceStreak = 0;
     this.tapTimes = [];
     this.driftRejectStreak = 0;
+    this.octaveMismatchStreak = 0;
   }
 
   private analyzeIfNeeded(time: number, force = false): void {
@@ -237,6 +278,17 @@ export class BPMDetector {
     this.cachedConfidence = this.computeConfidenceFromPeaks(this.cachedPeaks, autoStrength);
     if (this.tapLocked) {
       this.cachedConfidence = Math.max(this.cachedConfidence, 0.88);
+    }
+    // Decay confidence in proportion to how long real silence has persisted, so a
+    // tap-locked confidence floor (or a stale peak-based estimate) doesn't read as
+    // "still locked" indefinitely through a silent passage or the gap between songs.
+    // Scaled by elapsed silence rather than a flat one-shot multiply, since this
+    // analysis pass recomputes cachedConfidence fresh every time — a fixed factor
+    // would apply the same single haircut regardless of how long it's been quiet.
+    const silentMs = time - this.lastActiveAt - SILENCE_DECAY_AFTER_MS;
+    if (silentMs > 0) {
+      const decaySteps = silentMs / this.analysisIntervalMs;
+      this.cachedConfidence *= Math.pow(SILENCE_CONFIDENCE_DECAY, decaySteps);
     }
     this.lastBPM = this.applyBpmLock(candidateBpm);
     if (this.cachedPeaks.length > 0) {
@@ -277,10 +329,27 @@ export class BPMDetector {
     const diff = Math.abs(candidateBpm - locked);
     if (diff <= 2.5) {
       this.driftRejectStreak = 0;
+      this.octaveMismatchStreak = 0;
       this.lockedBpm = locked * 0.97 + candidateBpm * 0.03;
       this.lastBPM = this.lockedBpm;
       return this.lockedBpm;
     }
+
+    // A clean 2x/0.5x match (e.g. locked onto every other beat) is a much more
+    // distinctive signal than generic drift, so correct it faster than waiting on
+    // the generic drift-reject/unlock path below.
+    if (isOctaveMismatch(locked, candidateBpm)) {
+      this.octaveMismatchStreak += 1;
+      if (this.octaveMismatchStreak >= OCTAVE_CORRECTION_STREAK) {
+        this.lockedBpm = candidateBpm;
+        this.lastBPM = candidateBpm;
+        this.octaveMismatchStreak = 0;
+        this.driftRejectStreak = 0;
+        return this.lockedBpm;
+      }
+      return locked;
+    }
+    this.octaveMismatchStreak = 0;
 
     this.driftRejectStreak += 1;
     if (this.driftRejectStreak >= 12 && diff > 6) {

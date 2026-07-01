@@ -72,6 +72,9 @@ export class AudioEngine {
   private beatMatcher = new BeatMatcher();
   private bpmDetector = new BPMDetector();
   private bandBounds = { n: 0, bassEnd: 0, midEnd: 0, bassDiv: 1, midDiv: 1, highDiv: 1 };
+  /** Previous frame's BPM tick result, fed into this frame's beat-matcher refractory gap. */
+  private lastTickBpm = 0;
+  private lastTickBpmConfident = false;
   /** Reused every `read()` call so the hot path doesn't allocate a fresh bands/timing object every frame. */
   private outTiming: AudioTiming = { ...EMPTY_TIMING };
   private outBands: AudioBands = { ...EMPTY_BANDS, timing: this.outTiming };
@@ -201,7 +204,16 @@ export class AudioEngine {
     high /= highDiv;
     const centroid = total > 0 ? weighted / total / n : 0;
 
-    const match = this.beatMatcher.detect(bass, mid, high, centroid, beatThreshold, fftReadAt);
+    const match = this.beatMatcher.detect(
+      bass,
+      mid,
+      high,
+      centroid,
+      beatThreshold,
+      fftReadAt,
+      this.lastTickBpm,
+      this.lastTickBpmConfident,
+    );
 
     this.bpmDetector.feedBands(
       {
@@ -219,6 +231,8 @@ export class AudioEngine {
       beatPhase,
       bpmLocked,
     } = this.bpmDetector.tick(clockTime ?? fftReadAt);
+    this.lastTickBpm = bpm;
+    this.lastTickBpmConfident = bpm > 0 && bpmConfidence > 0.45;
 
     const sr = this.ctx?.sampleRate ?? 48000;
     const fftSize = this.analyser.fftSize;
