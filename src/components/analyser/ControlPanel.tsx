@@ -301,6 +301,25 @@ export function ControlPanel() {
                   Applies randomize when the view cycle picks a new visual.
                 </p>
               </ToggleRow>
+              <ToggleRow
+                label="Dynamic mode"
+                enabled={s.evolveEnabled}
+                onToggle={(v) => set({ evolveEnabled: v })}
+              >
+                <S
+                  label="Drift amount"
+                  value={s.evolveAmount}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(v) => set({ evolveAmount: v })}
+                />
+                <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                  Slowly drifts a few impactful settings for the current view over musical phrases,
+                  as a bounded offset around your own values — turn off to return to exactly what
+                  you set. Unlike view cycle, the view itself never changes.
+                </p>
+              </ToggleRow>
             </Row>
 
             {hasViewSettings && (

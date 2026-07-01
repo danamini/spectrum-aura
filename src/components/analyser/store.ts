@@ -251,6 +251,13 @@ export type Settings = {
   /** When switching views via cycle, also randomize post FX (and view settings if enabled). */
   viewCycleRandomize: boolean;
 
+  /** "Dynamic Mode" — a curated set of impactful per-view settings slowly drift
+   * over musical time (phrases), as a bounded offset around the value below, not
+   * a replacement of it. See engine/evolution.ts. */
+  evolveEnabled: boolean;
+  /** Drift intensity, 0 (none) to 1 (full — up to ~40% of the base value). */
+  evolveAmount: number;
+
   // experimental features
   showBPM: boolean; // show BPM & bar grid in Audio panel
   showLatency: boolean; // show audio→UI latency HUD
@@ -472,6 +479,9 @@ export const DEFAULT_SETTINGS: Settings = {
 
   viewCycleMode: false,
   viewCycleRandomize: true,
+
+  evolveEnabled: false,
+  evolveAmount: 0.6,
 
   showBPM: true,
   showLatency: true,
@@ -844,6 +854,7 @@ function normalizePostFxRanges(settings: Settings): Settings {
     assetflowMovement: Math.max(0.35, Math.min(1.8, settings.assetflowMovement)),
     assetflowBackgroundDrift: Math.max(0, Math.min(3, settings.assetflowBackgroundDrift)),
     glitchIntensity: Math.max(0, Math.min(1, settings.glitchIntensity)),
+    evolveAmount: Math.max(0, Math.min(1, settings.evolveAmount)),
   };
 }
 

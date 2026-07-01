@@ -7,6 +7,7 @@ import { ViewCycleController } from "../engine/view-cycle-controller";
 import { SongClock } from "../engine/song-clock";
 import { dispatchLiveTempo, setLiveTempoFrame } from "../engine/live-tempo";
 import { createSceneUpdateOpts, syncSceneUpdateOpts } from "../engine/scene-update-opts";
+import { ViewEvolutionEngine } from "../engine/evolution";
 import { measureFrameLatency, smoothLatency } from "../engine/latency-metrics";
 import {
   WEBXR_BACKGROUND_EVENT,
@@ -86,6 +87,7 @@ export function useAnalyserEngine(params: {
     const audio = new AudioEngine();
     audioRef.current = audio;
     const viewCycleController = new ViewCycleController();
+    const viewEvolutionEngine = new ViewEvolutionEngine();
 
     let raf = 0;
     let last = performance.now();
@@ -423,6 +425,11 @@ export function useAnalyserEngine(params: {
         scene.setPalette(PALETTES[s.paletteIndex]?.colors ?? PALETTES[0].colors);
       }
       syncSceneUpdateOpts(sceneOpts, s, displayedView, xrRuntime.active, xrBackgroundHidden);
+      if (s.evolveEnabled) {
+        viewEvolutionEngine.tick(sceneOpts, displayedView, barTimingFrame, dt, s.evolveAmount);
+      } else {
+        viewEvolutionEngine.reset();
+      }
       scene.update(dt, t, bandsForScene, sceneOpts);
 
       renderer.info.reset();

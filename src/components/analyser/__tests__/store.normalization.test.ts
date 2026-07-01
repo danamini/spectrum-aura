@@ -106,6 +106,17 @@ describe("settingsStore normalization", () => {
     expect(DEFAULT_SETTINGS.glitchIntensity).toBe(1);
   });
 
+  it("defaults Dynamic Mode to off and clamps evolveAmount to 0-1", async () => {
+    const { DEFAULT_SETTINGS, settingsStore } = await import("../store");
+    expect(DEFAULT_SETTINGS.evolveEnabled).toBe(false);
+
+    settingsStore.set({ evolveAmount: 5 });
+    expect(settingsStore.get().evolveAmount).toBe(1);
+
+    settingsStore.set({ evolveAmount: -2 });
+    expect(settingsStore.get().evolveAmount).toBe(0);
+  });
+
   it("caps bloom strength unless extreme mode is enabled", async () => {
     const { settingsStore } = await import("../store");
 
