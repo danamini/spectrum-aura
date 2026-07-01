@@ -121,6 +121,41 @@ describe("Shortcuts", () => {
     expect(secondCall).toHaveProperty("view");
   });
 
+  it("navigates forward with ArrowRight and backward with ArrowLeft", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(mocks.settingsStore.set).toHaveBeenCalledTimes(1);
+    const firstCall = mocks.settingsStore.set.mock.calls[0][0] as Record<string, unknown>;
+    expect(firstCall).toHaveProperty("view");
+
+    vi.clearAllMocks();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    expect(mocks.settingsStore.set).toHaveBeenCalledTimes(1);
+    const secondCall = mocks.settingsStore.set.mock.calls[0][0] as Record<string, unknown>;
+    expect(secondCall).toHaveProperty("view");
+  });
+
+  it("shows arrow keys as the primary Prev/Next Visual legend", () => {
+    const prevButton = container.querySelector("button[aria-label='Prev Visual']");
+    const nextButton = container.querySelector("button[aria-label='Next Visual']");
+    expect(prevButton?.querySelector("kbd")?.textContent).toBe("←");
+    expect(nextButton?.querySelector("kbd")?.textContent).toBe("→");
+  });
+
+  it("cycles saves with Shift+ArrowRight and Shift+ArrowLeft as aliases for ] and [", () => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true }),
+    );
+    expect(mocks.settingsStore.getSlots).toHaveBeenCalled();
+
+    vi.clearAllMocks();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowLeft", shiftKey: true, bubbles: true }),
+    );
+    expect(mocks.settingsStore.getSlots).toHaveBeenCalled();
+  });
+
   it("triggers randomize with R key", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true }));
     expect(mocks.settingsStore.randomize).toHaveBeenCalledTimes(1);

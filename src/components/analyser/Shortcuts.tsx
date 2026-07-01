@@ -294,12 +294,20 @@ export function Shortcuts() {
         actionsRef.current.doRandomize();
         e.preventDefault();
         e.stopPropagation();
-      } else if (k === "b") {
+      } else if (k === "b" || (e.key === "ArrowLeft" && !e.shiftKey)) {
         actionsRef.current.doToggleView(-1);
         e.preventDefault();
         e.stopPropagation();
-      } else if (k === "v") {
+      } else if (k === "v" || (e.key === "ArrowRight" && !e.shiftKey)) {
         actionsRef.current.doToggleView(1);
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "ArrowLeft" && e.shiftKey) {
+        actionsRef.current.doCycleSave(-1);
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "ArrowRight" && e.shiftKey) {
+        actionsRef.current.doCycleSave(1);
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "a") {
@@ -361,24 +369,28 @@ export function Shortcuts() {
   }, []);
 
   const prevVisualHint: Hint = {
-    key: "B",
+    key: "←",
     label: "Prev Visual",
     icon: <SkipBack />,
     tooltip: (
-      <TooltipBlock title="Prev Visual" hint="B" detail="Steps backward through the visual list." />
+      <TooltipBlock
+        title="Prev Visual"
+        hint="← or B"
+        detail="Steps backward through the visual list."
+      />
     ),
     onClick: () => {
       doToggleView(-1);
     },
   };
   const nextVisualHint: Hint = {
-    key: "V",
+    key: "→",
     label: "Next Visual",
     icon: <SkipForward />,
     tooltip: (
       <TooltipBlock
         title="Next Visual"
-        hint="V"
+        hint="→ or V"
         detail="Steps forward through the visual list and keeps the current mode in motion."
       />
     ),
@@ -577,7 +589,7 @@ export function Shortcuts() {
     tooltip: (
       <TooltipBlock
         title="Prev Save"
-        hint="["
+        hint="[ or ⇧←"
         detail="Loads the previous save in your current list."
       />
     ),
@@ -590,7 +602,11 @@ export function Shortcuts() {
     label: "Next Save",
     icon: <SkipForward />,
     tooltip: (
-      <TooltipBlock title="Next Save" hint="]" detail="Loads the next save in your current list." />
+      <TooltipBlock
+        title="Next Save"
+        hint="] or ⇧→"
+        detail="Loads the next save in your current list."
+      />
     ),
     onClick: () => {
       doCycleSave(1);

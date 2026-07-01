@@ -107,17 +107,18 @@ Vitest config: `include: ["src/**/__tests__/**/*.{test,spec}.{ts,tsx}"]`
 
 ## Shortcuts (user-facing)
 
-| Key         | Action                           |
-| ----------- | -------------------------------- |
-| `T`         | Beat tap (manual sync)           |
-| `⇧T`        | Downbeat / phrase reset          |
-| `M`         | Toggle BPM & bar grid HUD        |
-| `L`         | Latency HUD                      |
-| `G`         | Hide/show shortcut bar           |
-| `C`         | Toggle music-reactive view cycle |
-| `N`         | Stats panel                      |
-| `R` `B` `V` | Randomize / prev / next visual   |
-| `S`         | Settings panel                   |
+| Key                | Action                                        |
+| ------------------ | --------------------------------------------- |
+| `T`                | Beat tap (manual sync)                        |
+| `⇧T`               | Downbeat / phrase reset                       |
+| `M`                | Toggle BPM & bar grid HUD                     |
+| `L`                | Latency HUD                                   |
+| `G`                | Hide/show shortcut bar                        |
+| `C`                | Toggle music-reactive view cycle               |
+| `N`                | Stats panel                                   |
+| `R` `←/B` `→/V`    | Randomize / prev / next visual (arrows primary, letters kept as aliases) |
+| `[` `⇧←` / `]` `⇧→` | Prev / next save (bracket primary, shift-arrow alias) |
+| `S`                | Settings panel                                |
 
 Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcuts.tsx` utility cluster.
 
