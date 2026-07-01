@@ -183,6 +183,8 @@ export type Settings = {
   dofMaxBlur: number;
   glitch: boolean;
   glitchWild: boolean;
+  /** Duty-cycle fraction (0-1) of time the glitch pass actually renders while on. */
+  glitchIntensity: number;
   lensFlare: boolean;
   lensFlareAmount: number;
   godRays: boolean;
@@ -412,6 +414,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dofMaxBlur: 0.01,
   glitch: false,
   glitchWild: false,
+  glitchIntensity: 1,
   lensFlare: false,
   lensFlareAmount: 0.6,
   godRays: true,
@@ -840,6 +843,7 @@ function normalizePostFxRanges(settings: Settings): Settings {
     assetflowSpin: Math.max(0, Math.min(3, settings.assetflowSpin)),
     assetflowMovement: Math.max(0.35, Math.min(1.8, settings.assetflowMovement)),
     assetflowBackgroundDrift: Math.max(0, Math.min(3, settings.assetflowBackgroundDrift)),
+    glitchIntensity: Math.max(0, Math.min(1, settings.glitchIntensity)),
   };
 }
 
@@ -1015,6 +1019,7 @@ export const settingsStore = {
       dofMaxBlur: r(0.002, 0.02),
       glitch: b(0.2),
       glitchWild: b(0.2),
+      glitchIntensity: r(0.25, 1),
       lensFlare: b(0.45),
       lensFlareAmount: r(0.2, 1.1),
       godRays: b(0.7),

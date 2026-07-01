@@ -27,6 +27,29 @@ import {
 import { BLOOM_STRENGTH_MAX_NORMAL, type Settings } from "../store";
 import { MotionTrailPass } from "./MotionTrailPass";
 
+/** Glitch duty-cycle window length in frames (~1s at 60fps) — see `glitchIntensity`. */
+const GLITCH_DUTY_WINDOW_FRAMES = 60;
+
+/**
+ * AssetOverlay texture-swap timing. Two independent estimates of "how long to
+ * hold the current texture" are blended: one derived from the beat period
+ * (tighter as BPM confidence rises), one from raw audio energy (shorter as
+ * the track gets louder/more active). Both are clamped to the same overall
+ * bounds so neither can produce an implausibly short or long hold.
+ */
+const ASSET_OVERLAY_SWITCH_INTERVAL_MAX_S = 3.2;
+/** `beatSyncedInterval = beatPeriod * (BASE - confidence * CONFIDENCE_SCALE)`. */
+const ASSET_OVERLAY_BEAT_SYNC_MIN_S = 0.45;
+const ASSET_OVERLAY_BEAT_SYNC_BASE = 2.2;
+const ASSET_OVERLAY_BEAT_SYNC_CONFIDENCE_SCALE = 1.2;
+/** `energyInterval = BASE - activity * ACTIVITY_SCALE - pulse * PULSE_SCALE`. */
+const ASSET_OVERLAY_ENERGY_INTERVAL_MIN_S = 0.35;
+const ASSET_OVERLAY_ENERGY_INTERVAL_BASE = 2.6;
+const ASSET_OVERLAY_ENERGY_ACTIVITY_SCALE = 1.45;
+const ASSET_OVERLAY_ENERGY_PULSE_SCALE = 0.75;
+/** How strongly the beat-synced estimate pulls the blend once BPM is confident. */
+const ASSET_OVERLAY_BEAT_SYNC_BLEND_WEIGHT = 0.85;
+
 export type PostFxReactiveState = {
   bass: number;
   mid: number;
@@ -37,7 +60,30 @@ export type PostFxReactiveState = {
   bpmConfidence: number;
   pulse: number;
   performance: boolean;
+  /** Auto-detected quality tier (0 = full, 1 = moderate pressure, 2 = severe) — see `computeQualityTier`. */
+  qualityTier: 0 | 1 | 2;
 };
+
+const TIER_DOWNGRADE_TO_2_FPS = 30;
+const TIER_DOWNGRADE_TO_1_FPS = 45;
+const TIER_UPGRADE_TO_1_FPS = 52;
+const TIER_UPGRADE_TO_0_FPS = 58;
+
+/**
+ * Hysteresis-based performance tier from smoothed FPS: downgrades immediately
+ * under pressure (a stutter should get relief right away), but only upgrades
+ * once FPS has recovered past a higher margin than the downgrade threshold —
+ * without that gap, FPS hovering near a single cutoff would flap the tier
+ * every frame. Never skips a tier when recovering (2 -> 1 -> 0), so quality
+ * comes back gradually rather than snapping straight to full.
+ */
+export function computeQualityTier(smoothedFps: number, currentTier: 0 | 1 | 2): 0 | 1 | 2 {
+  if (smoothedFps < TIER_DOWNGRADE_TO_2_FPS) return 2;
+  if (smoothedFps < TIER_DOWNGRADE_TO_1_FPS) return currentTier >= 1 ? currentTier : 1;
+  if (currentTier === 2) return smoothedFps >= TIER_UPGRADE_TO_1_FPS ? 1 : 2;
+  if (currentTier === 1) return smoothedFps >= TIER_UPGRADE_TO_0_FPS ? 0 : 1;
+  return 0;
+}
 
 export class Composer {
   renderer: THREE.WebGLRenderer;
@@ -76,6 +122,7 @@ export class Composer {
   private assetOverlaySwitchEvery = 1.35;
   private assetOverlayBeatHoldoff = 0;
   private retroFxTime = 0;
+  private glitchDutyFrame = 0;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -337,15 +384,19 @@ export class Composer {
     });
 
     this.bloom.enabled = s.bloom;
-    const bloomStrength = s.bloomExtreme
+    const bloomBase = s.bloomExtreme
       ? s.bloomStrength
       : Math.min(BLOOM_STRENGTH_MAX_NORMAL, s.bloomStrength);
-    this.bloom.strength = bloomStrength;
+    // Breathe with bass, but never past the same ceiling the non-extreme cap
+    // already enforced — re-clamped after the reactive multiply, not skipped.
+    const bloomCeiling = s.bloomExtreme ? Infinity : BLOOM_STRENGTH_MAX_NORMAL;
+    this.bloom.strength = Math.min(bloomCeiling, bloomBase * (0.85 + bass * 0.3));
     this.bloom.radius = s.bloomRadius;
     this.bloom.threshold = s.bloomThreshold;
 
     this.chroma.enabled = s.chroma;
-    this.chroma.uniforms.amount.value = s.chromaAmount;
+    // Subtle shimmer on high-band transients (hi-hats, cymbals).
+    this.chroma.uniforms.amount.value = Math.min(0.03, s.chromaAmount * (0.8 + high * 1.4));
 
     this.film.enabled = s.grain;
     // FilmPass exposes uniforms on its material; intensity = nIntensity uniform
@@ -362,7 +413,15 @@ export class Composer {
     if (bu.aperture) bu.aperture.value = s.dofAperture;
     if (bu.maxblur) bu.maxblur.value = s.dofMaxBlur;
 
-    this.glitch.enabled = s.glitch;
+    // Duty-cycle gate: GlitchPass itself has no continuous intensity knob (its
+    // `amount` uniform is overwritten every frame by its own internal RNG), so
+    // approximate intensity by only letting the pass actually render for a
+    // fraction of each ~1s window, in one contiguous chunk rather than a
+    // per-frame coin flip (which would just look like flicker).
+    this.glitchDutyFrame = (this.glitchDutyFrame + 1) % GLITCH_DUTY_WINDOW_FRAMES;
+    const glitchIntensity = THREE.MathUtils.clamp(s.glitchIntensity, 0, 1);
+    const glitchDutyOn = this.glitchDutyFrame < glitchIntensity * GLITCH_DUTY_WINDOW_FRAMES;
+    this.glitch.enabled = s.glitch && glitchDutyOn;
     this.glitch.goWild = s.glitchWild;
 
     this.godRays.enabled = s.godRays;
@@ -385,13 +444,25 @@ export class Composer {
       const bpmActive = bpm > 40 && bpmConfidence > 0.2;
       const beatInterval = bpmActive ? 60 / bpm : 1;
       const beatSyncedInterval = THREE.MathUtils.clamp(
-        beatInterval * (2.2 - THREE.MathUtils.clamp(bpmConfidence, 0, 1) * 1.2),
-        0.45,
-        3.2,
+        beatInterval *
+          (ASSET_OVERLAY_BEAT_SYNC_BASE -
+            THREE.MathUtils.clamp(bpmConfidence, 0, 1) * ASSET_OVERLAY_BEAT_SYNC_CONFIDENCE_SCALE),
+        ASSET_OVERLAY_BEAT_SYNC_MIN_S,
+        ASSET_OVERLAY_SWITCH_INTERVAL_MAX_S,
       );
-      const energyInterval = THREE.MathUtils.clamp(2.6 - activity * 1.45 - pulse * 0.75, 0.35, 3.2);
+      const energyInterval = THREE.MathUtils.clamp(
+        ASSET_OVERLAY_ENERGY_INTERVAL_BASE -
+          activity * ASSET_OVERLAY_ENERGY_ACTIVITY_SCALE -
+          pulse * ASSET_OVERLAY_ENERGY_PULSE_SCALE,
+        ASSET_OVERLAY_ENERGY_INTERVAL_MIN_S,
+        ASSET_OVERLAY_SWITCH_INTERVAL_MAX_S,
+      );
       this.assetOverlaySwitchEvery = bpmActive
-        ? THREE.MathUtils.lerp(energyInterval, beatSyncedInterval, bpmConfidence * 0.85)
+        ? THREE.MathUtils.lerp(
+            energyInterval,
+            beatSyncedInterval,
+            bpmConfidence * ASSET_OVERLAY_BEAT_SYNC_BLEND_WEIGHT,
+          )
         : energyInterval;
       this.assetOverlaySwitchElapsed += frameStep * (0.75 + activity * 1.4);
 
@@ -509,11 +580,20 @@ export class Composer {
       0.01,
       0.95,
     );
-    if (reactive.performance) {
+    // Manual "Performance Mode" / XR always forces the severe tier immediately,
+    // regardless of measured FPS. Auto-detected pressure (qualityTier) escalates
+    // gradually: tier 1 drops only the priciest/least-noticed passes (SSAO, DoF)
+    // before tier 2's full cut — SSAOPass's kernel size is baked into its shader
+    // at construction time, so there's no cheap continuous "lower quality" knob
+    // for it; disabling it first is the graduated step actually available.
+    const tier = reactive.performance ? 2 : reactive.qualityTier;
+    if (tier >= 1) {
       this.ssao.enabled = false;
+      this.bokeh.enabled = false;
+    }
+    if (tier >= 2) {
       this.smaa.enabled = false;
       this.motionTrails.enabled = false;
-      this.bokeh.enabled = false;
       this.film.enabled = false;
       this.assetOverlay.enabled = false;
       this.bloom.radius = Math.min(this.bloom.radius, 0.45);

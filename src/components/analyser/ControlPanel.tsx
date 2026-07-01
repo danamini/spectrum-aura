@@ -759,6 +759,14 @@ export function ControlPanel() {
                       enabled={s.glitch}
                       onToggle={(v) => set({ glitch: v })}
                     >
+                      <S
+                        label="Intensity"
+                        value={s.glitchIntensity}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={(v) => set({ glitchIntensity: v })}
+                      />
                       <div className="flex items-center justify-between">
                         <Label className="text-xs">Wild mode</Label>
                         <Sw

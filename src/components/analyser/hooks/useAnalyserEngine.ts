@@ -1,7 +1,7 @@
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import * as THREE from "three";
 import { Scene } from "../engine/scene";
-import { Composer } from "../engine/composer";
+import { Composer, computeQualityTier } from "../engine/composer";
 import { AudioEngine } from "../engine/audio";
 import { ViewCycleController } from "../engine/view-cycle-controller";
 import { SongClock } from "../engine/song-clock";
@@ -140,6 +140,7 @@ export function useAnalyserEngine(params: {
       bpmConfidence: 0,
       pulse: 0,
       performance: false,
+      qualityTier: 0 as 0 | 1 | 2,
     };
     const mandalaPostFx = { ...settingsStore.get() };
     let lastPaletteIndex = settingsRef.current.paletteIndex;
@@ -463,6 +464,7 @@ export function useAnalyserEngine(params: {
         postFxReactive.bpmConfidence = bands.bpmConfidence;
         postFxReactive.pulse = bpmPulse;
         postFxReactive.performance = s.performance || xrRuntime.active;
+        postFxReactive.qualityTier = computeQualityTier(smoothedFps, postFxReactive.qualityTier);
         composer.apply(postFxSettings, postFxReactive);
         composer.render(dt);
       } else {

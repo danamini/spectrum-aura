@@ -72,6 +72,7 @@ describe("settingsStore normalization", () => {
       assetflowSpin: -1,
       assetflowMovement: 99,
       assetflowBackgroundDrift: -1,
+      glitchIntensity: 5,
     });
 
     const state = settingsStore.get();
@@ -97,6 +98,12 @@ describe("settingsStore normalization", () => {
     expect(state.assetflowSpin).toBe(0);
     expect(state.assetflowMovement).toBe(1.8);
     expect(state.assetflowBackgroundDrift).toBe(0);
+    expect(state.glitchIntensity).toBe(1);
+  });
+
+  it("defaults glitchIntensity to 1 (matches pre-existing always-on behavior)", async () => {
+    const { DEFAULT_SETTINGS } = await import("../store");
+    expect(DEFAULT_SETTINGS.glitchIntensity).toBe(1);
   });
 
   it("caps bloom strength unless extreme mode is enabled", async () => {
