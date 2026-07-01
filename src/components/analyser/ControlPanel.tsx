@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 import { Label } from "@/components/ui/label";
-import { Bn, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
+import { Bn, Disclosure, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
 import { ViewSettings } from "./control-panel/ViewSettings";
 import {
   ChevronDown,
@@ -917,116 +917,118 @@ export function ControlPanel() {
                         onChange={(v) => set({ tiltAmount: v })}
                       />
                     </ToggleRow>
-                    <ToggleRow
-                      label="Kaleidoscope"
-                      enabled={s.kaleidoscope}
-                      onToggle={(v) => set({ kaleidoscope: v })}
-                    >
-                      <S
-                        label="Sides"
-                        value={s.kaleidoscopeSides}
-                        min={2}
-                        max={24}
-                        step={1}
-                        onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
-                      />
-                      <S
-                        label="Angle"
-                        value={s.kaleidoscopeAngle}
-                        min={-3.14}
-                        max={3.14}
-                        step={0.01}
-                        onChange={(v) => set({ kaleidoscopeAngle: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Mirror"
-                      enabled={s.mirrorFx}
-                      onToggle={(v) => set({ mirrorFx: v })}
-                    >
-                      <div className="grid grid-cols-3 gap-2">
-                        {(
-                          [
-                            ["horizontal", "Horizontal"],
-                            ["vertical", "Vertical"],
-                            ["quad", "Quad"],
-                          ] as const
-                        ).map(([mode, label]) => (
-                          <Bn
-                            key={mode}
-                            active={s.mirrorMode === mode}
-                            variant={s.mirrorMode === mode ? "default" : "outline"}
-                            onClick={() => set({ mirrorMode: mode })}
-                          >
-                            {label}
-                          </Bn>
-                        ))}
-                      </div>
-                      <S
-                        label="Offset"
-                        value={s.mirrorOffset}
-                        min={-0.45}
-                        max={0.45}
-                        step={0.01}
-                        onChange={(v) => set({ mirrorOffset: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow label="CRT" enabled={s.crtFx} onToggle={(v) => set({ crtFx: v })}>
-                      <S
-                        label="Scanlines"
-                        value={s.crtScanlineIntensity}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ crtScanlineIntensity: v })}
-                      />
-                      <S
-                        label="Curvature"
-                        value={s.crtCurvature}
-                        min={0}
-                        max={0.1}
-                        step={0.01}
-                        onChange={(v) => set({ crtCurvature: v })}
-                      />
-                      <S
-                        label="Vignette"
-                        value={s.crtVignette}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ crtVignette: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Projector film"
-                      enabled={s.projectorFilmFx}
-                      onToggle={(v) => set({ projectorFilmFx: v })}
-                    >
-                      <S
-                        label="Artifact amount"
-                        value={s.projectorFilmAmount}
-                        min={0}
-                        max={1.5}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmAmount: v })}
-                      />
-                      <S
-                        label="Frame jitter"
-                        value={s.projectorFilmJitter}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmJitter: v })}
-                      />
-                      <S
-                        label="Lamp flicker"
-                        value={s.projectorFilmFlicker}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmFlicker: v })}
-                      />
-                    </ToggleRow>
+                    <Disclosure label="Retro / novelty FX (kaleidoscope, mirror, CRT, projector film)">
+                      <ToggleRow
+                        label="Kaleidoscope"
+                        enabled={s.kaleidoscope}
+                        onToggle={(v) => set({ kaleidoscope: v })}
+                      >
+                        <S
+                          label="Sides"
+                          value={s.kaleidoscopeSides}
+                          min={2}
+                          max={24}
+                          step={1}
+                          onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
+                        />
+                        <S
+                          label="Angle"
+                          value={s.kaleidoscopeAngle}
+                          min={-3.14}
+                          max={3.14}
+                          step={0.01}
+                          onChange={(v) => set({ kaleidoscopeAngle: v })}
+                        />
+                      </ToggleRow>
+                      <ToggleRow
+                        label="Mirror"
+                        enabled={s.mirrorFx}
+                        onToggle={(v) => set({ mirrorFx: v })}
+                      >
+                        <div className="grid grid-cols-3 gap-2">
+                          {(
+                            [
+                              ["horizontal", "Horizontal"],
+                              ["vertical", "Vertical"],
+                              ["quad", "Quad"],
+                            ] as const
+                          ).map(([mode, label]) => (
+                            <Bn
+                              key={mode}
+                              active={s.mirrorMode === mode}
+                              variant={s.mirrorMode === mode ? "default" : "outline"}
+                              onClick={() => set({ mirrorMode: mode })}
+                            >
+                              {label}
+                            </Bn>
+                          ))}
+                        </div>
+                        <S
+                          label="Offset"
+                          value={s.mirrorOffset}
+                          min={-0.45}
+                          max={0.45}
+                          step={0.01}
+                          onChange={(v) => set({ mirrorOffset: v })}
+                        />
+                      </ToggleRow>
+                      <ToggleRow label="CRT" enabled={s.crtFx} onToggle={(v) => set({ crtFx: v })}>
+                        <S
+                          label="Scanlines"
+                          value={s.crtScanlineIntensity}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ crtScanlineIntensity: v })}
+                        />
+                        <S
+                          label="Curvature"
+                          value={s.crtCurvature}
+                          min={0}
+                          max={0.1}
+                          step={0.01}
+                          onChange={(v) => set({ crtCurvature: v })}
+                        />
+                        <S
+                          label="Vignette"
+                          value={s.crtVignette}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ crtVignette: v })}
+                        />
+                      </ToggleRow>
+                      <ToggleRow
+                        label="Projector film"
+                        enabled={s.projectorFilmFx}
+                        onToggle={(v) => set({ projectorFilmFx: v })}
+                      >
+                        <S
+                          label="Artifact amount"
+                          value={s.projectorFilmAmount}
+                          min={0}
+                          max={1.5}
+                          step={0.01}
+                          onChange={(v) => set({ projectorFilmAmount: v })}
+                        />
+                        <S
+                          label="Frame jitter"
+                          value={s.projectorFilmJitter}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ projectorFilmJitter: v })}
+                        />
+                        <S
+                          label="Lamp flicker"
+                          value={s.projectorFilmFlicker}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ projectorFilmFlicker: v })}
+                        />
+                      </ToggleRow>
+                    </Disclosure>
                     <ToggleRow
                       label="Color grading"
                       enabled={s.grading}

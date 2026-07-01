@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ChevronDown } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -160,6 +161,36 @@ export function S({
         step={step}
         onValueChange={(v) => onChange(v[0])}
       />
+    </div>
+  );
+}
+
+/**
+ * Collapsible "Advanced" section for settings that are rarely touched day to
+ * day (fine-tuning knobs, novelty effects) — keeps the tab's default view
+ * short without removing anything. Collapsed by default unless `defaultOpen`.
+ */
+export function Disclosure({
+  label,
+  defaultOpen = false,
+  children,
+}: {
+  label: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.03]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-white/60 hover:text-white"
+      >
+        <span>{label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <div className="space-y-3 border-t border-white/10 p-3">{children}</div>}
     </div>
   );
 }
