@@ -1,4 +1,4 @@
-import { BarTimingHud, ExperimentalBadge } from "./BarTimingHud";
+import { BarTimingHud, BpmLockIndicator, ExperimentalBadge } from "./BarTimingHud";
 import type { LiveTempoState } from "./engine/live-tempo";
 import { bpmGlowStyle } from "./theme";
 
@@ -39,7 +39,16 @@ export function TempoReadout({
             BPM
             <ExperimentalBadge />
           </div>
-          <BpmDigits tempo={tempo} />
+          <div className="flex items-center justify-center gap-2">
+            <BpmLockIndicator
+              bpm={tempo.bpm}
+              confidence={tempo.bpmConfidence}
+              locked={tempo.barTiming.bpmLocked}
+              beatPhase={tempo.barTiming.beatPhase}
+              size={20}
+            />
+            <BpmDigits tempo={tempo} />
+          </div>
         </div>
       </>
     );
@@ -63,7 +72,15 @@ export function TempoReadout({
             </p>
           )}
         </div>
-        <BpmDigits tempo={tempo} />
+        <div className="flex items-center gap-2">
+          <BpmLockIndicator
+            bpm={tempo.bpm}
+            confidence={tempo.bpmConfidence}
+            locked={tempo.barTiming.bpmLocked}
+            beatPhase={tempo.barTiming.beatPhase}
+          />
+          <BpmDigits tempo={tempo} />
+        </div>
       </div>
       {showGrid ? (
         <BarTimingHud compact />

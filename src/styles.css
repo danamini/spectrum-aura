@@ -174,3 +174,9 @@
 .animate-ripple {
   animation: ripple 600ms ease-out forwards;
 }
+
+/* BPM lock indicator: spins while the detector is still searching for tempo. */
+@keyframes bpm-lock-search {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
