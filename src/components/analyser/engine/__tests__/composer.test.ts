@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import { computeQualityTier } from "../composer";
 
 describe("computeQualityTier", () => {
-  it("stays at tier 0 while FPS is healthy", () => {
+  it("stays at tier 0 while FPS is healthy, including a 60Hz display's normal dips", () => {
     expect(computeQualityTier(60, 0)).toBe(0);
-    expect(computeQualityTier(59, 0)).toBe(0);
+    expect(computeQualityTier(55, 0)).toBe(0);
+    expect(computeQualityTier(45, 0)).toBe(0);
   });
 
   it("downgrades to tier 1 once FPS dips below the tier-1 threshold", () => {
-    expect(computeQualityTier(40, 0)).toBe(1);
+    expect(computeQualityTier(35, 0)).toBe(1);
   });
 
   it("downgrades straight to tier 2 under severe pressure, regardless of current tier", () => {
@@ -18,9 +19,9 @@ describe("computeQualityTier", () => {
   });
 
   it("does not upgrade back to tier 0 until FPS clears the higher recovery threshold", () => {
-    // Recovered past the downgrade cutoff (45) but not the upgrade one (58).
+    // Recovered past the downgrade cutoff (40) but not the upgrade one (54).
     expect(computeQualityTier(50, 1)).toBe(1);
-    expect(computeQualityTier(58, 1)).toBe(0);
+    expect(computeQualityTier(54, 1)).toBe(0);
   });
 
   it("recovers one tier at a time (2 -> 1 -> 0), never skipping a tier", () => {
@@ -33,6 +34,6 @@ describe("computeQualityTier", () => {
   });
 
   it("stays at tier 2 while recovering FPS hasn't cleared the tier-1 recovery threshold", () => {
-    expect(computeQualityTier(48, 2)).toBe(2);
+    expect(computeQualityTier(44, 2)).toBe(2);
   });
 });

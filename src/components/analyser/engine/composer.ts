@@ -64,10 +64,15 @@ export type PostFxReactiveState = {
   qualityTier: 0 | 1 | 2;
 };
 
-const TIER_DOWNGRADE_TO_2_FPS = 30;
-const TIER_DOWNGRADE_TO_1_FPS = 45;
-const TIER_UPGRADE_TO_1_FPS = 52;
-const TIER_UPGRADE_TO_0_FPS = 58;
+// Deliberately generous margins: a 60Hz display idles around 60fps with
+// occasional dips into the high 50s, and transient jank (GC, HMR recompiles,
+// shader warm-up) briefly tanks the smoothed FPS — none of that should
+// silently switch user-enabled effects off. Only sustained, genuinely poor
+// frame rates downgrade.
+const TIER_DOWNGRADE_TO_2_FPS = 24;
+const TIER_DOWNGRADE_TO_1_FPS = 40;
+const TIER_UPGRADE_TO_1_FPS = 48;
+const TIER_UPGRADE_TO_0_FPS = 54;
 
 /**
  * Hysteresis-based performance tier from smoothed FPS: downgrades immediately
