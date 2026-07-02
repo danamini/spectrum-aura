@@ -83,6 +83,9 @@ export function useAnalyserEngine(params: {
     rendererRef.current = renderer;
     sceneRef.current = scene;
     composerRef.current = composer;
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__composer = composer;
+    }
 
     const audio = new AudioEngine();
     audioRef.current = audio;

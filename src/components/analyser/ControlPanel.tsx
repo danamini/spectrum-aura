@@ -615,6 +615,21 @@ export function ControlPanel() {
 
                 {ui.activeTab === "post" && (
                   <div className="space-y-3">
+                    {s.performance && (
+                      <div className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2.5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-amber-200/90">
+                          Performance Mode is bypassing all post FX
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <p className="font-mono text-[9px] leading-relaxed text-amber-200/60">
+                            Nothing below has any effect while it's on (Scene tab).
+                          </p>
+                          <Bn variant="outline" onClick={() => set({ performance: false })}>
+                            Turn off
+                          </Bn>
+                        </div>
+                      </div>
+                    )}
                     <ToggleRow
                       label="Post FX pipeline"
                       enabled={s.postFxEnabled}

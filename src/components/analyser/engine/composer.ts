@@ -574,6 +574,10 @@ export class Composer {
     this.grade.uniforms.saturation.value = s.saturation;
     this.grade.uniforms.hue.value = s.hue;
 
+    // SMAA has no user setting — re-enable it every pass so a tier-2
+    // downgrade (below) doesn't leave it permanently off after recovery.
+    this.smaa.enabled = true;
+
     this.sobel.enabled = s.sobelMode;
     this.sobel.uniforms.edgeStrength.value = THREE.MathUtils.clamp(
       s.sobelStrength * (0.8 + high * 0.8),
