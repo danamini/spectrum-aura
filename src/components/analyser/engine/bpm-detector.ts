@@ -72,6 +72,29 @@ export function isOctaveMismatch(
   return doubleDiff <= tolerance || halfDiff <= tolerance;
 }
 
+/**
+ * Keep only intervals close to the median — real music's peak list mixes beat
+ * onsets with hi-hat subdivisions and syncopation, so the raw interval list has
+ * huge spread even when the underlying tempo is rock solid. Judging tempo (and
+ * especially confidence) on the raw list is what kept real tracks from ever
+ * locking: interval CV stayed high no matter how steady the music was.
+ */
+export function filterIntervalsAroundMedian(sortedIntervals: number[]): number[] {
+  if (sortedIntervals.length < 3) return sortedIntervals;
+  const median = sortedIntervals[Math.floor(sortedIntervals.length / 2)]!;
+  const filtered = sortedIntervals.filter((iv) => iv >= median * 0.72 && iv <= median * 1.38);
+  return filtered.length >= 2 ? filtered : sortedIntervals;
+}
+
+/** Candidate-BPM history window used by the stability lock — see applyBpmLock. */
+const STABILITY_WINDOW = 5;
+/** Lock when this many recent candidates agree within STABILITY_TOLERANCE. */
+const STABILITY_LOCK_COUNT = 4;
+/** Relative spread (of the window midpoint) the candidates must stay within. */
+const STABILITY_TOLERANCE = 0.035;
+/** Minimum confidence for the stability lock path — evidence of *some* rhythm. */
+const STABILITY_MIN_CONFIDENCE = 0.3;
+
 export class BPMDetector {
   private energyHistory: Array<{ energy: number; time: number }> = [];
   private windowSizeMs = 8000;
@@ -107,6 +130,8 @@ export class BPMDetector {
   private tapTimes: number[] = [];
   private driftRejectStreak = 0;
   private octaveMismatchStreak = 0;
+  /** Recent unlocked candidate BPMs, for the stability-based lock path. */
+  private recentCandidates: number[] = [];
 
   private static clampBpm(bpm: number): number {
     let v = bpm;
@@ -208,6 +233,7 @@ export class BPMDetector {
     this.highConfidenceStreak = 0;
     this.driftRejectStreak = 0;
     this.octaveMismatchStreak = 0;
+    this.recentCandidates.length = 0;
   }
 
   /**
@@ -303,6 +329,7 @@ export class BPMDetector {
     this.tapTimes = [];
     this.driftRejectStreak = 0;
     this.octaveMismatchStreak = 0;
+    this.recentCandidates.length = 0;
   }
 
   private analyzeIfNeeded(time: number, force = false): void {
@@ -310,12 +337,26 @@ export class BPMDetector {
     this.lastAnalysisAt = time;
     this.cachedPeaks = this.findPeaks();
     const peakBpm = this.computeBpmFromPeaks(this.cachedPeaks);
-    const useAutocorr = !this.bpmLocked && this.cachedPeaks.length < 3;
-    const { bpm: autoBpm, strength: autoStrength } = useAutocorr
-      ? this.computeAutocorrelationBpm(time)
-      : { bpm: 0, strength: 0 };
+    // Autocorrelation runs on the whole energy envelope, so it sees through the
+    // subdivision/syncopation noise that pollutes the peak-interval estimate —
+    // run it every analysis pass (it was previously gated on having almost no
+    // peaks, which real music never satisfies, so it effectively never ran; and
+    // post-lock tracking on peak intervals alone let a biased peak stream walk
+    // the lock into the drift-reject unlock path on real music).
+    const { bpm: autoBpm, strength: autoStrength } = this.computeAutocorrelationBpm(time);
     const candidateBpm = this.blendBpmEstimates(peakBpm, autoBpm, autoStrength);
     this.cachedConfidence = this.computeConfidenceFromPeaks(this.cachedPeaks, autoStrength);
+    // Two independent estimators (peak intervals vs autocorrelation) agreeing on
+    // the same tempo is strong evidence even when either one alone is noisy.
+    if (!this.bpmLocked && peakBpm > 0 && autoBpm > 0) {
+      const relDiff = Math.abs(peakBpm - autoBpm) / peakBpm;
+      if (relDiff < 0.05) {
+        this.cachedConfidence = Math.max(
+          this.cachedConfidence,
+          Math.min(0.85, 0.55 + autoStrength * 0.5),
+        );
+      }
+    }
     if (this.tapLocked) {
       this.cachedConfidence = Math.max(this.cachedConfidence, 0.88);
     }
@@ -353,9 +394,34 @@ export class BPMDetector {
       } else {
         this.highConfidenceStreak = 0;
       }
-      if (this.highConfidenceStreak >= 4 && candidateBpm > 0) {
+
+      // Stability lock: real music rarely sustains the high-confidence streak
+      // (interval CV is inherently jittery), but the *estimate itself* settles
+      // fast — if the candidate has stayed put across several analysis passes
+      // with at least moderate confidence, that steadiness is the lock signal.
+      let stable = false;
+      if (candidateBpm > 0) {
+        this.recentCandidates.push(candidateBpm);
+        if (this.recentCandidates.length > STABILITY_WINDOW) this.recentCandidates.shift();
+        if (
+          this.recentCandidates.length >= STABILITY_LOCK_COUNT &&
+          this.cachedConfidence >= STABILITY_MIN_CONFIDENCE
+        ) {
+          const recent = this.recentCandidates.slice(-STABILITY_LOCK_COUNT);
+          const mn = Math.min(...recent);
+          const mx = Math.max(...recent);
+          stable = mx - mn <= ((mn + mx) / 2) * STABILITY_TOLERANCE;
+        }
+      }
+
+      if ((this.highConfidenceStreak >= 4 || stable) && candidateBpm > 0) {
         this.bpmLocked = true;
         this.lockedBpm = candidateBpm;
+        this.recentCandidates.length = 0;
+        // Reflect the lock in the reported confidence — the stability path can
+        // fire while instantaneous interval-CV confidence reads low even though
+        // the tempo evidence is solid.
+        this.cachedConfidence = Math.max(this.cachedConfidence, 0.68);
         if (this.phaseAnchorTime <= 0 && this.lastPeakTime > 0) {
           this.phaseAnchorTime = this.lastPeakTime;
         }
@@ -367,11 +433,16 @@ export class BPMDetector {
     if (candidateBpm <= 0) return locked;
 
     const diff = Math.abs(candidateBpm - locked);
-    if (diff <= 2.5) {
+    if (diff <= 4) {
       this.driftRejectStreak = 0;
       this.octaveMismatchStreak = 0;
       this.lockedBpm = locked * 0.97 + candidateBpm * 0.03;
       this.lastBPM = this.lockedBpm;
+      // Fresh evidence agreeing with the lock — keep reported confidence up so
+      // the HUD reads "locked and tracking" instead of drifting toward zero on
+      // interval-CV noise. Only fires on agreeing candidates, so true silence
+      // (no candidates at all) still decays confidence normally.
+      this.cachedConfidence = Math.max(this.cachedConfidence, 0.72);
       return this.lockedBpm;
     }
 
@@ -392,7 +463,7 @@ export class BPMDetector {
     this.octaveMismatchStreak = 0;
 
     this.driftRejectStreak += 1;
-    if (this.driftRejectStreak >= 12 && diff > 6) {
+    if (this.driftRejectStreak >= 12 && diff > 8) {
       this.bpmLocked = false;
       this.lockedBpm = 0;
       this.highConfidenceStreak = 0;
@@ -524,7 +595,19 @@ export class BPMDetector {
     if (intervals.length === 0) return 0;
 
     intervals.sort((a, b) => a - b);
-    const medianInterval = intervals[Math.floor(intervals.length / 2)];
+    const seedMedian = intervals[Math.floor(intervals.length / 2)]!;
+    // Fold subdivision (hi-hat 8ths/16ths) and skipped-beat intervals into the
+    // median's octave so they count as *evidence for* the beat period instead
+    // of polluting the median — real music's peak stream is a mixture, and the
+    // raw median wanders with whichever layer produced more peaks this window.
+    const folded = intervals.map((iv) => {
+      let v = iv;
+      while (v < seedMedian * 0.72) v *= 2;
+      while (v > seedMedian * 1.45) v /= 2;
+      return v;
+    });
+    folded.sort((a, b) => a - b);
+    const medianInterval = folded[Math.floor(folded.length / 2)]!;
 
     let bpm = 60000 / medianInterval;
     bpm = BPMDetector.clampBpm(bpm);
@@ -561,13 +644,20 @@ export class BPMDetector {
     }
     if (intervals.length < 2) return Math.max(0.35, autoStrength * 0.55);
 
-    const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const variance =
-      intervals.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / intervals.length;
+    // Judge consistency on the median-filtered intervals — mixed subdivision/
+    // syncopation intervals otherwise inflate CV so much that steady real music
+    // never reads as confident (see filterIntervalsAroundMedian).
+    intervals.sort((a, b) => a - b);
+    const filtered = filterIntervalsAroundMedian(intervals);
+    const mean = filtered.reduce((a, b) => a + b, 0) / filtered.length;
+    const variance = filtered.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / filtered.length;
     const stdDev = Math.sqrt(variance);
     const cv = mean > 0 ? stdDev / mean : 1;
+    // How much of the raw evidence actually fits the dominant tempo — a low
+    // fraction means the "consistent" cluster is a minority of what's playing.
+    const clusterFraction = filtered.length / intervals.length;
 
-    let confidence = 1 - cv * 3;
+    let confidence = (1 - cv * 3) * (0.55 + clusterFraction * 0.45);
     confidence = Math.max(0, Math.min(1, confidence));
     const peakBonus = Math.min(0.2, (peaks.length - 3) * 0.05);
     const autoBonus = autoStrength * 0.25;
