@@ -236,6 +236,8 @@ export class Scene {
   private assetflowLight?: THREE.PointLight;
   private assetflowAssetsRequested = false;
   private assetflowBuildToken = 0;
+  /** Which model template all actors share this build — re-rolled per build. */
+  private assetflowModelChoice = 0;
   private assetflowModelScale = 1;
   private assetflowModelTemplates: Array<THREE.Object3D | undefined> = [];
 
@@ -3930,6 +3932,7 @@ export class Scene {
   private buildAssetflow() {
     this.assetflowBuildToken += 1;
     this.assetflowAssetsRequested = false;
+    this.assetflowModelChoice = Math.floor(Math.random() * 12);
     for (const actor of this.assetflowActors) {
       actor.placeholder.geometry.dispose();
       const placeholderMat = actor.placeholder.material;
@@ -4205,10 +4208,12 @@ export class Scene {
     );
     if (templates.length === 0) return;
 
-    // Every actor gets the *same* model (the first available template) — a
-    // dozen instances of one shape spinning reads as a cohesive formation,
-    // where one-of-each looked like a random pile of unrelated objects.
-    const template = templates[0]!;
+    // Every actor gets the *same* model — a dozen instances of one shape
+    // spinning reads as a cohesive formation, where one-of-each looked like a
+    // random pile of unrelated objects. Which shape is randomized per build
+    // (falling back to the first loaded template until the chosen one
+    // arrives), so revisiting the view still offers variety.
+    const template = this.assetflowModelTemplates[this.assetflowModelChoice] ?? templates[0]!;
     for (let i = 0; i < this.assetflowActors.length; i++) {
       const actor = this.assetflowActors[i]!;
       if (actor.model) {
