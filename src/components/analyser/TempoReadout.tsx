@@ -10,7 +10,7 @@ import { bpmGlowStyle } from "./theme";
 function BpmDigits({ tempo }: { tempo: LiveTempoState }) {
   return (
     <div
-      className="font-mono text-3xl font-bold tabular-nums text-white/70"
+      className="min-w-[3ch] text-center font-mono text-3xl font-bold tabular-nums text-white/70"
       style={bpmGlowStyle(tempo.bpm, tempo.bpmConfidence)}
     >
       {tempo.audioRunning && tempo.bpm > 0 ? tempo.bpm : "—"}
@@ -39,15 +39,20 @@ export function TempoReadout({
             BPM
             <ExperimentalBadge />
           </div>
-          <div className="flex items-center justify-center gap-2">
-            <BpmLockIndicator
-              bpm={tempo.bpm}
-              confidence={tempo.bpmConfidence}
-              locked={tempo.barTiming.bpmLocked}
-              beatPhase={tempo.barTiming.beatPhase}
-              size={20}
-            />
-            <BpmDigits tempo={tempo} />
+          <div className="flex justify-center">
+            {/* Spinner floats out of flow so the digits stay put as it appears/animates. */}
+            <div className="relative">
+              <div className="absolute right-full top-1/2 mr-2 -translate-y-1/2">
+                <BpmLockIndicator
+                  bpm={tempo.bpm}
+                  confidence={tempo.bpmConfidence}
+                  locked={tempo.barTiming.bpmLocked}
+                  beatPhase={tempo.barTiming.beatPhase}
+                  size={20}
+                />
+              </div>
+              <BpmDigits tempo={tempo} />
+            </div>
           </div>
         </div>
       </>
@@ -65,20 +70,26 @@ export function TempoReadout({
             BPM
             <ExperimentalBadge />
           </div>
-          {tempo.bpmConfidence > 0.25 && (
-            <p className="mt-1 font-mono text-[9px] text-white/35">
-              {Math.round(tempo.bpmConfidence * 100)}% confidence
-              {tempo.barTiming.bpmLocked ? " · locked" : ""}
-            </p>
-          )}
+          {/* Kept mounted (invisible below threshold) so the row height never changes. */}
+          <p
+            className={`mt-1 font-mono text-[9px] text-white/35 ${
+              tempo.bpmConfidence > 0.25 ? "" : "invisible"
+            }`}
+            aria-hidden={tempo.bpmConfidence <= 0.25}
+          >
+            {Math.round(tempo.bpmConfidence * 100)}% confidence
+            {tempo.barTiming.bpmLocked ? " · locked" : ""}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <BpmLockIndicator
-            bpm={tempo.bpm}
-            confidence={tempo.bpmConfidence}
-            locked={tempo.barTiming.bpmLocked}
-            beatPhase={tempo.barTiming.beatPhase}
-          />
+        <div className="relative">
+          <div className="absolute right-full top-1/2 mr-2 -translate-y-1/2">
+            <BpmLockIndicator
+              bpm={tempo.bpm}
+              confidence={tempo.bpmConfidence}
+              locked={tempo.barTiming.bpmLocked}
+              beatPhase={tempo.barTiming.beatPhase}
+            />
+          </div>
           <BpmDigits tempo={tempo} />
         </div>
       </div>

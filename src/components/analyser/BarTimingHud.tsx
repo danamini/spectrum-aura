@@ -167,11 +167,15 @@ export function BarTimingHud({ compact = false }: { compact?: boolean }) {
           style={{ width: `${Math.max(0, Math.min(100, timing.phrasePhase * 100))}%` }}
         />
       </div>
-      {!timing.synced && !timing.bpmLocked && (
-        <div className="mt-1.5 text-center font-mono text-[8px] uppercase tracking-[0.16em] text-amber-200/65">
-          Syncing grid… · tap T on beats
-        </div>
-      )}
+      {/* Kept mounted (invisible when synced) so the HUD height never changes. */}
+      <div
+        className={`mt-1.5 text-center font-mono text-[8px] uppercase tracking-[0.16em] text-amber-200/65 ${
+          timing.synced || timing.bpmLocked ? "invisible" : ""
+        }`}
+        aria-hidden={timing.synced || timing.bpmLocked}
+      >
+        Syncing grid… · tap T on beats
+      </div>
     </div>
   );
 }
