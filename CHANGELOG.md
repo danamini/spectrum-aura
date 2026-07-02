@@ -11,6 +11,77 @@ presets) may change between minor versions.
 
 _Nothing yet._
 
+## [0.1.0] - 2026-07-02
+
+Large UI/UX, sync, and rendering overhaul. Pre-1.0 policy note: some default
+key bindings changed (arrows are now the primary prev/next binding; the old
+letters still work).
+
+### Added
+
+- **Dynamic Mode** (`evolveEnabled` / `evolveAmount`): a curated 1-3 impactful
+  settings per view slowly drift over musical phrases (wall-clock fallback when
+  unsynced), as a bounded offset around your own values.
+- **Saves tab** in the settings panel: every saved look listed with focus badge
+  and inline load/overwrite/delete, sharing one cursor with the shortcut bar.
+- **BPM lock indicator**: a ring that visibly searches while the detector
+  converges and settles into a beat-synced pulse once locked.
+- **Arrow-key shortcuts**: `←`/`→` prev/next visual, `⇧←`/`⇧→` (or `[`/`]`)
+  prev/next save. Letter aliases (`B`/`V`) kept.
+- **Phone-first layout**: full-width settings sheet, bottom tab bar with touch
+  targets, full-screen flyout, scroll affordances, safe-area padding.
+- **Glitch intensity** (`glitchIntensity`): duty-cycle control for the Glitch
+  pass, which previously was only ever full-on.
+- **Automatic post-FX quality tiers**: sustained low FPS gracefully sheds the
+  priciest passes first (SSAO/DoF, then more), with hysteresis; recovers
+  stepwise. Manual Performance Mode still forces the full cut.
+- **Realistic-music BPM regression suite** (`bpm-detector.realistic.test.ts`):
+  five jittered kick/snare/hat scenarios must lock within 8 s and hold.
+
+### Changed
+
+- **Unified amplitude curve** (`engine/loudness.ts`): all 14 views route their
+  primary amplitude response through one shared gamma curve, so the same
+  slider value feels comparable everywhere.
+- **BPM detection reworked for real music**: subdivision/octave interval
+  folding, autocorrelation every pass + cross-estimator agreement bonus,
+  cluster-weighted confidence, a stability-based lock path, mid-range 2x/0.5x
+  octave-lock correction, silence-proportional confidence decay with an
+  adaptive threshold, and BPM-adaptive beat refractory.
+- **View cycling** biases toward a different energy tier than the current view
+  and always presents the destination in 3D.
+- **Post-FX reactivity**: bloom breathes with bass; chroma shimmers on high
+  transients; asset-overlay switch timing centralized into named constants.
+- **Bespoke control skin**: sliders and switches restyled to the app's emerald
+  identity; retro/novelty FX grouped under a collapsed disclosure.
+- **Stale tap-locks re-acquire**: a manual tap tempo unconfirmed for 6 s
+  releases back to auto detection with a "Re-syncing…" flash.
+- Render-loop hygiene: pooled per-frame `AudioBands`/`bandsForScene` objects,
+  composer-reset tracking without per-frame string allocation.
+
+### Fixed
+
+- **Loading a save can no longer switch Performance Mode on** — 18 of the 19
+  bundled default saves carried `performance: true`, silently bypassing all
+  post-FX and persisting it. Saves now never touch it, the bundled saves are
+  clean, and the Post FX tab shows a warning banner with an inline "Turn off"
+  when Performance Mode is bypassing the pipeline.
+- **BPM lock on real audio**: the confidence silence-decay used a fixed
+  absolute threshold miscalibrated for real capture levels, preventing locking
+  entirely on quiet-but-present music.
+- All 16 sprite/overlay SVGs lacked width/height attributes, failing WebGL
+  texture upload (asset-flow sprites and composer overlays were silently
+  broken).
+- SMAA antialiasing stayed permanently off after one quality-tier downgrade.
+- Auto view-cycle appeared to only show 2D views once stale per-view 2D flags
+  accumulated in localStorage.
+- Tempo HUD no longer changes size as sync state changes; settings sheet has a
+  proper screen-reader description.
+- Asset-flow uses one shared model per build (random each build) instead of a
+  pile of unrelated models.
+- Dev-server hot updates that reach the settings store force a clean reload
+  instead of silently splitting panel and render-loop state.
+
 ## [0.0.1] - 2026-06-26
 
 First tagged release. Browser-only, real-time audio visualiser built on React 19,
@@ -52,5 +123,6 @@ Three.js, and Vite — no backend, no upload flow.
 - `npm run check` runs typecheck + lint + tests; strict TypeScript
   (`noUnusedLocals` / `noUnusedParameters`) enabled.
 
-[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/danamini/spectrum-aura/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/danamini/spectrum-aura/releases/tag/v0.0.1
