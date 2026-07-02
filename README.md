@@ -142,7 +142,8 @@ Technical deep dive: [Song clock and sync](docs/song-clock-and-sync.md).
 ### Live controls
 
 - `R` randomize look
-- `V` next visual
+- `←` / `→` prev / next visual (`B` / `V` aliases)
+- `[` / `]` (or `⇧←` / `⇧→`) prev / next saved look
 - `A` play saved looks in rotation
 - `F` toggle fullscreen
 - `S` toggle settings panel
@@ -170,6 +171,8 @@ Control panel additions:
 - `Post FX pipeline` master toggle in Post FX that bypasses all post-processing without changing individual effect settings.
 - `Randomize view settings` toggle in Post FX that keeps randomize constrained to post FX unless you explicitly enable view geometry changes.
 - `Monolith Brightness` slider in Monolith view settings for direct lighting/visibility control.
+- `Dynamic Mode` toggle + drift amount: a few impactful settings per view slowly drift over musical phrases, bounded around your own values.
+- Dedicated `Saves` tab listing every saved look with focus/load/overwrite/delete controls.
 - Asset-Flow controls for `Movement intensity`, `2D background amount`, and `2D background drift`.
 - Asset-Flow model motion is tuned for smoother 3D bounce with minimal lateral drift to avoid left/right flicker.
 - Asset-Flow layered 2D overlays now crossfade smoothly and bias transition timing toward detected beat intervals when BPM confidence is high.

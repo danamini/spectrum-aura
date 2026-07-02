@@ -24,7 +24,7 @@ Manual taps (T / ⇧T) ──epoch/BPM──────┘
 | Mode     | Entry                                                       | Behavior                                                                                       |
 | -------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `idle`   | Initial / lost auto confidence                              | No grid (`EMPTY_BAR_TIMING`)                                                                   |
-| `auto`   | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM drifts 3%/frame toward estimate                                             |
+| `auto`   | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM blends toward estimate with adaptive α (0.25 → 0.03 over ~30 frames)        |
 | `manual` | Any `hintBeat` / `hintDownbeat`                             | Tap-owned epoch; misaligned audio onsets ignored; aligned onsets may nudge and release to auto |
 
 ---
@@ -98,6 +98,15 @@ After manual sync has a BPM (`manualTapComplete`), confident audio onsets may:
 
 Manual mode is not a permanent lock — it is the user's anchor until audio agrees.
 
+### Stale re-acquisition
+
+If nothing confirms the tapped tempo for `MANUAL_REACQUIRE_AFTER_MS` (6 s) —
+silence and sustained misalignment look the same from here — manual mode drops
+back to idle and raises a one-shot signal (`consumeManualReleaseSignal()`).
+The render loop consumes it to also call `BPMDetector.releaseManualLock()`
+(SongClock has no reference to the detector) and flashes "Re-syncing…".
+Re-tapping mid-gap resets the grace period, as does any confirmed alignment.
+
 ### 4-bar phrase change detection (auto / post-tap)
 
 Each completed bar stores a signature \((\bar{b}, \bar{m}, \bar{c})\).
@@ -126,10 +135,13 @@ After 4 consecutive qualifying frames (or immediate if `bpmLocked`):
 t*0 = \text{now},\quad b_0 = 1,\quad \text{BPM}\_c = \text{BPM}*{\text{est}}
 \]
 
-While auto and not detector-locked:
+While auto and not detector-locked, the clock blends toward the estimate with
+an adaptive rate (`autoBpmBlendAlpha`): \(\alpha\) starts at **0.25** on the
+frame auto mode is entered (when \(\text{BPM}_c\) hasn't settled yet) and eases
+down to the steady-state **0.03** over the first 30 frames:
 
 \[
-\text{BPM}_c \leftarrow 0.97\,\text{BPM}\_c + 0.03\,\text{BPM}_{\text{est}}
+\text{BPM}_c \leftarrow (1-\alpha)\,\text{BPM}\_c + \alpha\,\text{BPM}_{\text{est}}
 \]
 
 No beat index jumps — only tempo slowly corrects.
@@ -176,6 +188,8 @@ t*{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T*{\text{beat}})
 3. Scene `bpmPhase` uses `audio.beatPhase` from SongClock injection, not session wall clock
 4. View cycle only on `phraseJustStarted` after 16 beats
 5. `⇧T` downbeat sets `beatInPhrase === 1` immediately
+6. A stale manual lock (>6 s with no confirmed alignment) reverts to idle and
+   signals the detector tap-lock release (`song-clock.test.ts`)
 
 ---
 
