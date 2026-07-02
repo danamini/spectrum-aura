@@ -30,8 +30,19 @@ function isValidBpm(bpm: number): boolean {
   return bpm >= 65 && bpm <= 195;
 }
 
-/** Combined band energy below this reads as "no signal" for confidence decay. */
-const SILENCE_ENERGY_THRESHOLD = 0.04;
+/** Combined band energy below this reads as "no signal" for confidence decay —
+ * an absolute floor only, used to seed/bound the adaptive check below so a
+ * source that's truly silent forever doesn't get stuck with an
+ * ever-shrinking relative floor. */
+const SILENCE_ABSOLUTE_FLOOR = 0.01;
+/** "Active" means combined band energy is at least this fraction of the
+ * slow-moving long-term average — adapts to whatever the actual input level
+ * is (mic gain, source volume) instead of assuming a fixed absolute scale.
+ * A fixed absolute threshold here was miscalibrated against real captured
+ * audio (mic/tab share), which commonly sits well below a synthetic test
+ * signal's level, and caused false "silence" during normal quiet-but-present
+ * playback — undermining BPM lock entirely on real input. */
+const SILENCE_RELATIVE_RATIO = 0.2;
 /** How long silence must persist before confidence starts decaying. */
 const SILENCE_DECAY_AFTER_MS = 1200;
 /** Per-analysis-pass decay factor once silence has persisted — mirrors the
@@ -85,6 +96,8 @@ export class BPMDetector {
   private lastMid = 0;
   private lastHigh = 0;
   private lastActiveAt = 0;
+  /** Slow-moving average of combined band energy — see SILENCE_RELATIVE_RATIO. */
+  private longTermEnergy = 0;
 
   private bpmLocked = false;
   private tapLocked = false;
@@ -122,7 +135,14 @@ export class BPMDetector {
       Math.max(0, bassDelta) * 1 + Math.max(0, midDelta) * 0.55 + Math.max(0, highDelta) * 0.28;
     const energy = bands.bass * 0.68 + bands.mid * 0.24 + bands.high * 0.08 + onset * 0.35;
 
-    if (bands.bass + bands.mid + bands.high > SILENCE_ENERGY_THRESHOLD) {
+    const totalEnergy = bands.bass + bands.mid + bands.high;
+    this.longTermEnergy =
+      this.longTermEnergy <= 0 ? totalEnergy : this.longTermEnergy * 0.98 + totalEnergy * 0.02;
+    const activeFloor = Math.max(
+      SILENCE_ABSOLUTE_FLOOR,
+      this.longTermEnergy * SILENCE_RELATIVE_RATIO,
+    );
+    if (totalEnergy > activeFloor) {
       this.lastActiveAt = time;
     }
 
@@ -274,6 +294,7 @@ export class BPMDetector {
     this.lastMid = 0;
     this.lastHigh = 0;
     this.lastActiveAt = 0;
+    this.longTermEnergy = 0;
     this.bpmLocked = false;
     this.tapLocked = false;
     this.lockedBpm = 0;

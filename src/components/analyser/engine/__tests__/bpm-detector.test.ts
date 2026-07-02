@@ -213,12 +213,16 @@ describe("BPMDetector", () => {
     }
     expect(detector.getConfidence()).toBeGreaterThanOrEqual(0.88);
 
-    // Feed near-silent bands (below the activity threshold) well past the decay
-    // grace period, advancing time without ever refreshing "last active" state.
+    // Feed genuinely-silent bands (near-zero, well below even a quiet real
+    // track's level) well past the decay grace period, advancing time without
+    // ever refreshing "last active" state. The activity floor is now relative
+    // to a slow-moving average rather than a fixed constant (see
+    // SILENCE_RELATIVE_RATIO) — quiet-but-real music must NOT decay
+    // confidence, only true silence should.
     let time = 2000;
     for (let i = 0; i < 80; i++) {
       time += 50;
-      detector.feedBands({ bass: 0.01, mid: 0.005, high: 0.002 }, time);
+      detector.feedBands({ bass: 0.001, mid: 0.0005, high: 0.0002 }, time);
       detector.tick(time);
     }
 
@@ -226,6 +230,25 @@ describe("BPMDetector", () => {
     // Silence must not change the lock itself, only the confidence readout.
     expect(detector.isTapLocked()).toBe(true);
     expect(detector.isLocked()).toBe(true);
+  });
+
+  it("does not falsely decay confidence on quiet-but-real audio (regression: real mic/tab capture is much quieter than a loud synthetic signal)", () => {
+    const detector = new BPMDetector();
+    const interval = 500; // 120 BPM
+    let time = 0;
+    const totalMs = 20000;
+    while (time <= totalMs) {
+      const phase = (time % interval) / interval;
+      const loud = phase < 0.2 ? 0.25 + phase * 3.2 : phase < 0.4 ? 0.89 - (phase - 0.2) * 3 : 0.12;
+      // Scaled down ~40x — peak ~0.022, always below the old fixed 0.04
+      // "silence" threshold this fix replaced.
+      const energy = loud / 40;
+      detector.feed(energy, time);
+      detector.tick(time);
+      time += 50;
+    }
+    expect(detector.isLocked()).toBe(true);
+    expect(detector.getConfidence()).toBeGreaterThan(0.85);
   });
 
   it("corrects an auto-locked half-tempo octave error once double-speed audio persists", () => {
