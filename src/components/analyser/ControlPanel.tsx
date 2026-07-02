@@ -1,9 +1,15 @@
 import * as React from "react";
 import { useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 import { Label } from "@/components/ui/label";
-import { Bn, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
+import { Bn, Disclosure, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
 import { ViewSettings } from "./control-panel/ViewSettings";
 import {
   ChevronDown,
@@ -23,6 +29,8 @@ import {
   type WebXrState,
 } from "./engine/xr";
 import { TempoReadout } from "./TempoReadout";
+import { usePresetActions } from "./hooks/usePresetActions";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EMPTY_LIVE_TEMPO, LIVE_TEMPO_EVENT, type LiveTempoState } from "./engine/live-tempo";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
@@ -30,7 +38,6 @@ import {
   PRESETS,
   settingsStore,
   useSettings,
-  useSlots,
   type Settings,
 } from "./store";
 import { getVisualDefinition, VISUALS } from "./visuals";
@@ -38,9 +45,9 @@ import { getVisualDefinition, VISUALS } from "./visuals";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 
 const UI_KEY = "analyser-ui-v1";
-type UIState = { viewSettingsOpen: boolean; activeTab: string; slotsOpen: boolean };
+type UIState = { viewSettingsOpen: boolean; activeTab: string };
 const loadUI = (): UIState => {
-  const fallback: UIState = { viewSettingsOpen: true, activeTab: "post", slotsOpen: false };
+  const fallback: UIState = { viewSettingsOpen: true, activeTab: "post" };
   if (typeof window === "undefined") return fallback;
   try {
     const raw = localStorage.getItem(UI_KEY);
@@ -53,10 +60,10 @@ const loadUI = (): UIState => {
 
 export function ControlPanel() {
   const s = useSettings();
-  const slots = useSlots();
+  const preset = usePresetActions();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [flyoutVisible, setFlyoutVisible] = useState(false);
-  const [selectedSaveIndex, setSelectedSaveIndex] = useState(0);
   const [xrState, setXrState] = useState<WebXrState>({
     available: false,
     active: false,
@@ -106,72 +113,6 @@ export function ControlPanel() {
     return () => window.clearTimeout(id);
   }, [open]);
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
-  const hasSavedPresets = slots.length > 0;
-  const activeSaveIndex = hasSavedPresets ? Math.min(selectedSaveIndex, slots.length - 1) : 0;
-
-  React.useEffect(() => {
-    setSelectedSaveIndex((prev) => {
-      if (slots.length === 0) return 0;
-      return Math.min(prev, slots.length - 1);
-    });
-  }, [slots.length]);
-
-  const loadSavedPreset = (index: number) => {
-    if (index < 0 || index >= slots.length) return;
-    settingsStore.loadSlot(index);
-    setSelectedSaveIndex(index);
-  };
-
-  const loadFocusedPreset = () => {
-    if (!hasSavedPresets) return;
-    loadSavedPreset(activeSaveIndex);
-  };
-
-  const focusSavedPreset = (index: number) => {
-    if (index < 0 || index >= slots.length) return;
-    setSelectedSaveIndex(index);
-  };
-
-  const stepSavedPreset = (direction: 1 | -1) => {
-    if (!hasSavedPresets) return;
-    const next = (activeSaveIndex + direction + slots.length) % slots.length;
-    focusSavedPreset(next);
-  };
-
-  const loadRandomSavedPreset = () => {
-    if (!hasSavedPresets) return;
-    const next =
-      slots.length === 1
-        ? 0
-        : (() => {
-            let index = activeSaveIndex;
-            while (index === activeSaveIndex) {
-              index = Math.floor(Math.random() * slots.length);
-            }
-            return index;
-          })();
-    focusSavedPreset(next);
-  };
-
-  const saveCurrentPreset = () => {
-    const nextIndex = slots.length;
-    settingsStore.saveSlot(nextIndex, `Save ${nextIndex + 1}`);
-    setSelectedSaveIndex(nextIndex);
-  };
-
-  const saveFocusedPreset = () => {
-    if (!hasSavedPresets) {
-      saveCurrentPreset();
-      return;
-    }
-    const focusedSave = slots[activeSaveIndex];
-    settingsStore.saveSlot(activeSaveIndex, focusedSave?.name ?? `Save ${activeSaveIndex + 1}`);
-  };
-
-  const deleteSavedPreset = () => {
-    if (!hasSavedPresets) return;
-    settingsStore.clearSlot(activeSaveIndex);
-  };
 
   const hasViewSettings = true;
   const currentVisual = getVisualDefinition(s.view);
@@ -276,12 +217,15 @@ export function ControlPanel() {
             )
               e.preventDefault();
           }}
-          className="analyser-scroll w-[380px] overflow-y-auto bg-black/85 backdrop-blur-xl border-white/10 text-white text-[12px] sm:max-w-[380px]"
+          className={`analyser-scroll w-full overflow-y-auto bg-black/85 backdrop-blur-xl border-white/10 text-white text-[12px] md:w-[380px] md:max-w-[380px] ${isMobile ? "z-[102]" : ""}`}
         >
           <SheetHeader>
             <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/70">
               Controls
             </SheetTitle>
+            <SheetDescription className="sr-only">
+              Visualizer settings: view selection, audio, scene, post FX, and saved presets.
+            </SheetDescription>
           </SheetHeader>
 
           <div className="mt-4 space-y-4 pb-10">
@@ -366,6 +310,25 @@ export function ControlPanel() {
                   Applies randomize when the view cycle picks a new visual.
                 </p>
               </ToggleRow>
+              <ToggleRow
+                label="Dynamic mode"
+                enabled={s.evolveEnabled}
+                onToggle={(v) => set({ evolveEnabled: v })}
+              >
+                <S
+                  label="Drift amount"
+                  value={s.evolveAmount}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(v) => set({ evolveAmount: v })}
+                />
+                <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                  Slowly drifts a few impactful settings for the current view over musical phrases,
+                  as a bounded offset around your own values — turn off to return to exactly what
+                  you set. Unlike view cycle, the view itself never changes.
+                </p>
+              </ToggleRow>
             </Row>
 
             {hasViewSettings && (
@@ -385,18 +348,23 @@ export function ControlPanel() {
           </div>
         </SheetContent>
 
-        {/* Vertical tab strip + slide-out panels (only while sheet is open) */}
+        {/* Tab strip + slide-out panels (only while sheet is open). Mobile gets a
+            bottom tab bar + full-screen panel since there's no room beside a
+            full-width sheet for the desktop's side-by-side layout. */}
         {open && (
           <>
-            {/* Vertical tab strip — sits just to the left of the 380px sheet */}
+            {/* Tab strip — vertical rail beside the sheet on desktop, bottom bar on mobile */}
             <div
               data-analyser-flyout
               className={
-                "fixed right-[380px] top-1/2 z-[60] -translate-y-1/2 flex flex-col gap-1 " +
+                (isMobile
+                  ? "fixed inset-x-0 bottom-0 z-[110] flex flex-row gap-1 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] "
+                  : "fixed right-[380px] top-1/2 z-[60] -translate-y-1/2 flex flex-col gap-1 ") +
                 "transition-all duration-[220ms] ease-out " +
                 (flyoutVisible
                   ? "translate-x-0 opacity-100"
-                  : "translate-x-4 opacity-0 pointer-events-none")
+                  : (isMobile ? "translate-y-4" : "translate-x-4") +
+                    " opacity-0 pointer-events-none")
               }
             >
               {(
@@ -404,6 +372,7 @@ export function ControlPanel() {
                   { id: "audio", label: "Audio" },
                   { id: "scene", label: "Scene" },
                   { id: "post", label: "Post FX" },
+                  { id: "saves", label: "Saves" },
                 ] as const
               ).map((t) => {
                 const active = ui.activeTab === t.id;
@@ -412,7 +381,9 @@ export function ControlPanel() {
                     key={t.id}
                     onClick={() => updateUi({ activeTab: active ? "" : t.id })}
                     className={
-                      "group h-24 w-9 rounded-l-md border border-r-0 backdrop-blur-xl transition-all flex items-center justify-center " +
+                      (isMobile
+                        ? "flex-1 h-11 rounded-md border backdrop-blur-xl transition-all flex items-center justify-center "
+                        : "group h-24 w-9 rounded-l-md border border-r-0 backdrop-blur-xl transition-all flex items-center justify-center ") +
                       (active
                         ? "bg-emerald-400 text-black border-emerald-300/60 shadow-[0_0_14px_rgba(52,211,153,0.55)]"
                         : "bg-black/70 text-white/70 border-white/10 hover:text-white hover:bg-black/85")
@@ -420,8 +391,12 @@ export function ControlPanel() {
                     title={t.label}
                   >
                     <span
-                      className="font-mono text-[10px] uppercase tracking-[0.3em]"
-                      style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+                      className="font-mono text-[10px] uppercase tracking-[0.2em]"
+                      style={
+                        isMobile
+                          ? undefined
+                          : { writingMode: "vertical-rl", transform: "rotate(180deg)" }
+                      }
                     >
                       {t.label}
                     </span>
@@ -430,22 +405,25 @@ export function ControlPanel() {
               })}
             </div>
 
-            {/* Slide-out content panel — appears to the left of the tab strip */}
+            {/* Slide-out content panel — beside the tab strip on desktop, full-screen on mobile */}
             <div
               data-analyser-flyout
               ref={flyoutPanelRef}
               aria-hidden={!ui.activeTab}
               inert={!ui.activeTab}
               className={
-                "analyser-scroll fixed right-[416px] top-0 z-[55] h-screen w-[360px] overflow-y-auto " +
-                "bg-black/85 backdrop-blur-xl border-l border-r border-white/10 text-white text-[12px] " +
-                "transition-transform duration-300 ease-out " +
+                "analyser-scroll fixed overflow-y-auto bg-black/85 backdrop-blur-xl text-white text-[12px] " +
+                (isMobile
+                  ? "inset-0 z-[105] h-screen w-full border-white/10 "
+                  : "right-[416px] top-0 z-[55] h-screen w-[360px] border-l border-r border-white/10 ") +
+                "transition-all duration-300 ease-out " +
                 (ui.activeTab && flyoutVisible
-                  ? "translate-x-0 opacity-100"
-                  : "translate-x-[420px] opacity-0 pointer-events-none")
+                  ? "translate-x-0 translate-y-0 opacity-100"
+                  : (isMobile ? "translate-y-6" : "translate-x-[420px]") +
+                    " opacity-0 pointer-events-none")
               }
             >
-              <div className="p-4 pb-12 space-y-4">
+              <div className={`p-4 space-y-4 ${isMobile ? "pb-24" : "pb-12"}`}>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/70">
                     {ui.activeTab === "audio"
@@ -454,7 +432,9 @@ export function ControlPanel() {
                         ? "Scene"
                         : ui.activeTab === "post"
                           ? "Post FX"
-                          : ""}
+                          : ui.activeTab === "saves"
+                            ? "Saves"
+                            : ""}
                   </span>
                   <button
                     onClick={closeFlyout}
@@ -635,6 +615,21 @@ export function ControlPanel() {
 
                 {ui.activeTab === "post" && (
                   <div className="space-y-3">
+                    {s.performance && (
+                      <div className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2.5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-amber-200/90">
+                          Performance Mode is bypassing all post FX
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <p className="font-mono text-[9px] leading-relaxed text-amber-200/60">
+                            Nothing below has any effect while it's on (Scene tab).
+                          </p>
+                          <Bn variant="outline" onClick={() => set({ performance: false })}>
+                            Turn off
+                          </Bn>
+                        </div>
+                      </div>
+                    )}
                     <ToggleRow
                       label="Post FX pipeline"
                       enabled={s.postFxEnabled}
@@ -673,166 +668,10 @@ export function ControlPanel() {
                       </div>
                     </Row>
 
-                    <div className="rounded-md border border-white/10 bg-white/[0.03]">
-                      <button
-                        onClick={() => updateUi({ slotsOpen: !ui.slotsOpen })}
-                        className="flex w-full items-center justify-between px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-white/60 hover:text-white"
-                      >
-                        <span>My presets (saved locally)</span>
-                        <ChevronDown
-                          className={`h-3.5 w-3.5 transition-transform ${ui.slotsOpen ? "rotate-180" : ""}`}
-                        />
-                      </button>
-                      {ui.slotsOpen && (
-                        <div className="space-y-3 border-t border-white/10 p-3">
-                          <div className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/[0.02] px-3 py-3">
-                            <div>
-                              <Label className="text-[11px]">Saved presets</Label>
-                              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
-                                {slots.length} saved locally
-                              </div>
-                            </div>
-                            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
-                              Focus a save, then play, step, random, save, add, or delete.
-                            </div>
-                          </div>
-
-                          <div className="rounded-md border border-white/10 bg-black/20 p-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <select
-                                value={hasSavedPresets ? String(activeSaveIndex) : ""}
-                                onChange={(e) => setSelectedSaveIndex(Number(e.target.value))}
-                                disabled={!hasSavedPresets}
-                                aria-label="Focused save"
-                                className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[12px] text-white outline-none transition-colors hover:border-white/20 focus:border-emerald-400/50 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                {hasSavedPresets ? (
-                                  slots.map((slot, index) => (
-                                    <option key={`${slot.name}-${index}`} value={index}>
-                                      {index + 1}. {slot.name}
-                                    </option>
-                                  ))
-                                ) : (
-                                  <option value="">No saved presets yet</option>
-                                )}
-                              </select>
-                              <Bn
-                                variant="primary"
-                                className="h-9 px-2"
-                                onClick={loadFocusedPreset}
-                                disabled={!hasSavedPresets}
-                                title="Load focused save"
-                                aria-label="Load focused save"
-                              >
-                                <Play className="h-4 w-4" />
-                                <span>Load</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={() => stepSavedPreset(-1)}
-                                disabled={!hasSavedPresets}
-                                title="Focus previous save"
-                                aria-label="Focus previous save"
-                              >
-                                <SkipBack className="h-4 w-4" />
-                                <span>Prev</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={() => stepSavedPreset(1)}
-                                disabled={!hasSavedPresets}
-                                title="Focus next save"
-                                aria-label="Focus next save"
-                              >
-                                <SkipForward className="h-4 w-4" />
-                                <span>Next</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={loadRandomSavedPreset}
-                                disabled={!hasSavedPresets}
-                                title="Focus random save"
-                                aria-label="Focus random save"
-                              >
-                                <Shuffle className="h-4 w-4" />
-                                <span>Random</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={saveFocusedPreset}
-                                title={
-                                  hasSavedPresets
-                                    ? "Overwrite focused save"
-                                    : "Save current as first save"
-                                }
-                                aria-label={
-                                  hasSavedPresets
-                                    ? "Overwrite focused save"
-                                    : "Save current as first save"
-                                }
-                              >
-                                <Save className="h-4 w-4" />
-                                <span>Save</span>
-                              </Bn>
-                              <Bn
-                                variant="default"
-                                className="h-9 px-2"
-                                onClick={saveCurrentPreset}
-                                title="Add new save"
-                                aria-label="Add new save"
-                              >
-                                <Plus className="h-4 w-4" />
-                                <span>Add</span>
-                              </Bn>
-                              <Bn
-                                variant="ghost"
-                                className="h-9 px-2"
-                                onClick={deleteSavedPreset}
-                                disabled={!hasSavedPresets}
-                                title="Delete focused save"
-                                aria-label="Delete focused save"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span>Delete</span>
-                              </Bn>
-                            </div>
-                            <div className="mt-2 flex items-center justify-between gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
-                              <span>
-                                {hasSavedPresets
-                                  ? `Focused: ${activeSaveIndex + 1}. ${slots[activeSaveIndex]?.name ?? "Save"}`
-                                  : "Save current setup to start your list."}
-                              </span>
-                              <span>
-                                Play loads. Skip or shuffle changes focus. Save updates focused.
-                              </span>
-                            </div>
-                          </div>
-
-                          <ToggleRow
-                            label="Cycle saves (auto-load each preset)"
-                            enabled={s.slotCycleMode}
-                            onToggle={(v) => set({ slotCycleMode: v })}
-                          >
-                            <S
-                              label="Seconds per slot"
-                              value={s.slotCycleSeconds}
-                              min={10}
-                              max={120}
-                              step={1}
-                              onChange={(v) => set({ slotCycleSeconds: v })}
-                            />
-                            <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                              Turning on loads the first saved preset immediately, then advances in
-                              list order.
-                            </p>
-                          </ToggleRow>
-                        </div>
-                      )}
-                    </div>
+                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                      Looking for your saved looks? They moved to the Saves tab so they're easier to
+                      find.
+                    </p>
 
                     <ToggleRow label="Bloom" enabled={s.bloom} onToggle={(v) => set({ bloom: v })}>
                       <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-2 py-2">
@@ -963,6 +802,14 @@ export function ControlPanel() {
                       enabled={s.glitch}
                       onToggle={(v) => set({ glitch: v })}
                     >
+                      <S
+                        label="Intensity"
+                        value={s.glitchIntensity}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={(v) => set({ glitchIntensity: v })}
+                      />
                       <div className="flex items-center justify-between">
                         <Label className="text-xs">Wild mode</Label>
                         <Sw
@@ -1113,116 +960,118 @@ export function ControlPanel() {
                         onChange={(v) => set({ tiltAmount: v })}
                       />
                     </ToggleRow>
-                    <ToggleRow
-                      label="Kaleidoscope"
-                      enabled={s.kaleidoscope}
-                      onToggle={(v) => set({ kaleidoscope: v })}
-                    >
-                      <S
-                        label="Sides"
-                        value={s.kaleidoscopeSides}
-                        min={2}
-                        max={24}
-                        step={1}
-                        onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
-                      />
-                      <S
-                        label="Angle"
-                        value={s.kaleidoscopeAngle}
-                        min={-3.14}
-                        max={3.14}
-                        step={0.01}
-                        onChange={(v) => set({ kaleidoscopeAngle: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Mirror"
-                      enabled={s.mirrorFx}
-                      onToggle={(v) => set({ mirrorFx: v })}
-                    >
-                      <div className="grid grid-cols-3 gap-2">
-                        {(
-                          [
-                            ["horizontal", "Horizontal"],
-                            ["vertical", "Vertical"],
-                            ["quad", "Quad"],
-                          ] as const
-                        ).map(([mode, label]) => (
-                          <Bn
-                            key={mode}
-                            active={s.mirrorMode === mode}
-                            variant={s.mirrorMode === mode ? "default" : "outline"}
-                            onClick={() => set({ mirrorMode: mode })}
-                          >
-                            {label}
-                          </Bn>
-                        ))}
-                      </div>
-                      <S
-                        label="Offset"
-                        value={s.mirrorOffset}
-                        min={-0.45}
-                        max={0.45}
-                        step={0.01}
-                        onChange={(v) => set({ mirrorOffset: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow label="CRT" enabled={s.crtFx} onToggle={(v) => set({ crtFx: v })}>
-                      <S
-                        label="Scanlines"
-                        value={s.crtScanlineIntensity}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ crtScanlineIntensity: v })}
-                      />
-                      <S
-                        label="Curvature"
-                        value={s.crtCurvature}
-                        min={0}
-                        max={0.1}
-                        step={0.01}
-                        onChange={(v) => set({ crtCurvature: v })}
-                      />
-                      <S
-                        label="Vignette"
-                        value={s.crtVignette}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ crtVignette: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Projector film"
-                      enabled={s.projectorFilmFx}
-                      onToggle={(v) => set({ projectorFilmFx: v })}
-                    >
-                      <S
-                        label="Artifact amount"
-                        value={s.projectorFilmAmount}
-                        min={0}
-                        max={1.5}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmAmount: v })}
-                      />
-                      <S
-                        label="Frame jitter"
-                        value={s.projectorFilmJitter}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmJitter: v })}
-                      />
-                      <S
-                        label="Lamp flicker"
-                        value={s.projectorFilmFlicker}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmFlicker: v })}
-                      />
-                    </ToggleRow>
+                    <Disclosure label="Retro / novelty FX (kaleidoscope, mirror, CRT, projector film)">
+                      <ToggleRow
+                        label="Kaleidoscope"
+                        enabled={s.kaleidoscope}
+                        onToggle={(v) => set({ kaleidoscope: v })}
+                      >
+                        <S
+                          label="Sides"
+                          value={s.kaleidoscopeSides}
+                          min={2}
+                          max={24}
+                          step={1}
+                          onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
+                        />
+                        <S
+                          label="Angle"
+                          value={s.kaleidoscopeAngle}
+                          min={-3.14}
+                          max={3.14}
+                          step={0.01}
+                          onChange={(v) => set({ kaleidoscopeAngle: v })}
+                        />
+                      </ToggleRow>
+                      <ToggleRow
+                        label="Mirror"
+                        enabled={s.mirrorFx}
+                        onToggle={(v) => set({ mirrorFx: v })}
+                      >
+                        <div className="grid grid-cols-3 gap-2">
+                          {(
+                            [
+                              ["horizontal", "Horizontal"],
+                              ["vertical", "Vertical"],
+                              ["quad", "Quad"],
+                            ] as const
+                          ).map(([mode, label]) => (
+                            <Bn
+                              key={mode}
+                              active={s.mirrorMode === mode}
+                              variant={s.mirrorMode === mode ? "default" : "outline"}
+                              onClick={() => set({ mirrorMode: mode })}
+                            >
+                              {label}
+                            </Bn>
+                          ))}
+                        </div>
+                        <S
+                          label="Offset"
+                          value={s.mirrorOffset}
+                          min={-0.45}
+                          max={0.45}
+                          step={0.01}
+                          onChange={(v) => set({ mirrorOffset: v })}
+                        />
+                      </ToggleRow>
+                      <ToggleRow label="CRT" enabled={s.crtFx} onToggle={(v) => set({ crtFx: v })}>
+                        <S
+                          label="Scanlines"
+                          value={s.crtScanlineIntensity}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ crtScanlineIntensity: v })}
+                        />
+                        <S
+                          label="Curvature"
+                          value={s.crtCurvature}
+                          min={0}
+                          max={0.1}
+                          step={0.01}
+                          onChange={(v) => set({ crtCurvature: v })}
+                        />
+                        <S
+                          label="Vignette"
+                          value={s.crtVignette}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ crtVignette: v })}
+                        />
+                      </ToggleRow>
+                      <ToggleRow
+                        label="Projector film"
+                        enabled={s.projectorFilmFx}
+                        onToggle={(v) => set({ projectorFilmFx: v })}
+                      >
+                        <S
+                          label="Artifact amount"
+                          value={s.projectorFilmAmount}
+                          min={0}
+                          max={1.5}
+                          step={0.01}
+                          onChange={(v) => set({ projectorFilmAmount: v })}
+                        />
+                        <S
+                          label="Frame jitter"
+                          value={s.projectorFilmJitter}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ projectorFilmJitter: v })}
+                        />
+                        <S
+                          label="Lamp flicker"
+                          value={s.projectorFilmFlicker}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          onChange={(v) => set({ projectorFilmFlicker: v })}
+                        />
+                      </ToggleRow>
+                    </Disclosure>
                     <ToggleRow
                       label="Color grading"
                       enabled={s.grading}
@@ -1312,6 +1161,148 @@ export function ControlPanel() {
                         step={0.05}
                         onChange={(v) => set({ assetOverlaySpeed: v })}
                       />
+                    </ToggleRow>
+                  </div>
+                )}
+
+                {ui.activeTab === "saves" && (
+                  <div className="space-y-3">
+                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                      Captures every setting — view, post FX, and audio — as one saved look. Loaded
+                      and saved from here, the shortcut bar, or number keys 1–5 all share the same
+                      list.
+                    </p>
+                    <Row label="Save current setup">
+                      <div className="flex flex-wrap gap-1.5">
+                        <Bn variant="primary" onClick={() => preset.saveNew()}>
+                          <Plus className="mr-1 h-3.5 w-3.5" /> New save
+                        </Bn>
+                        <Bn
+                          variant="default"
+                          onClick={() => preset.saveFocused()}
+                          disabled={!preset.hasPresets}
+                        >
+                          <Save className="mr-1 h-3.5 w-3.5" /> Overwrite focused
+                        </Bn>
+                      </div>
+                    </Row>
+                    <Row label={`Saved locally (${preset.slots.length})`}>
+                      {preset.hasPresets ? (
+                        <div className="space-y-1.5">
+                          {preset.slots.map((slot, index) => {
+                            const isFocused = index === preset.activeIndex;
+                            return (
+                              <div
+                                key={`${slot.name}-${index}`}
+                                className={`flex items-center gap-2 rounded-md border px-2 py-1.5 transition-colors ${
+                                  isFocused
+                                    ? "border-emerald-300/40 bg-emerald-300/[0.07]"
+                                    : "border-white/10 bg-white/[0.02]"
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => preset.focus(index)}
+                                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                  aria-label={`Focus ${slot.name}`}
+                                  aria-pressed={isFocused}
+                                >
+                                  <span className="shrink-0 font-mono text-[9px] text-white/35">
+                                    {index + 1}
+                                  </span>
+                                  <span className="truncate text-[12px] text-white/85">
+                                    {slot.name}
+                                  </span>
+                                  {isFocused && (
+                                    <span className="shrink-0 rounded border border-emerald-300/30 bg-emerald-300/10 px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider text-emerald-200/90">
+                                      Focused
+                                    </span>
+                                  )}
+                                </button>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <Bn
+                                    variant="ghost"
+                                    className="h-7 px-1.5"
+                                    onClick={() => preset.loadAt(index)}
+                                    title={`Load ${slot.name}`}
+                                    aria-label={`Load ${slot.name}`}
+                                  >
+                                    <Play className="h-3.5 w-3.5" />
+                                  </Bn>
+                                  <Bn
+                                    variant="ghost"
+                                    className="h-7 px-1.5"
+                                    onClick={() => preset.saveAt(index, slot.name)}
+                                    title={`Overwrite ${slot.name}`}
+                                    aria-label={`Overwrite ${slot.name}`}
+                                  >
+                                    <Save className="h-3.5 w-3.5" />
+                                  </Bn>
+                                  <Bn
+                                    variant="ghost"
+                                    className="h-7 px-1.5"
+                                    onClick={() => preset.deleteAt(index)}
+                                    title={`Delete ${slot.name}`}
+                                    aria-label={`Delete ${slot.name}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Bn>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                          No saves yet — capture your current setup above, or press{" "}
+                          <span className="text-white/50">⇧1</span>–
+                          <span className="text-white/50">⇧5</span> to save to a numbered slot.
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <Bn
+                          variant="default"
+                          className="h-8 px-2"
+                          onClick={() => preset.step(-1)}
+                          disabled={!preset.hasPresets}
+                        >
+                          <SkipBack className="mr-1 h-3.5 w-3.5" /> Focus prev
+                        </Bn>
+                        <Bn
+                          variant="default"
+                          className="h-8 px-2"
+                          onClick={() => preset.step(1)}
+                          disabled={!preset.hasPresets}
+                        >
+                          <SkipForward className="mr-1 h-3.5 w-3.5" /> Focus next
+                        </Bn>
+                        <Bn
+                          variant="default"
+                          className="h-8 px-2"
+                          onClick={() => preset.random()}
+                          disabled={!preset.hasPresets}
+                        >
+                          <Shuffle className="mr-1 h-3.5 w-3.5" /> Focus random
+                        </Bn>
+                      </div>
+                    </Row>
+                    <ToggleRow
+                      label="Cycle saves (auto-load each preset)"
+                      enabled={s.slotCycleMode}
+                      onToggle={(v) => set({ slotCycleMode: v })}
+                    >
+                      <S
+                        label="Seconds per slot"
+                        value={s.slotCycleSeconds}
+                        min={10}
+                        max={120}
+                        step={1}
+                        onChange={(v) => set({ slotCycleSeconds: v })}
+                      />
+                      <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                        Turning on loads the first saved preset immediately, then advances in list
+                        order.
+                      </p>
                     </ToggleRow>
                   </div>
                 )}

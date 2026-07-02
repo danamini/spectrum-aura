@@ -52,6 +52,9 @@ export class BeatMatcher {
     centroid: number,
     beatThreshold: number,
     now: number,
+    /** Last known BPM estimate, used to scale the refractory gap once confident. */
+    estimatedBpm = 0,
+    bpmConfident = false,
   ): BeatMatchResult {
     const bassDelta = bass - this.lastBass;
     const midDelta = mid - this.lastMid;
@@ -94,7 +97,15 @@ export class BeatMatcher {
     const adaptiveFloor = Math.max(0.12, longTerm * 0.78);
     const adaptiveThreshold = Math.max(adaptiveFloor * 1.05, bassAvg * beatThreshold);
 
-    const minGapMs = longTerm > 0.35 ? 160 : 180;
+    // Once a confident tempo is known, scale the refractory gap to ~35% of the beat
+    // period instead of the fixed 160/180ms guess, which was too tight for slow
+    // tempos (e.g. reggae/ballads) and too loose for fast ones (e.g. drum & bass).
+    const minGapMs =
+      bpmConfident && estimatedBpm > 0
+        ? Math.max(100, Math.min(220, (60000 / estimatedBpm) * 0.35))
+        : longTerm > 0.35
+          ? 160
+          : 180;
     const gapOk = now - this.lastBeat >= minGapMs;
 
     const bassSpike = bass > adaptiveThreshold && bass > adaptiveFloor && gapOk;

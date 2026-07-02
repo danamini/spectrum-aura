@@ -15,15 +15,21 @@ How frames flow from audio read to pixels, and where delay accumulates.
 requestAnimationFrame(desktopLoop)
   ├─ audio.read(beatSensitivity, now)     // FFT + detectors
   ├─ songClock.tick({ now, estimated… })   // authoritative bar phase
-  ├─ bandsForScene = { …bands, beatPhase, bpm: clockBpm }
+  ├─ Object.assign(bandsForScene, bands)   // pooled — mutated, not re-allocated
   ├─ viewCycleController.tick(…)
   ├─ setLiveTempoFrame(…)                  // HUD @ engine rate
+  ├─ viewEvolutionEngine.tick(…)           // Dynamic Mode drift (when enabled)
   ├─ scene.update(dt, t, bandsForScene)
   ├─ composer.render(dt) OR renderer.render()
   └─ stats / latency HUD commits (throttled)
 ```
 
 `now` is `performance.now()` from rAF — used consistently for SongClock phase.
+
+**Allocation discipline:** the hot path is allocation-free — `bandsForScene`
+and `audio.read()`'s `AudioBands` output are pooled objects mutated in place
+every frame, not fresh literals. (`tempoFrame` is deliberately *not* pooled:
+it flows into a React `useState` that detects changes by reference identity.)
 
 ---
 
@@ -36,7 +42,33 @@ requestAnimationFrame(desktopLoop)
 | Post-FX chain      | 2–15 ms   | Bloom/glitch costly             |
 | **Total frame**    | < 16.7 ms | 60 FPS                          |
 
-Performance mode reduces pixel ratio and skips post-FX in XR.
+Performance mode reduces pixel ratio and skips the post-FX pipeline entirely
+(`usePostFx = postFxEnabled && !xr && !performance`) — the Post FX tab shows a
+warning banner while it's on. Loading a saved preset can never toggle it.
+
+### Automatic quality tiers
+
+`computeQualityTier(smoothedFps, currentTier)` in `engine/composer.ts`
+auto-degrades post-FX under **sustained** low FPS, with hysteresis so it never
+flaps and recovers one tier at a time:
+
+| Tier | Enters below | Recovers at | Effect                                                  |
+| ---- | ------------ | ----------- | ------------------------------------------------------- |
+| 1    | 40 fps       | ≥ 54 fps    | Disables SSAO + DoF only                                 |
+| 2    | 24 fps       | ≥ 48 fps    | Also SMAA, motion trails, film grain, asset overlay; caps bloom |
+
+Margins are deliberately generous so a 60Hz display's normal dips and
+transient jank (GC, shader warm-up) never silently switch effects off.
+Manual Performance Mode / XR force tier 2 regardless of FPS.
+
+### Audio-reactive post-FX
+
+Beyond the passes that were always reactive (SSAO, motion trails, radial
+blur, sobel, asset overlay): bloom strength breathes with bass
+(`base × (0.85 + 0.3·bass)`, re-clamped to the non-extreme ceiling), chroma
+shimmers on high-band transients (`min(0.03, amount × (0.8 + 1.4·high))`),
+and Glitch runs on a duty cycle — `glitchIntensity` (0–1) controls what
+fraction of each ~1 s window the pass actually renders.
 
 ---
 

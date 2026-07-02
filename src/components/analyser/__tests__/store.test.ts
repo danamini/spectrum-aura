@@ -248,6 +248,25 @@ describe("analyser store utility functions", () => {
     expect(state.projectorFilmFx).toBe(true);
   });
 
+  it("cycleRandomView presents the destination view in 3D even when its 2D flag is set", async () => {
+    const { settingsStore } = await import("../store");
+    const { VISUALS } = await import("../visuals");
+
+    // Simulate stale per-view 2D flags accumulated from browsing id -> id2d
+    // with the arrow keys — without clearing them, the auto-cycle appears to
+    // only ever show 2D views.
+    const allFullscreenTrue = Object.fromEntries(
+      VISUALS.filter((v) => v.fullscreenKey).map((v) => [v.fullscreenKey!, true]),
+    );
+    settingsStore.set({ ...allFullscreenTrue, viewCycleRandomize: false });
+
+    settingsStore.cycleRandomView();
+    const state = settingsStore.get();
+    const landed = VISUALS.find((v) => v.id === state.view);
+    expect(landed?.fullscreenKey).toBeDefined();
+    expect(state[landed!.fullscreenKey! as keyof typeof state]).toBe(false);
+  });
+
   it("reset restores default settings", async () => {
     const { settingsStore } = await import("../store");
 
@@ -285,5 +304,29 @@ describe("analyser store utility functions", () => {
     expect(state.barCount).toBe(100);
     // Vignette should be normalized even from loaded state
     expect(state.vignetteAmount).toBeLessThanOrEqual(1.25);
+  });
+
+  it("loading a save never toggles Performance Mode (machine-specific, bypasses post FX)", async () => {
+    const { settingsStore } = await import("../store");
+
+    // Save a look that (like a batch of old bundled defaults) carries
+    // performance: true baked in.
+    settingsStore.set({ performance: true, view: "classic" });
+    settingsStore.saveSlot(0, "Perf-tainted save");
+
+    settingsStore.set({ performance: false, view: "ripple" });
+    settingsStore.loadSlot(0);
+
+    expect(settingsStore.get().view).toBe("classic");
+    expect(settingsStore.get().performance).toBe(false);
+  });
+
+  it("ships no bundled default saves with performance mode on", async () => {
+    const defaultSaves = (await import("../default-saves.json")).default as Array<{
+      settings: { performance?: boolean };
+    }>;
+    for (const save of defaultSaves) {
+      expect(save.settings.performance).not.toBe(true);
+    }
   });
 });

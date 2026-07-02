@@ -1,6 +1,65 @@
 import { BEATS_PER_PHRASE, type BarTiming } from "./engine/bar-clock";
 import { useLiveTempoFrame } from "./engine/live-tempo";
 
+/**
+ * Visual "is it locked yet" cue: spins while the detector searches, with spin
+ * speed easing down as confidence climbs, then settles into a steady pulse on
+ * the live beat phase once locked. Shared by the overlay and Audio panel so
+ * both read the same lock state the same way.
+ */
+export function BpmLockIndicator({
+  bpm,
+  confidence,
+  locked,
+  beatPhase,
+  size = 28,
+}: {
+  bpm: number;
+  confidence: number;
+  locked: boolean;
+  beatPhase: number;
+  size?: number;
+}) {
+  const active = bpm > 0 && confidence > 0.05;
+  const searching = active && !locked;
+  // Fast/jittery while confidence is low, slows as the detector converges on a lock.
+  const spinDurationS = 1.6 - Math.min(1.3, confidence * 1.3);
+  const pulse = locked ? 0.55 + Math.sin(beatPhase * Math.PI * 2) * 0.45 : 0;
+
+  return (
+    <div
+      className="relative shrink-0"
+      style={{ width: size, height: size }}
+      role="img"
+      aria-label={locked ? "Beat locked" : searching ? "Searching for beat" : "No beat detected"}
+    >
+      <div
+        className="absolute inset-0 rounded-full border-2 border-white/10"
+        style={
+          locked
+            ? {
+                borderColor: `rgba(52, 211, 153, ${0.35 + pulse * 0.4})`,
+                boxShadow: `0 0 ${4 + pulse * 8}px rgba(52, 211, 153, ${0.25 + pulse * 0.35})`,
+              }
+            : undefined
+        }
+      />
+      {searching && (
+        <div
+          className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-300/80"
+          style={{ animation: `bpm-lock-search ${spinDurationS}s linear infinite` }}
+        />
+      )}
+      {locked && (
+        <div
+          className="absolute inset-[3px] rounded-full bg-emerald-300/80"
+          style={{ opacity: 0.25 + pulse * 0.55, transform: `scale(${0.7 + pulse * 0.3})` }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function ExperimentalBadge() {
   return (
     <span className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[6px] font-bold tracking-wider text-white/50">
@@ -108,11 +167,15 @@ export function BarTimingHud({ compact = false }: { compact?: boolean }) {
           style={{ width: `${Math.max(0, Math.min(100, timing.phrasePhase * 100))}%` }}
         />
       </div>
-      {!timing.synced && !timing.bpmLocked && (
-        <div className="mt-1.5 text-center font-mono text-[8px] uppercase tracking-[0.16em] text-amber-200/65">
-          Syncing grid… · tap T on beats
-        </div>
-      )}
+      {/* Kept mounted (invisible when synced) so the HUD height never changes. */}
+      <div
+        className={`mt-1.5 text-center font-mono text-[8px] uppercase tracking-[0.16em] text-amber-200/65 ${
+          timing.synced || timing.bpmLocked ? "invisible" : ""
+        }`}
+        aria-hidden={timing.synced || timing.bpmLocked}
+      >
+        Syncing grid… · tap T on beats
+      </div>
     </div>
   );
 }

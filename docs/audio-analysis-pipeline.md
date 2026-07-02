@@ -88,7 +88,15 @@ Rolling mean over 43 frames:
 \tau = \max\bigl(0.12,\; 0.78 \cdot (0.72\bar{b} + 0.28\bar{m})\bigr) \cdot \texttt{beatThreshold}
 \]
 
-Beat fires if bass spike **or** fusion onset passes threshold, with refractory period:
+Beat fires if bass spike **or** fusion onset passes threshold, with a refractory
+period. Once a confident tempo is known (`detect()` receives last frame's
+`estimatedBpm`/`bpmConfident` from `audio.ts`), the gap scales with the beat:
+
+\[
+\Delta t\_{\min} = \operatorname{clamp}\!\left(\frac{60000}{\text{BPM}} \cdot 0.35,\; 100,\; 220\right)\,\text{ms}
+\]
+
+falling back to the fixed pre-lock rule while tempo is unknown:
 
 \[
 \Delta t\_{\min} = \begin{cases} 160\,\text{ms} & \bar{b} > 0.35 \\ 180\,\text{ms} & \text{otherwise} \end{cases}
@@ -110,12 +118,16 @@ E_t = 0.68 b + 0.24 m + 0.08 h + 0.35 O_t
 
 Stored in an 8 s sliding window for peak picking.
 
-### Peak interval BPM
+### Peak interval BPM (with subdivision folding)
 
-Median inter-peak interval \(\tilde{\Delta t}\):
+Real music's peak stream mixes beat onsets with hi-hat subdivisions and
+syncopation, so the raw interval list has huge spread even at a rock-steady
+tempo. Before taking the median, every interval is folded into the seed
+median's octave (`< 0.72×median` doubles, `> 1.45×median` halves) so
+subdivisions count as *evidence for* the beat period instead of polluting it:
 
 \[
-\text{BPM}\_{\text{peak}} = \frac{60000}{\tilde{\Delta t}}
+\text{BPM}\_{\text{peak}} = \frac{60000}{\tilde{\Delta t}\_{\text{folded}}}
 \]
 
 Octave correction: double if \(<80\), halve if \(>180\), clamp \([60,200]\).
@@ -128,7 +140,11 @@ Resample envelope to 25 ms bins over 8 s. For each lag \(\ell\):
 R(\ell) = \frac{1}{C}\sum_i e[i]\,e[i-\ell]
 \]
 
-Pick \(\ell^\*\) with parabolic refinement. Convert lag → BPM.
+Pick \(\ell^\*\) with parabolic refinement. Convert lag → BPM. Runs **every
+analysis pass** (it sees through subdivision noise by operating on the whole
+envelope) — both as an estimate and as a cross-check: when the peak and
+autocorrelation estimates agree within 5%, confidence is floored at
+\(\min(0.85,\; 0.55 + 0.5\cdot\text{autoStrength})\).
 
 ### Blend and smooth
 
@@ -138,12 +154,34 @@ Pick \(\ell^\*\) with parabolic refinement. Convert lag → BPM.
 
 with \(\alpha \approx 0.08\) (adaptive).
 
-### Confidence from interval CV
+### Confidence
+
+CV is computed over **median-filtered** intervals (only those within
+\([0.72, 1.38]\times\) the median), scaled by how much of the raw evidence fits
+that dominant cluster:
 
 \[
-CV = \frac{\sigma*{\Delta t}}{\mu*{\Delta t}},\qquad
-\text{confidence} \approx \max(0, 1 - 3\cdot CV) + \text{bonuses}
+\text{confidence} = \operatorname{clamp}\bigl((1 - 3\cdot CV)(0.55 + 0.45\cdot f\_{\text{cluster}})\bigr) + \text{peak/auto bonuses}
 \]
+
+**Silence decay:** once combined band energy stays below an adaptive floor
+(\(\max(0.01,\; 0.2\cdot\bar{E}\_{\text{long}})\), relative to a slow-moving
+long-term average so it tracks the actual input level) for >1.2 s, confidence
+decays by \(0.85^{\,\text{silentMs}/250}\) — so a stale estimate doesn't read
+as "still locked" through silence or the gap between songs.
+
+### Lock / unlock criteria (`applyBpmLock`)
+
+- **Lock** when either fires with a valid candidate:
+  - `highConfidenceStreak >= 4` (confidence > 0.62 on 4 consecutive passes), or
+  - **stability lock**: 4 of the last 5 candidates within ±3.5% of each other
+    with confidence ≥ 0.3 — real music rarely sustains the streak, but the
+    estimate itself settles fast.
+- **While locked**: candidates within **4 BPM** blend into the lock
+  (97/3 EMA) and pin reported confidence ≥ 0.72; a clean 2x/0.5x octave match
+  (`isOctaveMismatch`, ±4%) corrects the lock in place after 6 consecutive
+  passes; anything else counts toward drift-reject.
+- **Unlock** only after 12 consecutive divergent passes with diff > **8 BPM**.
 
 ### Tap lock (`hintBeat`)
 
@@ -151,7 +189,9 @@ When user taps `T` ≥2 times:
 
 - `tapLocked = true` — BPM frozen to median tap interval
 - `phaseAnchorTime` set on each tap
-- Audio drift/unlock logic **disabled** until reset
+- Audio drift/unlock logic **disabled** while tap-locked. Two exits: `reset()`,
+  or `releaseManualLock()` — invoked when SongClock's stale re-acquisition
+  fires (no confirmed alignment for 6 s; see song-clock-and-sync.md).
 
 ### Beat phase (detector-only)
 

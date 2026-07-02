@@ -294,12 +294,20 @@ export function Shortcuts() {
         actionsRef.current.doRandomize();
         e.preventDefault();
         e.stopPropagation();
-      } else if (k === "b") {
+      } else if (k === "b" || (e.key === "ArrowLeft" && !e.shiftKey)) {
         actionsRef.current.doToggleView(-1);
         e.preventDefault();
         e.stopPropagation();
-      } else if (k === "v") {
+      } else if (k === "v" || (e.key === "ArrowRight" && !e.shiftKey)) {
         actionsRef.current.doToggleView(1);
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "ArrowLeft" && e.shiftKey) {
+        actionsRef.current.doCycleSave(-1);
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "ArrowRight" && e.shiftKey) {
+        actionsRef.current.doCycleSave(1);
         e.preventDefault();
         e.stopPropagation();
       } else if (k === "a") {
@@ -361,24 +369,28 @@ export function Shortcuts() {
   }, []);
 
   const prevVisualHint: Hint = {
-    key: "B",
+    key: "←",
     label: "Prev Visual",
     icon: <SkipBack />,
     tooltip: (
-      <TooltipBlock title="Prev Visual" hint="B" detail="Steps backward through the visual list." />
+      <TooltipBlock
+        title="Prev Visual"
+        hint="← or B"
+        detail="Steps backward through the visual list."
+      />
     ),
     onClick: () => {
       doToggleView(-1);
     },
   };
   const nextVisualHint: Hint = {
-    key: "V",
+    key: "→",
     label: "Next Visual",
     icon: <SkipForward />,
     tooltip: (
       <TooltipBlock
         title="Next Visual"
-        hint="V"
+        hint="→ or V"
         detail="Steps forward through the visual list and keeps the current mode in motion."
       />
     ),
@@ -577,7 +589,7 @@ export function Shortcuts() {
     tooltip: (
       <TooltipBlock
         title="Prev Save"
-        hint="["
+        hint="[ or ⇧←"
         detail="Loads the previous save in your current list."
       />
     ),
@@ -590,7 +602,11 @@ export function Shortcuts() {
     label: "Next Save",
     icon: <SkipForward />,
     tooltip: (
-      <TooltipBlock title="Next Save" hint="]" detail="Loads the next save in your current list." />
+      <TooltipBlock
+        title="Next Save"
+        hint="] or ⇧→"
+        detail="Loads the next save in your current list."
+      />
     ),
     onClick: () => {
       doCycleSave(1);
@@ -742,8 +758,8 @@ export function Shortcuts() {
                   3D: drag mouse to move camera
                 </div>
               )}
-              <div className="flex w-full flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 opacity-70 transition-opacity hover:opacity-100">
-                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex w-full flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100 active:opacity-100">
+                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)] [&::-webkit-scrollbar]:hidden">
                   <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
                     {xrActive && <Btn h={xrHint} />}
                     <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
@@ -773,7 +789,7 @@ export function Shortcuts() {
                     </div>
                   </div>
                 </div>
-                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)] [&::-webkit-scrollbar]:hidden">
                   <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
                     <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
                       <span className="rounded bg-white/8 px-2 py-0.5 font-mono text-[10px] tracking-wider text-emerald-200/80 select-none">
@@ -788,7 +804,7 @@ export function Shortcuts() {
                     </div>
                   </div>
                 </div>
-                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)] [&::-webkit-scrollbar]:hidden">
                   <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
                     <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
                       <Btn h={hints[1]!} />

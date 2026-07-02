@@ -10,8 +10,25 @@ import type { AudioBands } from "./audio";
 import type { SceneUpdateOpts } from "./scene-update-opts";
 import { settingsStore } from "../store";
 import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS, type ViewMode } from "../visuals";
+import { bipolarBand, normalizedBand } from "./loudness";
 
 const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
+
+/** Asset-flow GLB templates; the per-build shared-model roll indexes into this. */
+const ASSETFLOW_MODEL_PATHS = [
+  "assets/models/kenney/model-01.glb",
+  "assets/models/poly-pizza/model-02.glb",
+  "assets/models/quaternius/model-03.glb",
+  "assets/models/kenney/model-04.glb",
+  "assets/models/poly-pizza/model-05.glb",
+  "assets/models/quaternius/model-06.glb",
+  "assets/models/kenney/model-07.glb",
+  "assets/models/poly-pizza/model-08.glb",
+  "assets/models/kenney/model-09.glb",
+  "assets/models/poly-pizza/model-10.glb",
+  "assets/models/quaternius/model-11.glb",
+  "assets/models/kenney/model-12.glb",
+];
 
 export type Palette = [string, string, string];
 
@@ -235,6 +252,8 @@ export class Scene {
   private assetflowLight?: THREE.PointLight;
   private assetflowAssetsRequested = false;
   private assetflowBuildToken = 0;
+  /** Which model template all actors share this build — re-rolled per build. */
+  private assetflowModelChoice = 0;
   private assetflowModelScale = 1;
   private assetflowModelTemplates: Array<THREE.Object3D | undefined> = [];
 
@@ -878,7 +897,7 @@ export class Scene {
       const t = i / n;
       const idx = Math.floor(Math.pow(t, 1.6) * (bins.length * 0.7));
       const v = bins[idx] / 255;
-      const target = Math.pow(v, 1.3);
+      const target = normalizedBand(v);
       this.classicLevels[i] = Math.max(target, this.classicLevels[i] * 0.85);
 
       if (this.classicLevels[i] >= this.classicPeakLevels[i]) {
@@ -1027,8 +1046,8 @@ export class Scene {
       const v = bins[idx] ? bins[idx]! / 255 : 0;
       const shimmer = Math.sin(time * 3.2 + i * 0.013) * 0.25;
       arr[i * 3] = base[i * 3] + Math.sin(time * 0.8 + i * 0.021) * 0.06 * high;
-      arr[i * 3 + 1] = (v * 3.8 + shimmer) * (0.35 + high * 1.4) * amp;
-      arr[i * 3 + 2] = base[i * 3 + 2] + (v - 0.5) * 1.4 * high * amp;
+      arr[i * 3 + 1] = (normalizedBand(v) * 3.8 + shimmer) * (0.35 + high * 1.4) * amp;
+      arr[i * 3 + 2] = base[i * 3 + 2] + bipolarBand(v) * 1.4 * high * amp;
       if (colArr) {
         if (opts.datastreamUsePalette) {
           const c = this.colorAtInto(freqT, this.tmpColor).lerp(
@@ -1135,7 +1154,7 @@ export class Scene {
   ) {
     if (!this.nebula || !this.nebulaMat) return;
     const amp = Math.max(0.05, opts.nebulaAmplitude);
-    const avgFrequency = (audio.bass + audio.mid + audio.high) / 3;
+    const avgFrequency = normalizedBand((audio.bass + audio.mid + audio.high) / 3);
     this.nebula.rotation.y += dt * (0.08 + avgFrequency * 0.4) * (0.4 + amp * 0.6);
     this.nebula.rotation.x += dt * 0.04 * (0.4 + amp * 0.6);
     this.nebulaMat.uniforms.uTime.value = time;
@@ -1230,7 +1249,7 @@ export class Scene {
         const i = z * size + x;
         const freqT = this.monolithCount <= 1 ? 0 : i / (this.monolithCount - 1);
         const bin = bins[Math.floor(freqT * activeBinCount)] ?? 0;
-        const target = 0.2 + Math.pow(bin / 255, 1.5) * 15 * amp;
+        const target = 0.2 + normalizedBand(bin / 255) * 15 * amp;
         const current = this.monolithHeights[i] ?? 0;
         const next = target > current ? target : Math.max(0.2, current - this.monolithGravity * dt);
         this.monolithHeights[i] = next;
@@ -1367,11 +1386,11 @@ export class Scene {
         const binStart = Math.floor(((i * P + p) / (R * P)) * activeBinCount);
         const v = bins[binStart] ? bins[binStart]! / 255 : 0;
         const t = P <= 1 ? 0 : p / (P - 1);
-        const radius = 1.3 + t * 5.3 + v * 1.8 * amp;
+        const radius = 1.3 + t * 5.3 + normalizedBand(v) * 1.8 * amp;
         const angle = (i / R) * Math.PI * 2 + Math.sin(time * 0.7 + p * 0.3) * 0.08;
         r.points[p]!.set(
           Math.cos(angle) * radius,
-          (t - 0.5) * 1.5 + (v - 0.5) * 1.4 * amp,
+          (t - 0.5) * 1.5 + bipolarBand(v) * 1.4 * amp,
           Math.sin(angle) * radius,
         );
       }
@@ -1455,7 +1474,7 @@ export class Scene {
     for (let c = 0; c < cols; c++) {
       const idx = Math.floor((c / cols) * activeBinCount);
       const v = bins[idx] ? bins[idx]! / 255 : 0;
-      this.terrainHistory[c] = Math.pow(v, 1.25) * 3.6 * amp;
+      this.terrainHistory[c] = normalizedBand(v) * 3.6 * amp;
     }
     const pos = this.terrainGeo.attributes.position as THREE.BufferAttribute;
     for (let r = 0; r < rows; r++) {
@@ -1601,16 +1620,17 @@ export class Scene {
     const bass = Math.max(0, Math.min(1, audio.bass));
     const high = Math.max(0, Math.min(1, audio.high));
     const mid = Math.max(0, Math.min(1, audio.mid));
+    const bassShaped = normalizedBand(bass);
     const bins = audio.bins;
     const n = this.obsidianShards.length;
 
     // Explosion distance driven by sub-bass
-    const explodeDist = bass * 3.0 * amp;
+    const explodeDist = bassShaped * 3.0 * amp;
 
     // Core brightness — peaks on transient (beat)
     const peakFlare = audio.beat ? 1 : 0;
     if (this.obsidianCore) {
-      const targetIntensity = (1.5 + bass * 8 + peakFlare * 12) * amp;
+      const targetIntensity = (1.5 + bassShaped * 8 + peakFlare * 12) * amp;
       this.obsidianCore.intensity +=
         (targetIntensity - this.obsidianCore.intensity) * Math.min(1, dt * 10);
       this.obsidianCore.color.copy(
@@ -1623,7 +1643,7 @@ export class Scene {
       // frequency bin for this shard
       const freqT = n <= 1 ? 0 : i / (n - 1);
       const binIdx = Math.floor(freqT * Math.max(1, Math.floor(bins.length * 0.75)));
-      const binVal = (bins[binIdx] ?? 0) / 255;
+      const binVal = normalizedBand((bins[binIdx] ?? 0) / 255);
 
       // Explode outward
       const dir = s.basePos.clone().normalize();
@@ -1637,8 +1657,8 @@ export class Scene {
       // Material — deep obsidian with palette-tinted emissive edge glow
       if (opts.obsidianUsePalette) {
         const c = this.colorAtInto(freqT, this.tmpColor);
-        s.mat.emissive.copy(c).lerp(this.white, 0.1 + bass * 0.15);
-        s.mat.emissiveIntensity = (0.3 + binVal * 1.6 + bass * 0.8) * amp;
+        s.mat.emissive.copy(c).lerp(this.white, 0.1 + bassShaped * 0.15);
+        s.mat.emissiveIntensity = (0.3 + binVal * 1.6 + bassShaped * 0.8) * amp;
       } else {
         s.mat.emissive.set(0x3a3aaa);
         s.mat.emissiveIntensity = 0.2 + binVal * 0.8;
@@ -1650,7 +1670,7 @@ export class Scene {
       const floorMat = this.obsidianFloor.material as THREE.MeshStandardMaterial;
       floorMat.roughness = Math.max(0.02, 0.15 - bass * 0.13);
       if (opts.obsidianUsePalette) {
-        floorMat.emissive.copy(this.paletteThree[0]).multiplyScalar(bass * 0.3 * amp);
+        floorMat.emissive.copy(this.paletteThree[0]).multiplyScalar(bassShaped * 0.3 * amp);
       }
     }
 
@@ -2025,7 +2045,7 @@ export class Scene {
     for (let c = 0; c < C; c++) {
       const idx = Math.floor((c / C) * activeBins);
       const v = (bins[idx] ?? 0) / 255;
-      this.soundwallHistory[c] = Math.pow(v, 1.2) * 12 * amp;
+      this.soundwallHistory[c] = normalizedBand(v) * 12 * amp;
     }
 
     // Strobe light: flash on bass transients
@@ -2221,7 +2241,7 @@ export class Scene {
       const s = this.geoNebulaMeshes[i]!;
       const freqT = N <= 1 ? 0 : i / (N - 1);
       const binIdx = Math.floor(freqT * activeBins);
-      const binVal = (bins[binIdx] ?? 0) / 255;
+      const binVal = normalizedBand((bins[binIdx] ?? 0) / 255);
 
       // Scale pulse to assigned frequency
       const targetScale = s.baseScale * (1 + binVal * 2.1 * amp + bass * 0.35);
@@ -2393,7 +2413,7 @@ export class Scene {
       // Frequency bin: map ring index → spectrum (so ring 0 = bass, ring N-1 = mid-high)
       const spectralT = r / RINGS;
       const binIdx = Math.min(bins.length - 1, Math.floor(spectralT * bins.length * 0.65));
-      const binVal = Math.max(0, Math.min(1, (bins[binIdx] ?? 0) / 255));
+      const binVal = normalizedBand(Math.max(0, Math.min(1, (bins[binIdx] ?? 0) / 255)));
 
       // Radius pulses with the bin's energy + bass at close range
       const radiusMod = 1.0 + binVal * 0.7 * amp + audio.bass * 0.35 * amp * Math.pow(proximity, 2);
@@ -3274,7 +3294,7 @@ export class Scene {
         const bpmRotation =
           audio.bpm > 0 && audio.bpmConfidence > 0.3 ? bpmPhase * Math.PI * 2 * 0.3 : 0;
         const rotatedAngle = angle + bpmRotation;
-        const h = 0.2 + Math.pow(v, 1.4) * 6 * hScale;
+        const h = 0.2 + normalizedBand(v) * 6 * hScale;
         this.dummy.position.set(
           Math.cos(rotatedAngle) * radius,
           0,
@@ -3876,7 +3896,7 @@ export class Scene {
     const baseThickness = 0.08;
     const amplitude =
       ((maxRadius * 0.32 * (baseThickness / 0.08)) / yScale) *
-      (0.8 + audio.bass * 1.3) *
+      (0.8 + normalizedBand(audio.bass) * 1.3) *
       Math.max(0.05, opts.rippleAmplitude);
     const waveCycles = opts.rippleWaveCycles + audio.mid * 1.0;
 
@@ -3896,7 +3916,9 @@ export class Scene {
         const ringSpectrum = this.rippleRingSpectrumInSlice(bins, t, c, C);
         const wavePhase = t * waveCycles * Math.PI * 2 - this.ripplePhases[c] * Math.PI * 2;
         const yWave =
-          Math.sin(wavePhase) * amplitude * (0.58 + sliceV * 0.85 + ringSpectrum * 0.55);
+          Math.sin(wavePhase) *
+          amplitude *
+          (0.58 + normalizedBand(sliceV) * 0.85 + normalizedBand(ringSpectrum) * 0.55);
         mesh.position.y = yWave;
 
         if (t < 0.5) _c.copy(colA).lerp(colB, t * 2);
@@ -3926,6 +3948,7 @@ export class Scene {
   private buildAssetflow() {
     this.assetflowBuildToken += 1;
     this.assetflowAssetsRequested = false;
+    this.assetflowModelChoice = Math.floor(Math.random() * ASSETFLOW_MODEL_PATHS.length);
     for (const actor of this.assetflowActors) {
       actor.placeholder.geometry.dispose();
       const placeholderMat = actor.placeholder.material;
@@ -4052,23 +4075,9 @@ export class Scene {
 
     const baseUrl = (import.meta.env.BASE_URL || "/").replace(/\/*$/, "/");
     const toPublicUrl = (path: string) => `${baseUrl}${path.replace(/^\/+/, "")}`;
-    const modelPaths = [
-      "assets/models/kenney/model-01.glb",
-      "assets/models/poly-pizza/model-02.glb",
-      "assets/models/quaternius/model-03.glb",
-      "assets/models/kenney/model-04.glb",
-      "assets/models/poly-pizza/model-05.glb",
-      "assets/models/quaternius/model-06.glb",
-      "assets/models/kenney/model-07.glb",
-      "assets/models/poly-pizza/model-08.glb",
-      "assets/models/kenney/model-09.glb",
-      "assets/models/poly-pizza/model-10.glb",
-      "assets/models/quaternius/model-11.glb",
-      "assets/models/kenney/model-12.glb",
-    ];
-    this.assetflowModelTemplates = new Array(modelPaths.length);
+    this.assetflowModelTemplates = new Array(ASSETFLOW_MODEL_PATHS.length);
     const gltfLoader = new GLTFLoader();
-    modelPaths.forEach((path, idx) => {
+    ASSETFLOW_MODEL_PATHS.forEach((path, idx) => {
       gltfLoader.load(
         toPublicUrl(path),
         (gltf) => {
@@ -4201,12 +4210,17 @@ export class Scene {
     );
     if (templates.length === 0) return;
 
+    // Every actor gets the *same* model — a dozen instances of one shape
+    // spinning reads as a cohesive formation, where one-of-each looked like a
+    // random pile of unrelated objects. Which shape is randomized per build
+    // (falling back to the first loaded template until the chosen one
+    // arrives), so revisiting the view still offers variety.
+    const template = this.assetflowModelTemplates[this.assetflowModelChoice] ?? templates[0]!;
     for (let i = 0; i < this.assetflowActors.length; i++) {
       const actor = this.assetflowActors[i]!;
       if (actor.model) {
         actor.root.remove(actor.model);
       }
-      const template = templates[i % templates.length]!;
       const model = this.cloneAssetflowModel(template);
       actor.model = model;
       actor.root.add(model);
@@ -4375,7 +4389,9 @@ export class Scene {
       const hasModel = Boolean(actor.model);
       actor.placeholder.visible = includeShapes || !hasModel;
       if (actor.model) actor.model.visible = true;
-      const bin = bins.length > 0 ? bins[Math.min(actor.bin, bins.length - 1)]! / 255 : 0;
+      const bin = normalizedBand(
+        bins.length > 0 ? bins[Math.min(actor.bin, bins.length - 1)]! / 255 : 0,
+      );
       const phase = time * actor.pathSpeed * globalPathSpeed * activity + actor.pathPhase;
       const radialBeat = 1 + beatPulse * 0.06 + audio.bass * 0.04;
       const pathRadius = spread * radialBeat;

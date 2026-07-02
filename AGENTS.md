@@ -71,7 +71,12 @@ Analyser.tsx (orchestrator)
 | BPM estimate           | `src/components/analyser/engine/bpm-detector.ts`                 |
 | Onsets                 | `src/components/analyser/engine/beat-matcher.ts`                 |
 | Audio read             | `src/components/analyser/engine/audio.ts`                        |
+| Scene / views          | `src/components/analyser/engine/scene.ts`                        |
+| Post-FX / quality tiers| `src/components/analyser/engine/composer.ts`                     |
+| Loudness curve         | `src/components/analyser/engine/loudness.ts`                     |
+| Dynamic Mode drift     | `src/components/analyser/engine/evolution.ts`                    |
 | View cycle             | `src/components/analyser/engine/view-cycle-controller.ts`        |
+| Visual registry        | `src/components/analyser/visuals.ts`                             |
 | HUD                    | `src/components/analyser/BarTimingHud.tsx`                       |
 | Live tempo bus         | `src/components/analyser/engine/live-tempo.ts`                   |
 | Latency metrics        | `src/components/analyser/engine/latency-metrics.ts`              |
@@ -98,8 +103,14 @@ npm run check       # typecheck + lint + test
 - `Analyser.regression.test.ts` — render-loop initialization order (`useAnalyserEngine`)
 - `ControlPanel.regression.test.ts` — ViewSettings delegation + per-view keys
 - `usePresetActions.test.ts` — preset cursor helpers + store integration
-- `song-clock.test.ts` — tap/auto modes, beat math
+- `song-clock.test.ts` — tap/auto modes, beat math, stale-tap re-acquisition
 - `latency-metrics.test.ts` — signal latency must not grow from stale timestamps
+- `bpm-detector.realistic.test.ts` — must lock on realistic (jittered, layered) music, not just pulse trains
+- `bpm-detector.test.ts` — lock/unlock/octave-correction, silence confidence decay
+- `loudness.test.ts` — shared amplitude curve all views route through
+- `evolution.test.ts` — Dynamic Mode drift stays bounded, phrase/wall-clock waypoints, wobble
+- `composer.test.ts` — auto quality-tier thresholds and hysteresis
+- `BarTimingHud.test.tsx` — BPM lock indicator states
 
 Shared harness: `engine/__tests__/helpers/song-clock.harness.ts`
 
@@ -107,17 +118,18 @@ Vitest config: `include: ["src/**/__tests__/**/*.{test,spec}.{ts,tsx}"]`
 
 ## Shortcuts (user-facing)
 
-| Key         | Action                           |
-| ----------- | -------------------------------- |
-| `T`         | Beat tap (manual sync)           |
-| `⇧T`        | Downbeat / phrase reset          |
-| `M`         | Toggle BPM & bar grid HUD        |
-| `L`         | Latency HUD                      |
-| `G`         | Hide/show shortcut bar           |
-| `C`         | Toggle music-reactive view cycle |
-| `N`         | Stats panel                      |
-| `R` `B` `V` | Randomize / prev / next visual   |
-| `S`         | Settings panel                   |
+| Key                | Action                                        |
+| ------------------ | --------------------------------------------- |
+| `T`                | Beat tap (manual sync)                        |
+| `⇧T`               | Downbeat / phrase reset                       |
+| `M`                | Toggle BPM & bar grid HUD                     |
+| `L`                | Latency HUD                                   |
+| `G`                | Hide/show shortcut bar                        |
+| `C`                | Toggle music-reactive view cycle               |
+| `N`                | Stats panel                                   |
+| `R` `←/B` `→/V`    | Randomize / prev / next visual (arrows primary, letters kept as aliases) |
+| `[` `⇧←` / `]` `⇧→` | Prev / next save (bracket primary, shift-arrow alias) |
+| `S`                | Settings panel                                |
 
 Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcuts.tsx` utility cluster.
 

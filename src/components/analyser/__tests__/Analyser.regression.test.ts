@@ -5,13 +5,15 @@ import { describe, expect, it } from "vitest";
 const ENGINE_HOOK = "src/components/analyser/hooks/useAnalyserEngine.ts";
 
 describe("Analyser engine render-loop regression", () => {
-  it("declares displayedView before composer reset key initialization", () => {
+  it("declares displayedView before composer reset key tracking state", () => {
     const source = readFileSync(join(process.cwd(), ENGINE_HOOK), "utf8");
 
     const displayedViewDecl = source.match(
       /let\s+displayedView\s*:\s*ViewMode\s*=\s*settingsRef\.current\.view\s*;/,
     );
-    const resetKeyInit = source.match(/let\s+lastComposerResetKey\s*=\s*`\$\{displayedView\}\|/);
+    const resetKeyInit = source.match(
+      /let\s+lastResetView\s*:\s*ViewMode\s*\|\s*null\s*=\s*null\s*;/,
+    );
 
     expect(displayedViewDecl).not.toBeNull();
     expect(resetKeyInit).not.toBeNull();

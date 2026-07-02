@@ -21,6 +21,11 @@ const MANUAL_AUDIO_ONSET = 0.06;
 const MANUAL_ALIGN_WINDOW = 0.22;
 const PHRASE_CHANGE_THRESHOLD = 0.14;
 const PHRASE_ONSET_MIN = 0.08;
+/** After this long without a confirmed alignment to the tapped tempo, drop the
+ * manual lock and let auto-detection try to reacquire from scratch. Covers both
+ * "audio went silent" and "audio kept playing but the tempo diverged" — either
+ * way, alignment checks would otherwise never succeed again on their own. */
+export const MANUAL_REACQUIRE_AFTER_MS = 6000;
 
 export type ClockSource = "idle" | "auto" | "manual";
 
@@ -86,6 +91,22 @@ function isValidBpm(bpm: number): boolean {
   return bpm >= AUTO_BPM_MIN && bpm <= AUTO_BPM_MAX;
 }
 
+const AUTO_BLEND_BASE_ALPHA = 0.03;
+const AUTO_BLEND_FAST_ALPHA = 0.25;
+const AUTO_BLEND_FAST_WINDOW_FRAMES = 30;
+
+/**
+ * Blend weight for the not-yet-locked auto-mode BPM estimate: converges faster
+ * right after entering auto mode (when clockBpm hasn't settled yet), easing down
+ * to the steady-state rate as the estimate stabilizes. `framesSinceAutoEntry` is
+ * 0 on the frame auto mode is entered.
+ */
+export function autoBpmBlendAlpha(framesSinceAutoEntry: number): number {
+  if (framesSinceAutoEntry >= AUTO_BLEND_FAST_WINDOW_FRAMES) return AUTO_BLEND_BASE_ALPHA;
+  const t = Math.max(0, framesSinceAutoEntry) / AUTO_BLEND_FAST_WINDOW_FRAMES;
+  return AUTO_BLEND_FAST_ALPHA + (AUTO_BLEND_BASE_ALPHA - AUTO_BLEND_FAST_ALPHA) * t;
+}
+
 function timingFromBeatFloat(
   beatFloat: number,
   source: ClockSource,
@@ -143,10 +164,13 @@ export class SongClock {
   private tapTimes: number[] = [];
   private lastTapMs = 0;
   private autoConfidenceStreak = 0;
+  private framesSinceAutoEntry = 0;
   private manualTapComplete = false;
   private downbeatLatch = false;
   private audioAlignStreak = 0;
   private lastAudioBeatMs = 0;
+  private lastAlignedAt = 0;
+  private manualReleasePending = false;
   private barSampleSum = { bass: 0, mid: 0, centroid: 0, n: 0 };
   private recentBars: BarSignature[] = [];
 
@@ -160,12 +184,27 @@ export class SongClock {
     this.tapTimes = [];
     this.lastTapMs = 0;
     this.autoConfidenceStreak = 0;
+    this.framesSinceAutoEntry = 0;
     this.manualTapComplete = false;
     this.downbeatLatch = false;
     this.audioAlignStreak = 0;
     this.lastAudioBeatMs = 0;
+    this.lastAlignedAt = 0;
+    this.manualReleasePending = false;
     this.barSampleSum = { bass: 0, mid: 0, centroid: 0, n: 0 };
     this.recentBars = [];
+  }
+
+  /**
+   * True once, the frame after a stale manual lock was dropped back to idle —
+   * lets the caller release the underlying BPMDetector's tap-lock too (SongClock
+   * doesn't hold a reference to it), so fresh auto-detection can actually
+   * contribute new estimates again. Edge-triggered: resets to false once read.
+   */
+  consumeManualReleaseSignal(): boolean {
+    if (!this.manualReleasePending) return false;
+    this.manualReleasePending = false;
+    return true;
   }
 
   getSource(): ClockSource {
@@ -198,6 +237,7 @@ export class SongClock {
     this.downbeatLatch = true;
     this.manualTapComplete = this.clockBpm > 0;
     this.audioAlignStreak = 0;
+    this.lastAlignedAt = now;
     this.barSampleSum = { bass: 0, mid: 0, centroid: 0, n: 0 };
     this.recentBars = [];
   }
@@ -238,6 +278,7 @@ export class SongClock {
     this.lastTotalBeats = Math.max(0, this.epochBeatNumber - 1);
     this.manualTapComplete = this.clockBpm > 0;
     this.audioAlignStreak = 0;
+    this.lastAlignedAt = now;
   }
 
   tick(input: SongClockTickInput): BarTiming {
@@ -280,10 +321,13 @@ export class SongClock {
           this.epochBeatNumber = 1;
           this.epochSet = true;
           this.lastTotalBeats = 0;
+          this.framesSinceAutoEntry = 0;
         }
       } else if (this.source === "auto") {
         if (!bpmLocked) {
-          this.clockBpm = this.clockBpm * 0.97 + estimatedBpm * 0.03;
+          const alpha = autoBpmBlendAlpha(this.framesSinceAutoEntry);
+          this.clockBpm = this.clockBpm * (1 - alpha) + estimatedBpm * alpha;
+          this.framesSinceAutoEntry += 1;
         } else {
           this.clockBpm = estimatedBpm;
         }
@@ -323,6 +367,22 @@ export class SongClock {
       centroid: number;
     },
   ): BarTiming {
+    if (
+      this.manualTapComplete &&
+      this.clockBpm > 0 &&
+      now - this.lastAlignedAt > MANUAL_REACQUIRE_AFTER_MS
+    ) {
+      // Nothing has confirmed this tempo in a while — could be silence, could be
+      // the track changing tempo. Either way, alignment checks against the stale
+      // tapped value will never succeed on their own, so drop back to idle and
+      // let normal auto-detection try to reacquire from scratch.
+      this.source = "idle";
+      this.manualTapComplete = false;
+      this.audioAlignStreak = 0;
+      this.manualReleasePending = true;
+      return { ...EMPTY_BAR_TIMING, bpmLocked: false };
+    }
+
     if (this.manualTapComplete && this.clockBpm > 0) {
       this.applyManualAudioAssist(now, audio);
     }
@@ -382,6 +442,7 @@ export class SongClock {
         this.clockBpm = this.clockBpm * 0.98 + audio.estimatedBpm * 0.02;
       }
       this.audioAlignStreak += 1;
+      this.lastAlignedAt = now;
       if (this.audioAlignStreak >= MANUAL_RELEASE_STREAK && audio.bpmConfidence > 0.68) {
         this.source = "auto";
         this.manualTapComplete = false;

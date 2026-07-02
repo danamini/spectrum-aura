@@ -1,12 +1,13 @@
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import * as THREE from "three";
 import { Scene } from "../engine/scene";
-import { Composer } from "../engine/composer";
+import { Composer, computeQualityTier } from "../engine/composer";
 import { AudioEngine } from "../engine/audio";
 import { ViewCycleController } from "../engine/view-cycle-controller";
 import { SongClock } from "../engine/song-clock";
 import { dispatchLiveTempo, setLiveTempoFrame } from "../engine/live-tempo";
 import { createSceneUpdateOpts, syncSceneUpdateOpts } from "../engine/scene-update-opts";
+import { ViewEvolutionEngine } from "../engine/evolution";
 import { measureFrameLatency, smoothLatency } from "../engine/latency-metrics";
 import {
   WEBXR_BACKGROUND_EVENT,
@@ -82,10 +83,16 @@ export function useAnalyserEngine(params: {
     rendererRef.current = renderer;
     sceneRef.current = scene;
     composerRef.current = composer;
+    // Deliberate dev-only inspection seam: lets devtools (and headless test
+    // drivers) examine live pass state — window.__composer.composer.passes etc.
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__composer = composer;
+    }
 
     const audio = new AudioEngine();
     audioRef.current = audio;
     const viewCycleController = new ViewCycleController();
+    const viewEvolutionEngine = new ViewEvolutionEngine();
 
     let raf = 0;
     let last = performance.now();
@@ -102,6 +109,34 @@ export function useAnalyserEngine(params: {
     const highHistory: number[] = [];
     let displayedView: ViewMode = settingsRef.current.view;
     const sceneOpts = createSceneUpdateOpts(displayedView);
+    // Pooled once and mutated every frame below so the hot path doesn't allocate a
+    // fresh object every rAF tick; `audio.read()` returns its own pooled `bands`
+    // object too, but we still need a distinct one here since bpm/beatPhase are
+    // overridden by the SongClock-authoritative values.
+    const bandsForScene = {
+      bass: 0,
+      mid: 0,
+      high: 0,
+      centroid: 0,
+      beat: false,
+      bpm: 0,
+      bpmConfidence: 0,
+      beatPhase: 0,
+      onsetStrength: 0,
+      signalSwing: false,
+      bpmLocked: false,
+      bins: new Uint8Array(0),
+      timing: {
+        readCpuMs: 0,
+        audioToRenderMs: 0,
+        baseLatencyMs: 0,
+        outputLatencyMs: 0,
+        fftWindowMs: 0,
+        bassDelta: 0,
+        signalChangeAt: 0,
+      },
+      fftReadAt: 0,
+    };
     const postFxReactive = {
       bass: 0,
       mid: 0,
@@ -112,6 +147,7 @@ export function useAnalyserEngine(params: {
       bpmConfidence: 0,
       pulse: 0,
       performance: false,
+      qualityTier: 0 as 0 | 1 | 2,
     };
     const mandalaPostFx = { ...settingsStore.get() };
     let lastPaletteIndex = settingsRef.current.paletteIndex;
@@ -126,8 +162,15 @@ export function useAnalyserEngine(params: {
     let lastOpacity = "";
     let lastStatsCommitAt = 0;
     let lastLiveTempoCommitAt = 0;
+    let reacquireFlashUntil = 0;
     let radialKickEnv = 0;
-    let lastComposerResetKey = `${displayedView}|${settingsRef.current.activePreset ?? ""}|${settingsRef.current.postFxEnabled ? 1 : 0}|${settingsRef.current.motionTrails ? 1 : 0}`;
+    // Tracked as discrete fields (not a template-string key) so the hot path doesn't
+    // allocate a new string every frame just to detect whether a composer reset is due.
+    let lastResetView: ViewMode | null = null;
+    let lastResetPreset: string | null | undefined = undefined;
+    let lastResetPostFx: boolean | undefined = undefined;
+    let lastResetMotionTrails: boolean | undefined = undefined;
+    let lastResetPerformance: boolean | undefined = undefined;
     let xrLoopActive = false;
     let xrBackgroundHidden = false;
 
@@ -350,13 +393,25 @@ export function useAnalyserEngine(params: {
         mid: bands.mid,
         centroid: bands.centroid,
       });
+      if (songClockRef.current.consumeManualReleaseSignal()) {
+        // Manual lock went stale (silence or the track's tempo diverged) —
+        // release the detector's tap-lock too so fresh candidates can flow
+        // again, and flash a message so it reads as "still working on it"
+        // rather than the visual just going quiet.
+        audio.releaseManualBpmLock();
+        beatHintFlashRef.current = "Re-syncing…";
+        reacquireFlashUntil = now + 2500;
+      } else if (reacquireFlashUntil > 0 && now >= reacquireFlashUntil) {
+        reacquireFlashUntil = 0;
+        if (beatHintFlashRef.current === "Re-syncing…") {
+          beatHintFlashRef.current = null;
+        }
+      }
       const clockBpm = barTimingFrame.clockBpm || bands.bpm;
       const clockBeatPhase = barTimingFrame.synced ? barTimingFrame.beatPhase : bands.beatPhase;
-      const bandsForScene = {
-        ...bands,
-        bpm: clockBpm,
-        beatPhase: clockBeatPhase,
-      };
+      Object.assign(bandsForScene, bands);
+      bandsForScene.bpm = clockBpm;
+      bandsForScene.beatPhase = clockBeatPhase;
       if (s.viewCycleMode) {
         const cycle = viewCycleController.tick({
           now,
@@ -390,13 +445,27 @@ export function useAnalyserEngine(params: {
         scene.setPalette(PALETTES[s.paletteIndex]?.colors ?? PALETTES[0].colors);
       }
       syncSceneUpdateOpts(sceneOpts, s, displayedView, xrRuntime.active, xrBackgroundHidden);
+      if (s.evolveEnabled) {
+        viewEvolutionEngine.tick(sceneOpts, displayedView, barTimingFrame, dt, s.evolveAmount);
+      } else {
+        viewEvolutionEngine.reset();
+      }
       scene.update(dt, t, bandsForScene, sceneOpts);
 
       renderer.info.reset();
-      const composerResetKey = `${displayedView}|${s.activePreset ?? ""}|${s.postFxEnabled ? 1 : 0}|${s.motionTrails ? 1 : 0}|${s.performance ? 1 : 0}`;
-      if (composerResetKey !== lastComposerResetKey) {
+      if (
+        displayedView !== lastResetView ||
+        s.activePreset !== lastResetPreset ||
+        s.postFxEnabled !== lastResetPostFx ||
+        s.motionTrails !== lastResetMotionTrails ||
+        s.performance !== lastResetPerformance
+      ) {
         composer.resetTemporalEffects();
-        lastComposerResetKey = composerResetKey;
+        lastResetView = displayedView;
+        lastResetPreset = s.activePreset;
+        lastResetPostFx = s.postFxEnabled;
+        lastResetMotionTrails = s.motionTrails;
+        lastResetPerformance = s.performance;
       }
       const tAfterScene = performance.now();
       const usePostFx = s.postFxEnabled && !xrRuntime.active && !s.performance;
@@ -422,6 +491,7 @@ export function useAnalyserEngine(params: {
         postFxReactive.bpmConfidence = bands.bpmConfidence;
         postFxReactive.pulse = bpmPulse;
         postFxReactive.performance = s.performance || xrRuntime.active;
+        postFxReactive.qualityTier = computeQualityTier(smoothedFps, postFxReactive.qualityTier);
         composer.apply(postFxSettings, postFxReactive);
         composer.render(dt);
       } else {
@@ -549,6 +619,9 @@ export function useAnalyserEngine(params: {
       composer.dispose();
       scene.dispose();
       renderer.dispose();
+      if (import.meta.env.DEV) {
+        delete (window as unknown as Record<string, unknown>).__composer;
+      }
       if (renderer.domElement.parentElement === container) {
         container.removeChild(renderer.domElement);
       }

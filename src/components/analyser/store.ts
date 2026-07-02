@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ViewMode } from "./visuals";
-import { VISUALS } from "./visuals";
+import { VISUALS, pickNextView } from "./visuals";
 import defaultSaves from "./default-saves.json";
 
 export type { ViewMode } from "./visuals";
@@ -183,6 +183,8 @@ export type Settings = {
   dofMaxBlur: number;
   glitch: boolean;
   glitchWild: boolean;
+  /** Duty-cycle fraction (0-1) of time the glitch pass actually renders while on. */
+  glitchIntensity: number;
   lensFlare: boolean;
   lensFlareAmount: number;
   godRays: boolean;
@@ -248,6 +250,13 @@ export type Settings = {
   viewCycleMode: boolean;
   /** When switching views via cycle, also randomize post FX (and view settings if enabled). */
   viewCycleRandomize: boolean;
+
+  /** "Dynamic Mode" — a curated set of impactful per-view settings slowly drift
+   * over musical time (phrases), as a bounded offset around the value below, not
+   * a replacement of it. See engine/evolution.ts. */
+  evolveEnabled: boolean;
+  /** Drift intensity, 0 (none) to 1 (full — up to ~40% of the base value). */
+  evolveAmount: number;
 
   // experimental features
   showBPM: boolean; // show BPM & bar grid in Audio panel
@@ -412,6 +421,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dofMaxBlur: 0.01,
   glitch: false,
   glitchWild: false,
+  glitchIntensity: 1,
   lensFlare: false,
   lensFlareAmount: 0.6,
   godRays: true,
@@ -469,6 +479,9 @@ export const DEFAULT_SETTINGS: Settings = {
 
   viewCycleMode: false,
   viewCycleRandomize: true,
+
+  evolveEnabled: false,
+  evolveAmount: 0.6,
 
   showBPM: true,
   showLatency: true,
@@ -840,6 +853,8 @@ function normalizePostFxRanges(settings: Settings): Settings {
     assetflowSpin: Math.max(0, Math.min(3, settings.assetflowSpin)),
     assetflowMovement: Math.max(0.35, Math.min(1.8, settings.assetflowMovement)),
     assetflowBackgroundDrift: Math.max(0, Math.min(3, settings.assetflowBackgroundDrift)),
+    glitchIntensity: Math.max(0, Math.min(1, settings.glitchIntensity)),
+    evolveAmount: Math.max(0, Math.min(1, settings.evolveAmount)),
   };
 }
 
@@ -1015,6 +1030,7 @@ export const settingsStore = {
       dofMaxBlur: r(0.002, 0.02),
       glitch: b(0.2),
       glitchWild: b(0.2),
+      glitchIntensity: r(0.25, 1),
       lensFlare: b(0.45),
       lensFlareAmount: r(0.2, 1.1),
       godRays: b(0.7),
@@ -1209,14 +1225,23 @@ export const settingsStore = {
     emit();
   },
   cycleRandomView: () => {
-    const current = state.view;
-    const ids = VISUALS.map((v) => v.id);
-    if (ids.length <= 1) return;
-    let next = current;
-    while (next === current) {
-      next = ids[Math.floor(Math.random() * ids.length)]!;
-    }
-    state = normalizeSettings({ ...state, view: next, activePreset: null });
+    if (VISUALS.length <= 1) return;
+    const next = pickNextView(state.view, VISUALS);
+    if (next === state.view) return;
+    // Present the destination in its canonical 3D form. Per-view 2D flags are
+    // persistent (set whenever you stop on a view's 2D variant while browsing
+    // with the arrow keys) and nothing else ever clears them — so without this,
+    // the auto-cycle appears to "only ever show 2D views" once enough flags
+    // have accumulated in a long-lived localStorage.
+    const fullscreenKey = VISUALS.find((v) => v.id === next)?.fullscreenKey as
+      | keyof Settings
+      | undefined;
+    state = normalizeSettings({
+      ...state,
+      view: next,
+      activePreset: null,
+      ...(fullscreenKey ? { [fullscreenKey]: false } : {}),
+    });
     emit();
     if (state.viewCycleRandomize) {
       settingsStore.randomize();
@@ -1254,6 +1279,12 @@ export const settingsStore = {
       ...merged,
       slotCycleMode: currentCycleMode,
       slotCycleSeconds: currentCycleSeconds,
+      // Performance Mode is a machine-specific tradeoff, not part of a saved
+      // "look" — and it hard-bypasses all post FX. Old saves (including a
+      // previous batch of bundled defaults) carried performance: true, so
+      // loading one silently killed post FX and persisted that across
+      // sessions. Saves can no longer toggle it.
+      performance: state.performance,
     });
     emit();
   },
@@ -1299,4 +1330,16 @@ export function useSlots(): SavedSlot[] {
 
 export function useSettings(): Settings {
   return useSyncExternalStore(settingsStore.subscribe, settingsStore.get, settingsStore.get);
+}
+
+// The settings store is a module-level singleton holding live state that the
+// render loop closes over. A hot update that re-evaluates this module splits
+// the world in two — the panel writes to a fresh store instance while the
+// running rAF loop keeps reading the old one, so toggles (post FX, etc.)
+// silently stop working until a manual refresh. Force a clean full reload
+// whenever a hot update reaches this module instead.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    window.location.reload();
+  });
 }

@@ -65,7 +65,7 @@ describe("ControlPanel decomposition regression", () => {
     expect(viewSettings).not.toMatch(/#ff2d95/);
   });
 
-  it("exports Sw/Bn/Row/ToggleRow/S from primitives", () => {
+  it("exports Sw/Bn/Row/ToggleRow/S/Disclosure from primitives", () => {
     const primitives = readFileSync(join(process.cwd(), PRIMITIVES), "utf8");
     for (const name of [
       "export function Sw",
@@ -73,9 +73,15 @@ describe("ControlPanel decomposition regression", () => {
       "export function Row",
       "export function ToggleRow",
       "export function S",
+      "export function Disclosure",
     ]) {
       expect(primitives).toContain(name);
     }
+  });
+
+  it("demotes retro/novelty post-FX (kaleidoscope, mirror, CRT, projector film) under a Disclosure", () => {
+    const panel = readFileSync(join(process.cwd(), CONTROL_PANEL), "utf8");
+    expect(panel).toMatch(/<Disclosure label="Retro \/ novelty FX/);
   });
 
   it("covers every visual mode in ViewSettings sliders or toggles", () => {

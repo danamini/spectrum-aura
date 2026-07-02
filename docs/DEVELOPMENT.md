@@ -50,8 +50,10 @@ src/
 │           ├── live-tempo.ts         # Per-frame HUD bus
 │           ├── latency-metrics.ts    # Render latency measurement (tested)
 │           ├── view-cycle-controller.ts
+│           ├── loudness.ts           # Shared perceptual-loudness gamma curve (all views)
+│           ├── evolution.ts          # Dynamic Mode drift engine
 │           ├── scene.ts
-│           ├── composer.ts
+│           ├── composer.ts           # Post-FX chain + auto quality tiers
 │           ├── shaders.ts
 │           └── __tests__/            # Engine unit + sync invariant tests
 │               ├── helpers/song-clock.harness.ts
@@ -120,6 +122,9 @@ Recent controls:
 - `mirrorFx` / `mirrorMode` / `mirrorOffset`: directional mirror post-FX pass.
 - `crtFx` / `crtScanlineIntensity` / `crtCurvature` / `crtVignette`: retro CRT post-FX pass.
 - `projectorFilmFx` / `projectorFilmAmount` / `projectorFilmJitter` / `projectorFilmFlicker`: random film projector artifact pass.
+- `glitchIntensity`: duty-cycle fraction (0-1) of each ~1 s window the Glitch pass actually renders — three.js's GlitchPass has no continuous intensity knob.
+- `evolveEnabled` / `evolveAmount`: "Dynamic Mode" — a curated 1-3 settings per view drift slowly over musical phrases (wall-clock fallback when unsynced), bounded around the user's own values (`engine/evolution.ts`).
+- ControlPanel additions: dedicated **Saves** tab (list with focus/load/overwrite/delete via `usePresetActions`), Dynamic Mode toggle, an amber warning banner in the Post FX tab when Performance Mode is bypassing the pipeline, retro/novelty FX grouped under a collapsed `Disclosure`, and a phone-first layout via `useIsMobile()` (full-width sheet, bottom tab bar, full-screen flyout).
 
 **Key Settings Limits**:
 
@@ -133,8 +138,8 @@ Recent controls:
 Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bottom shortcut bar:
 
 - `R`: Randomize
-- `B`: Prev Visual
-- `V`: Next Visual
+- `←` / `→`: Prev / Next Visual (`B` / `V` kept as aliases)
+- `[` / `]` or `Shift+←` / `Shift+→`: Prev / Next Save
 - `X`: Audio Source (stops the current audio engine so a new source can be selected)
 - `F`: Toggle fullscreen
 - `N`: Toggle Stats panel
@@ -225,8 +230,8 @@ All tests live under `__tests__/` (see `vitest.config.ts`):
 
 | Location                     | Suites                                                                                                                                 |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `analyser/__tests__/`        | `Analyser.regression`, `ControlPanel.regression`, `usePresetActions`, `theme`, `Shortcuts`, `store.*`, `visuals`                       |
-| `analyser/engine/__tests__/` | `song-clock`, `sync-invariants`, `bpm-detector`, `beat-matcher`, `latency-metrics`, `view-cycle-controller`, `latency-benchmark`, `xr` |
+| `analyser/__tests__/`        | `Analyser.regression`, `ControlPanel.regression`, `usePresetActions`, `theme`, `Shortcuts`, `store.*`, `visuals`, `BarTimingHud`      |
+| `analyser/engine/__tests__/` | `song-clock`, `sync-invariants`, `bpm-detector`, `bpm-detector.realistic`, `beat-matcher`, `latency-metrics`, `view-cycle-controller`, `latency-benchmark`, `loudness`, `evolution`, `composer`, `xr` |
 
 Shared fixtures: `__tests__/helpers/test-helpers.ts`, `engine/__tests__/helpers/song-clock.harness.ts`.
 
