@@ -4205,12 +4205,15 @@ export class Scene {
     );
     if (templates.length === 0) return;
 
+    // Every actor gets the *same* model (the first available template) — a
+    // dozen instances of one shape spinning reads as a cohesive formation,
+    // where one-of-each looked like a random pile of unrelated objects.
+    const template = templates[0]!;
     for (let i = 0; i < this.assetflowActors.length; i++) {
       const actor = this.assetflowActors[i]!;
       if (actor.model) {
         actor.root.remove(actor.model);
       }
-      const template = templates[i % templates.length]!;
       const model = this.cloneAssetflowModel(template);
       actor.model = model;
       actor.root.add(model);
