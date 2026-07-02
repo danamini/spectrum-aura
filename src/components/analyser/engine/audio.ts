@@ -267,6 +267,11 @@ export class AudioEngine {
     this.bpmDetector.hintBeat(time, downbeat, fallbackBpm);
   }
 
+  /** See BPMDetector.releaseManualLock() — called when SongClock drops a stale manual lock. */
+  releaseManualBpmLock(): void {
+    this.bpmDetector.releaseManualLock();
+  }
+
   stop() {
     try {
       this.stream?.getTracks().forEach((t) => t.stop());

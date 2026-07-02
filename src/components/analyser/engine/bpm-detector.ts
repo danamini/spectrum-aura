@@ -172,6 +172,25 @@ export class BPMDetector {
   }
 
   /**
+   * Drop the manual tap-lock so auto-detection can try to reacquire BPM from
+   * scratch — called by SongClock once it decides the tapped tempo has gone
+   * stale (long silence or sustained misalignment; see
+   * MANUAL_REACQUIRE_AFTER_MS in song-clock.ts). Otherwise `applyBpmLock()`'s
+   * `tapLocked` early-return would keep discarding every fresh candidate BPM
+   * forever, even though analysis keeps computing them under the hood.
+   * Leaves `energyHistory`/`lastBPM` alone (not a hard reset) so re-acquisition
+   * has a reasonable starting point instead of snapping to "no BPM at all".
+   */
+  releaseManualLock(): void {
+    this.tapLocked = false;
+    this.bpmLocked = false;
+    this.lockedBpm = 0;
+    this.highConfidenceStreak = 0;
+    this.driftRejectStreak = 0;
+    this.octaveMismatchStreak = 0;
+  }
+
+  /**
    * Manual beat tap — aligns phase and refines BPM from tap spacing.
    * Use `downbeat` to mark bar 1 beat 1.
    */

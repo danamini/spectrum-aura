@@ -5,6 +5,7 @@ import {
   BEATS_PER_PHRASE,
   TAP_TIMEOUT_MS,
   MANUAL_RELEASE_STREAK,
+  MANUAL_REACQUIRE_AFTER_MS,
   autoBpmBlendAlpha,
 } from "../song-clock";
 import { BEAT_MS, startAuto, tickAt } from "./helpers/song-clock.harness";
@@ -150,6 +151,61 @@ describe("SongClock", () => {
       });
     }
     expect(clock.getSource()).toBe("auto");
+  });
+
+  it("drops a stale manual lock after a long silence/gap and signals a release", () => {
+    const clock = new SongClock();
+    for (let i = 0; i < 4; i++) clock.hintBeat(i * BEAT_MS);
+    expect(clock.getSource()).toBe("manual");
+    // No audioBeat overrides below — tickAt's default (audioBeat: false) simulates
+    // silence: nothing ever confirms alignment, so the reacquire clock never resets.
+    const stillWithinGrace = tickAt(clock, BEAT_MS * 4 + MANUAL_REACQUIRE_AFTER_MS - 500);
+    expect(clock.getSource()).toBe("manual");
+    expect(stillWithinGrace.bpmLocked).toBe(true);
+    expect(clock.consumeManualReleaseSignal()).toBe(false);
+
+    const afterGap = tickAt(clock, BEAT_MS * 4 + MANUAL_REACQUIRE_AFTER_MS + 500);
+    expect(clock.getSource()).toBe("idle");
+    expect(clock.isManualTapComplete()).toBe(false);
+    expect(afterGap.bpmLocked).toBe(false);
+    expect(afterGap.synced).toBe(false);
+
+    // Edge-triggered: true exactly once, then false until the next stale release.
+    expect(clock.consumeManualReleaseSignal()).toBe(true);
+    expect(clock.consumeManualReleaseSignal()).toBe(false);
+  });
+
+  it("does not drop the manual lock while audio keeps confirming alignment", () => {
+    const clock = new SongClock();
+    for (let i = 0; i < 4; i++) clock.hintBeat(i * BEAT_MS);
+    const start = BEAT_MS * 4;
+
+    // Aligned confirmations below MANUAL_RELEASE_STREAK's confidence bar (0.68), so
+    // they refresh the reacquire clock without also triggering the separate
+    // release-to-auto path this file already covers above.
+    let now = start;
+    while (now < start + MANUAL_REACQUIRE_AFTER_MS * 2) {
+      tickAt(clock, now, { audioBeat: true, onsetStrength: 0.12, bpmConfidence: 0.6 });
+      now += BEAT_MS;
+    }
+
+    expect(clock.getSource()).toBe("manual");
+    expect(clock.consumeManualReleaseSignal()).toBe(false);
+  });
+
+  it("re-tapping resets the reacquire grace period", () => {
+    const clock = new SongClock();
+    for (let i = 0; i < 4; i++) clock.hintBeat(i * BEAT_MS);
+    const firstTapEnd = BEAT_MS * 4;
+
+    tickAt(clock, firstTapEnd + MANUAL_REACQUIRE_AFTER_MS - 1000);
+    clock.hintBeat(firstTapEnd + MANUAL_REACQUIRE_AFTER_MS - 1000);
+    expect(clock.getSource()).toBe("manual");
+
+    // Well past the original tap's threshold, but under MANUAL_REACQUIRE_AFTER_MS
+    // since the re-tap above.
+    tickAt(clock, firstTapEnd + MANUAL_REACQUIRE_AFTER_MS + 2000);
+    expect(clock.getSource()).toBe("manual");
   });
 
   it("detects phrase change after four bars with spectral shift", () => {

@@ -160,6 +160,31 @@ describe("BPMDetector", () => {
     expect(detector.tick(1000).beatPhase).toBe(0);
   });
 
+  it("releaseManualLock lets fresh audio re-acquire BPM after a tap-lock", () => {
+    const detector = new BPMDetector();
+    const interval = 500; // ~120 BPM
+    for (let i = 0; i < 5; i++) {
+      detector.hintBeat(i * interval, i === 0);
+    }
+    expect(detector.isTapLocked()).toBe(true);
+    expect(detector.isLocked()).toBe(true);
+
+    detector.releaseManualLock();
+    expect(detector.isTapLocked()).toBe(false);
+    expect(detector.isLocked()).toBe(false);
+
+    // A genuinely different tempo should now be able to win — proving the
+    // detector isn't just silently discarding fresh candidates anymore (the
+    // old tapLocked early-return in applyBpmLock would have kept it at 120).
+    feedPulseTrain(detector, 353, 8000); // ~170 BPM, feeds/ticks t = 0..8000 internally
+    let t = 8000;
+    for (let i = 0; i < 20; i++) {
+      t += 250;
+      detector.tick(t);
+    }
+    expect(detector.getBPM()).toBeGreaterThan(150);
+  });
+
   it("keeps tap-locked tempo after manual taps stop", () => {
     const detector = new BPMDetector();
     const interval = 500;

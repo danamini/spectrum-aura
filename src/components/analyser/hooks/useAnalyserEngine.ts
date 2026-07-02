@@ -157,6 +157,7 @@ export function useAnalyserEngine(params: {
     let lastOpacity = "";
     let lastStatsCommitAt = 0;
     let lastLiveTempoCommitAt = 0;
+    let reacquireFlashUntil = 0;
     let radialKickEnv = 0;
     // Tracked as discrete fields (not a template-string key) so the hot path doesn't
     // allocate a new string every frame just to detect whether a composer reset is due.
@@ -387,6 +388,20 @@ export function useAnalyserEngine(params: {
         mid: bands.mid,
         centroid: bands.centroid,
       });
+      if (songClockRef.current.consumeManualReleaseSignal()) {
+        // Manual lock went stale (silence or the track's tempo diverged) —
+        // release the detector's tap-lock too so fresh candidates can flow
+        // again, and flash a message so it reads as "still working on it"
+        // rather than the visual just going quiet.
+        audio.releaseManualBpmLock();
+        beatHintFlashRef.current = "Re-syncing…";
+        reacquireFlashUntil = now + 2500;
+      } else if (reacquireFlashUntil > 0 && now >= reacquireFlashUntil) {
+        reacquireFlashUntil = 0;
+        if (beatHintFlashRef.current === "Re-syncing…") {
+          beatHintFlashRef.current = null;
+        }
+      }
       const clockBpm = barTimingFrame.clockBpm || bands.bpm;
       const clockBeatPhase = barTimingFrame.synced ? barTimingFrame.beatPhase : bands.beatPhase;
       Object.assign(bandsForScene, bands);
