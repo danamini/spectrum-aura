@@ -1,6 +1,12 @@
 import * as React from "react";
 import { useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 import { Label } from "@/components/ui/label";
 import { Bn, Disclosure, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
@@ -217,6 +223,9 @@ export function ControlPanel() {
             <SheetTitle className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/70">
               Controls
             </SheetTitle>
+            <SheetDescription className="sr-only">
+              Visualizer settings: view selection, audio, scene, post FX, and saved presets.
+            </SheetDescription>
           </SheetHeader>
 
           <div className="mt-4 space-y-4 pb-10">
