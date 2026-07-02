@@ -55,15 +55,25 @@ export const EVOLUTION_TARGETS: Partial<Record<ViewMode, EvolutionTarget[]>> = {
 
 /** New waypoint picked every this many phrases (4 bars each) — a slow "progressive slide". */
 const PHRASES_PER_WAYPOINT = 3;
+/** Without a synced BPM grid, phrases never tick — fall back to advancing a
+ * pseudo-phrase on wall-clock so Dynamic Mode still does something before the
+ * detector locks (or with no music at all). ~8s ≈ one phrase at 120 BPM. */
+const FALLBACK_PHRASE_MS = 8000;
 /** Fraction of the remaining distance to the waypoint closed per second of easing. */
 const EASE_PER_SEC = 0.6;
 /** Max drift as a fraction of the base value, at evolveAmount = 1. */
-const MAX_OFFSET_RATIO = 0.4;
+const MAX_OFFSET_RATIO = 0.5;
+/** Continuous low-frequency wobble layered on the waypoint drift, so the view
+ * is always gently in motion instead of easing to a target and then sitting
+ * frozen until the next waypoint (which read as "the setting does nothing"). */
+const WOBBLE_RATE_HZ = 0.05;
+const WOBBLE_DEPTH = 0.3;
 
 type TargetState = {
   waypointIndex: number;
   target: number; // 0..1
   current: number; // 0..1, eased toward target
+  wobblePhase: number; // radians, advances continuously
 };
 
 /**
@@ -77,10 +87,12 @@ type TargetState = {
  */
 export class ViewEvolutionEngine {
   private phraseCounter = 0;
+  private msSincePhrase = 0;
   private states = new Map<string, TargetState>();
 
   reset(): void {
     this.phraseCounter = 0;
+    this.msSincePhrase = 0;
     this.states.clear();
   }
 
@@ -94,18 +106,22 @@ export class ViewEvolutionEngine {
     const targets = EVOLUTION_TARGETS[view];
     if (!targets || targets.length === 0 || amount <= 0) return;
 
-    if (barTiming.phraseJustStarted) {
+    this.msSincePhrase += dt * 1000;
+    if (barTiming.phraseJustStarted || this.msSincePhrase >= FALLBACK_PHRASE_MS) {
       this.phraseCounter += 1;
+      this.msSincePhrase = 0;
     }
     const waypointIndex = Math.floor(this.phraseCounter / PHRASES_PER_WAYPOINT);
     const boundedAmount = Math.max(0, Math.min(1, amount));
     const ease = Math.min(1, dt * EASE_PER_SEC);
     const numericOpts = opts as unknown as Record<string, number>;
 
+    let keyIndex = 0;
     for (const t of targets) {
       let state = this.states.get(t.key);
       if (!state) {
-        state = { waypointIndex: -1, target: 0.5, current: 0.5 };
+        // Stagger wobble phases per key so multiple targets don't move in sync.
+        state = { waypointIndex: -1, target: 0.5, current: 0.5, wobblePhase: keyIndex * 2.1 };
         this.states.set(t.key, state);
       }
       if (state.waypointIndex !== waypointIndex) {
@@ -113,12 +129,19 @@ export class ViewEvolutionEngine {
         state.target = Math.random();
       }
       state.current += (state.target - state.current) * ease;
+      state.wobblePhase += dt * WOBBLE_RATE_HZ * Math.PI * 2;
 
       const base = numericOpts[t.key];
-      if (typeof base !== "number") continue;
-      const offsetFraction = (state.current - 0.5) * 2; // -1..1
+      if (typeof base !== "number") {
+        keyIndex++;
+        continue;
+      }
+      const waypointFraction = (state.current - 0.5) * 2; // -1..1
+      const wobbleFraction = Math.sin(state.wobblePhase) * WOBBLE_DEPTH;
+      const offsetFraction = Math.max(-1, Math.min(1, waypointFraction + wobbleFraction));
       const offset = base * offsetFraction * MAX_OFFSET_RATIO * boundedAmount;
       numericOpts[t.key] = Math.max(t.min, Math.min(t.max, base + offset));
+      keyIndex++;
     }
   }
 }
