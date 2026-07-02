@@ -79,7 +79,7 @@ export function isOctaveMismatch(
  * especially confidence) on the raw list is what kept real tracks from ever
  * locking: interval CV stayed high no matter how steady the music was.
  */
-export function filterIntervalsAroundMedian(sortedIntervals: number[]): number[] {
+function filterIntervalsAroundMedian(sortedIntervals: number[]): number[] {
   if (sortedIntervals.length < 3) return sortedIntervals;
   const median = sortedIntervals[Math.floor(sortedIntervals.length / 2)]!;
   const filtered = sortedIntervals.filter((iv) => iv >= median * 0.72 && iv <= median * 1.38);

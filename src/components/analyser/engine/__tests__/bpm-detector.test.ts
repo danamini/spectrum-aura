@@ -120,10 +120,21 @@ describe("BPMDetector", () => {
     }
     expect(locked).toBe(true);
 
+    // Feed a slightly-off (520ms ≈ 115 BPM) pulse train with *forward*
+    // timestamps — backwards ones are silently dropped by the feed-interval
+    // guard, which once left this half of the test asserting nothing.
     const lockedBpm = detector.getBPM();
-    feedPulseTrain(detector, 520, 4000);
-    for (let i = 0; i < 20; i++) detector.tick(16000 + i * 250);
-    expect(Math.abs(detector.getBPM() - lockedBpm)).toBeLessThan(8);
+    let t = 27000;
+    for (let i = 0; i < 120; i++) {
+      const phase = (t % 520) / 520;
+      const energy =
+        phase < 0.2 ? 0.25 + phase * 3.2 : phase < 0.4 ? 0.89 - (phase - 0.2) * 3 : 0.12;
+      detector.feed(energy, t);
+      detector.tick(t);
+      t += 50;
+    }
+    // Within the locked agreement band, drift only nudges the lock slowly.
+    expect(Math.abs(detector.getBPM() - lockedBpm)).toBeLessThan(4);
   });
 
   it("learns BPM from manual tap hints", () => {

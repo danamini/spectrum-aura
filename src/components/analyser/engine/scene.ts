@@ -14,6 +14,22 @@ import { bipolarBand, normalizedBand } from "./loudness";
 
 const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
 
+/** Asset-flow GLB templates; the per-build shared-model roll indexes into this. */
+const ASSETFLOW_MODEL_PATHS = [
+  "assets/models/kenney/model-01.glb",
+  "assets/models/poly-pizza/model-02.glb",
+  "assets/models/quaternius/model-03.glb",
+  "assets/models/kenney/model-04.glb",
+  "assets/models/poly-pizza/model-05.glb",
+  "assets/models/quaternius/model-06.glb",
+  "assets/models/kenney/model-07.glb",
+  "assets/models/poly-pizza/model-08.glb",
+  "assets/models/kenney/model-09.glb",
+  "assets/models/poly-pizza/model-10.glb",
+  "assets/models/quaternius/model-11.glb",
+  "assets/models/kenney/model-12.glb",
+];
+
 export type Palette = [string, string, string];
 
 export class Scene {
@@ -3932,7 +3948,7 @@ export class Scene {
   private buildAssetflow() {
     this.assetflowBuildToken += 1;
     this.assetflowAssetsRequested = false;
-    this.assetflowModelChoice = Math.floor(Math.random() * 12);
+    this.assetflowModelChoice = Math.floor(Math.random() * ASSETFLOW_MODEL_PATHS.length);
     for (const actor of this.assetflowActors) {
       actor.placeholder.geometry.dispose();
       const placeholderMat = actor.placeholder.material;
@@ -4059,23 +4075,9 @@ export class Scene {
 
     const baseUrl = (import.meta.env.BASE_URL || "/").replace(/\/*$/, "/");
     const toPublicUrl = (path: string) => `${baseUrl}${path.replace(/^\/+/, "")}`;
-    const modelPaths = [
-      "assets/models/kenney/model-01.glb",
-      "assets/models/poly-pizza/model-02.glb",
-      "assets/models/quaternius/model-03.glb",
-      "assets/models/kenney/model-04.glb",
-      "assets/models/poly-pizza/model-05.glb",
-      "assets/models/quaternius/model-06.glb",
-      "assets/models/kenney/model-07.glb",
-      "assets/models/poly-pizza/model-08.glb",
-      "assets/models/kenney/model-09.glb",
-      "assets/models/poly-pizza/model-10.glb",
-      "assets/models/quaternius/model-11.glb",
-      "assets/models/kenney/model-12.glb",
-    ];
-    this.assetflowModelTemplates = new Array(modelPaths.length);
+    this.assetflowModelTemplates = new Array(ASSETFLOW_MODEL_PATHS.length);
     const gltfLoader = new GLTFLoader();
-    modelPaths.forEach((path, idx) => {
+    ASSETFLOW_MODEL_PATHS.forEach((path, idx) => {
       gltfLoader.load(
         toPublicUrl(path),
         (gltf) => {

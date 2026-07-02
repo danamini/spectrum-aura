@@ -83,6 +83,8 @@ export function useAnalyserEngine(params: {
     rendererRef.current = renderer;
     sceneRef.current = scene;
     composerRef.current = composer;
+    // Deliberate dev-only inspection seam: lets devtools (and headless test
+    // drivers) examine live pass state — window.__composer.composer.passes etc.
     if (import.meta.env.DEV) {
       (window as unknown as Record<string, unknown>).__composer = composer;
     }
@@ -617,6 +619,9 @@ export function useAnalyserEngine(params: {
       composer.dispose();
       scene.dispose();
       renderer.dispose();
+      if (import.meta.env.DEV) {
+        delete (window as unknown as Record<string, unknown>).__composer;
+      }
       if (renderer.domElement.parentElement === container) {
         container.removeChild(renderer.domElement);
       }

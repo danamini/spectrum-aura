@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EVOLUTION_TARGETS, ViewEvolutionEngine } from "../evolution";
 import { createSceneUpdateOpts } from "../scene-update-opts";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("EVOLUTION_TARGETS", () => {
   const allTargetLists = Object.values(EVOLUTION_TARGETS).filter((v) => v !== undefined);
@@ -57,6 +61,42 @@ describe("ViewEvolutionEngine", () => {
       if (opts.mandalaAmplitude !== 2) sawDrift = true;
     }
     expect(sawDrift).toBe(true);
+  });
+
+  it("keeps the view gently in motion between waypoints (continuous wobble)", () => {
+    const engine = new ViewEvolutionEngine();
+    const opts = createSceneUpdateOpts("mandala");
+
+    // Tick well past the initial waypoint ease (~5s at EASE_PER_SEC) with no
+    // phrase ticks and no new waypoints — without the wobble, the value would
+    // settle at the waypoint and freeze, which read as "the setting does
+    // nothing" when watching the view.
+    const values: number[] = [];
+    for (let i = 0; i < 420; i++) {
+      opts.mandalaAmplitude = 2;
+      engine.tick(opts, "mandala", { phraseJustStarted: false }, 1 / 60, 1);
+      if (i >= 360) values.push(opts.mandalaAmplitude);
+    }
+    const spread = Math.max(...values) - Math.min(...values);
+    expect(spread).toBeGreaterThan(0.001);
+  });
+
+  it("advances waypoints on wall-clock when phrases never tick (no BPM sync)", () => {
+    const engine = new ViewEvolutionEngine();
+    const opts = createSceneUpdateOpts("mandala");
+    // First tick consumes one Math.random for the initial waypoint; count
+    // rolls after that. Each pseudo-phrase fallback fires every ~8s of dt and
+    // a new waypoint every 3 phrases — so ~25s with no phraseJustStarted must
+    // roll at least one more waypoint.
+    opts.mandalaAmplitude = 2;
+    engine.tick(opts, "mandala", { phraseJustStarted: false }, 1 / 60, 1);
+    const randomSpy = vi.spyOn(Math, "random");
+    const frames = Math.ceil(25 / (1 / 60));
+    for (let i = 0; i < frames; i++) {
+      opts.mandalaAmplitude = 2;
+      engine.tick(opts, "mandala", { phraseJustStarted: false }, 1 / 60, 1);
+    }
+    expect(randomSpy).toHaveBeenCalled();
   });
 
   it("resets cleanly so re-enabling starts a fresh phrase count", () => {
