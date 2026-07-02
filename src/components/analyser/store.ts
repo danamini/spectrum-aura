@@ -1279,6 +1279,12 @@ export const settingsStore = {
       ...merged,
       slotCycleMode: currentCycleMode,
       slotCycleSeconds: currentCycleSeconds,
+      // Performance Mode is a machine-specific tradeoff, not part of a saved
+      // "look" — and it hard-bypasses all post FX. Old saves (including a
+      // previous batch of bundled defaults) carried performance: true, so
+      // loading one silently killed post FX and persisted that across
+      // sessions. Saves can no longer toggle it.
+      performance: state.performance,
     });
     emit();
   },

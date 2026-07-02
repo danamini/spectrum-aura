@@ -305,4 +305,28 @@ describe("analyser store utility functions", () => {
     // Vignette should be normalized even from loaded state
     expect(state.vignetteAmount).toBeLessThanOrEqual(1.25);
   });
+
+  it("loading a save never toggles Performance Mode (machine-specific, bypasses post FX)", async () => {
+    const { settingsStore } = await import("../store");
+
+    // Save a look that (like a batch of old bundled defaults) carries
+    // performance: true baked in.
+    settingsStore.set({ performance: true, view: "classic" });
+    settingsStore.saveSlot(0, "Perf-tainted save");
+
+    settingsStore.set({ performance: false, view: "ripple" });
+    settingsStore.loadSlot(0);
+
+    expect(settingsStore.get().view).toBe("classic");
+    expect(settingsStore.get().performance).toBe(false);
+  });
+
+  it("ships no bundled default saves with performance mode on", async () => {
+    const defaultSaves = (await import("../default-saves.json")).default as Array<{
+      settings: { performance?: boolean };
+    }>;
+    for (const save of defaultSaves) {
+      expect(save.settings.performance).not.toBe(true);
+    }
+  });
 });
