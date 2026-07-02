@@ -248,6 +248,25 @@ describe("analyser store utility functions", () => {
     expect(state.projectorFilmFx).toBe(true);
   });
 
+  it("cycleRandomView presents the destination view in 3D even when its 2D flag is set", async () => {
+    const { settingsStore } = await import("../store");
+    const { VISUALS } = await import("../visuals");
+
+    // Simulate stale per-view 2D flags accumulated from browsing id -> id2d
+    // with the arrow keys — without clearing them, the auto-cycle appears to
+    // only ever show 2D views.
+    const allFullscreenTrue = Object.fromEntries(
+      VISUALS.filter((v) => v.fullscreenKey).map((v) => [v.fullscreenKey!, true]),
+    );
+    settingsStore.set({ ...allFullscreenTrue, viewCycleRandomize: false });
+
+    settingsStore.cycleRandomView();
+    const state = settingsStore.get();
+    const landed = VISUALS.find((v) => v.id === state.view);
+    expect(landed?.fullscreenKey).toBeDefined();
+    expect(state[landed!.fullscreenKey! as keyof typeof state]).toBe(false);
+  });
+
   it("reset restores default settings", async () => {
     const { settingsStore } = await import("../store");
 

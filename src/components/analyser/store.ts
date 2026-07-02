@@ -1228,7 +1228,20 @@ export const settingsStore = {
     if (VISUALS.length <= 1) return;
     const next = pickNextView(state.view, VISUALS);
     if (next === state.view) return;
-    state = normalizeSettings({ ...state, view: next, activePreset: null });
+    // Present the destination in its canonical 3D form. Per-view 2D flags are
+    // persistent (set whenever you stop on a view's 2D variant while browsing
+    // with the arrow keys) and nothing else ever clears them — so without this,
+    // the auto-cycle appears to "only ever show 2D views" once enough flags
+    // have accumulated in a long-lived localStorage.
+    const fullscreenKey = VISUALS.find((v) => v.id === next)?.fullscreenKey as
+      | keyof Settings
+      | undefined;
+    state = normalizeSettings({
+      ...state,
+      view: next,
+      activePreset: null,
+      ...(fullscreenKey ? { [fullscreenKey]: false } : {}),
+    });
     emit();
     if (state.viewCycleRandomize) {
       settingsStore.randomize();
@@ -1311,4 +1324,16 @@ export function useSlots(): SavedSlot[] {
 
 export function useSettings(): Settings {
   return useSyncExternalStore(settingsStore.subscribe, settingsStore.get, settingsStore.get);
+}
+
+// The settings store is a module-level singleton holding live state that the
+// render loop closes over. A hot update that re-evaluates this module splits
+// the world in two — the panel writes to a fresh store instance while the
+// running rAF loop keeps reading the old one, so toggles (post FX, etc.)
+// silently stop working until a manual refresh. Force a clean full reload
+// whenever a hot update reaches this module instead.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    window.location.reload();
+  });
 }
