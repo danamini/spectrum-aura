@@ -11,6 +11,26 @@ presets) may change between minor versions.
 
 _Nothing yet._
 
+## [0.2.0] - 2026-07-03
+
+### Added
+
+- **Stage Lights visual**: a row of overhead sweeping spotlight beams,
+  color/tuning-aligned to LOW/MID/HIGH by position along the rig. Fixture
+  count is configurable to 3, 5, or 7 via a continuous band-position blend
+  rather than a fixed per-index lookup, so extra fixtures land *between*
+  bands instead of just repeating one. Beats trigger a brief brighten/tighten
+  and, on strong bass hits, a momentary fan-out. An optional laser-fan
+  accent (`stagelightsLasers`) adds a fixed fan of thin, bright, upward beams
+  from a downstage projector.
+- **Demo-scene text overlay** (`textOverlayEnabled`, Post FX tab):
+  moving/bouncing/scrolling/stacking/orbiting phrases layered on top of the
+  active visual. Phrases come from bofh.bombeck.io in small batches
+  (`engine/text-sources/`) and work fully offline via an embedded fallback
+  phrase list.
+- Dynamic Mode now drifts Stage Lights' orbit speed and beam sweep speed, so
+  the camera moves noticeably more while Dynamic Mode is on for this view.
+
 ## [0.1.0] - 2026-07-02
 
 Large UI/UX, sync, and rendering overhaul. Pre-1.0 policy note: some default
@@ -123,6 +143,7 @@ Three.js, and Vite — no backend, no upload flow.
 - `npm run check` runs typecheck + lint + tests; strict TypeScript
   (`noUnusedLocals` / `noUnusedParameters`) enabled.
 
-[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/danamini/spectrum-aura/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/danamini/spectrum-aura/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/danamini/spectrum-aura/releases/tag/v0.0.1
