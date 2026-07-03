@@ -1072,6 +1072,70 @@ export function ControlPanel() {
                         />
                       </ToggleRow>
                     </Disclosure>
+                    <Disclosure label="Demo-scene text overlay (BOFH excuses)">
+                      <ToggleRow
+                        label="Text overlay"
+                        enabled={s.textOverlayEnabled}
+                        onToggle={(v) => set({ textOverlayEnabled: v })}
+                      >
+                        <div className="grid grid-cols-2 gap-2">
+                          {(
+                            [
+                              ["bounce", "Bounce"],
+                              ["scroller", "Scroller"],
+                              ["stack", "Stack"],
+                              ["orbit", "Orbit"],
+                            ] as const
+                          ).map(([style, label]) => (
+                            <Bn
+                              key={style}
+                              active={s.textOverlayStyle === style}
+                              variant={s.textOverlayStyle === style ? "default" : "outline"}
+                              onClick={() => set({ textOverlayStyle: style })}
+                            >
+                              {label}
+                            </Bn>
+                          ))}
+                        </div>
+                        <S
+                          label="Intensity"
+                          value={s.textOverlayIntensity}
+                          min={0}
+                          max={2}
+                          step={0.05}
+                          onChange={(v) => set({ textOverlayIntensity: v })}
+                        />
+                        <S
+                          label="Phrase interval (sec)"
+                          value={s.textOverlayPhraseInterval}
+                          min={3}
+                          max={20}
+                          step={0.5}
+                          onChange={(v) => set({ textOverlayPhraseInterval: v })}
+                        />
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[11px]">All caps</Label>
+                          <Sw
+                            checked={s.textOverlayAllCaps}
+                            onCheckedChange={(v) => set({ textOverlayAllCaps: v })}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[11px]">Scramble in/out</Label>
+                          <Sw
+                            checked={s.textOverlayScramble}
+                            onCheckedChange={(v) => set({ textOverlayScramble: v })}
+                          />
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+                          <Label className="text-[11px]">Phrase source</Label>
+                          <p className="mt-1 text-[10px] leading-relaxed text-white/60">
+                            Phrases come from bofh.bombeck.io in small batches and may require
+                            network; works fully offline from embedded fallback phrases.
+                          </p>
+                        </div>
+                      </ToggleRow>
+                    </Disclosure>
                     <ToggleRow
                       label="Color grading"
                       enabled={s.grading}
