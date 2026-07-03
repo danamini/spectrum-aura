@@ -857,6 +857,48 @@ export function ViewSettings({ s, set }: { s: Settings; set: (patch: Partial<Set
           </div>
         </>
       )}
+      {s.view === "stagelights" && (
+        <>
+          <S
+            label="Amplitude"
+            value={s.stagelightsAmplitude}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ stagelightsAmplitude: v })}
+          />
+          <S
+            label="Sweep speed"
+            value={s.stagelightsSweepSpeed}
+            min={0.2}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ stagelightsSweepSpeed: v })}
+          />
+          <S
+            label="Fixture count"
+            value={s.stagelightsFixtureCount}
+            min={3}
+            max={7}
+            step={2}
+            onChange={(v) => set({ stagelightsFixtureCount: Math.round(v) })}
+          />
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Use selected palette</Label>
+            <Sw
+              checked={s.stagelightsUsePalette}
+              onCheckedChange={(v) => set({ stagelightsUsePalette: v })}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Lasers</Label>
+            <Sw
+              checked={s.stagelightsLasers}
+              onCheckedChange={(v) => set({ stagelightsLasers: v })}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

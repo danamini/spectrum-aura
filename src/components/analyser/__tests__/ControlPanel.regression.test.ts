@@ -52,6 +52,9 @@ describe("ControlPanel decomposition regression", () => {
       "geometrynebulaAmplitude",
       "reztubeAmplitude",
       "assetflowAmplitude",
+      "stagelightsAmplitude",
+      "stagelightsFixtureCount",
+      "stagelightsLasers",
     ];
 
     for (const key of expectedPerViewKeys) {
@@ -101,6 +104,7 @@ describe("ControlPanel decomposition regression", () => {
       "geometrynebula",
       "reztube",
       "assetflow",
+      "stagelights",
     ];
     for (const view of views) {
       expect(viewSettings, `missing view block: ${view}`).toMatch(

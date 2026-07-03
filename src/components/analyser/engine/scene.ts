@@ -11,8 +11,32 @@ import type { SceneUpdateOpts } from "./scene-update-opts";
 import { settingsStore } from "../store";
 import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS, type ViewMode } from "../visuals";
 import { bipolarBand, normalizedBand } from "./loudness";
+import { TextBuffer } from "./text-sources/text-buffer";
+import { bofhTextSource, BOFH_FALLBACK_EXCUSES } from "./text-sources/bofh-source";
 
 const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
+
+/** Text overlay: fixed pool of reusable canvas-textured planes shared across
+ * all four motion styles (bounce/scroller need 1, stack ~5, orbit up to 8). */
+const MAX_TEXT_PLANES = 8;
+/** Seconds a plane spends resolving from scrambled glyphs to final text. */
+const TEXT_SCRAMBLE_DURATION = 0.45;
+const TEXT_SCRAMBLE_CHARS = "!<>-_\\/[]{}=+*^?#$%&ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+/** Distance/scale the text overlay group sits at, relative to the live
+ * camera, per view — a small escape hatch for visually tight scenes (e.g.
+ * inside the Torus tunnel) discovered during manual testing. */
+const TEXT_OVERLAY_DEFAULT_ANCHOR = { distance: 7, scale: 1 };
+const TEXT_OVERLAY_VIEW_ANCHOR: Partial<Record<ViewMode, { distance: number; scale: number }>> = {};
+
+type TextPlaneEntry = {
+  mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D | null;
+  texture: THREE.CanvasTexture;
+  lastDrawnText: string;
+  /** -999 = no scramble pending, -1 = settled (fully drawn, skip redraws), >=0 = scramble start time. */
+  scrambleStartedAt: number;
+};
 
 /** Asset-flow GLB templates; the per-build shared-model roll indexes into this. */
 const ASSETFLOW_MODEL_PATHS = [
@@ -29,6 +53,74 @@ const ASSETFLOW_MODEL_PATHS = [
   "assets/models/quaternius/model-11.glb",
   "assets/models/kenney/model-12.glb",
 ];
+
+/** Stage Lights: a row of coordinated spotlight beams driven by bass/mid/high —
+ * LOW-aligned fixtures (left) lead with a slow wide sweep, MID (center) follows
+ * at moderate speed, HIGH-aligned (right) does fast micro-sweeps with shimmer
+ * jitter. Fixture count is user-configurable (3/5/7); each fixture's tuning is
+ * a continuous blend of the LOW/MID/HIGH anchor values below based on its
+ * position in the row, so extra fixtures fill in *between* the three bands
+ * rather than just repeating them. Fixed (non-random) tuning keeps the
+ * choreography deterministic frame to frame instead of flickering. */
+const STAGELIGHTS_COLORS: readonly [number, number, number] = [0xffa64d, 0x33ccff, 0xdd44ff];
+const STAGELIGHTS_RIG_SPAN = 7.5;
+const STAGELIGHTS_RIG_Y = 8.5;
+const STAGELIGHTS_RIG_Z = -2.5;
+/** Downward pitch from horizontal so beams rake across the stage floor. */
+const STAGELIGHTS_TILT = (62 * Math.PI) / 180;
+const STAGELIGHTS_FLOOR_Y = -3.4;
+const STAGELIGHTS_BASE_LENGTH = 13;
+const STAGELIGHTS_BASE_WIDTH: readonly [number, number, number] = [1.7, 1.1, 0.65];
+const STAGELIGHTS_SWEEP_HZ: readonly [number, number, number] = [0.32, 0.5, 0.95];
+const STAGELIGHTS_SWEEP_AMPLITUDE: readonly [number, number, number] = [0.55, 0.42, 0.24];
+const STAGELIGHTS_SWEEP_PHASE: readonly [number, number, number] = [0, 0.9, 1.8];
+/** Total fan-out spread (radians, ~ ±26°) across the row when a strong beat lands. */
+const STAGELIGHTS_FAN_SPREAD = 0.9;
+const STAGELIGHTS_FAN_DURATION = 0.8;
+
+/** Laser option: a fixed fan of thin, bright, upward-shooting beams from a
+ * downstage-floor projector — a classic laser-show accent layered on top of
+ * the overhead floodlights, toggled independently of fixture count. */
+const STAGELIGHTS_LASER_COUNT = 5;
+const STAGELIGHTS_LASER_ORIGIN = new THREE.Vector3(0, STAGELIGHTS_FLOOR_Y + 0.15, 5.5);
+const STAGELIGHTS_LASER_LENGTH = 26;
+const STAGELIGHTS_LASER_RADIUS = 0.09;
+const STAGELIGHTS_LASER_FAN = (100 * Math.PI) / 180;
+
+/** Piecewise-linear interpolation across 3 anchor values (LOW/MID/HIGH) by a
+ * continuous 0..1 position — lets extra fixtures land *between* bands. */
+function stagelightsTent3(a: number, b: number, c: number, t: number): number {
+  const clamped = t < 0 ? 0 : t > 1 ? 1 : t;
+  return clamped < 0.5
+    ? THREE.MathUtils.lerp(a, b, clamped * 2)
+    : THREE.MathUtils.lerp(b, c, (clamped - 0.5) * 2);
+}
+
+type StagelightsFixture = {
+  cone: THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial>;
+  hotspot: THREE.Sprite;
+  pool: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  origin: THREE.Vector3;
+  /** 0 (LOW/left) .. 1 (HIGH/right) position of this fixture within the row. */
+  bandPos: number;
+  angle: number;
+  speed: number;
+  phase: number;
+  amplitude: number;
+  baseWidth: number;
+  smoothed: number;
+  /** Precomputed at build time from bandPos (fixed for the fixture's lifetime). */
+  highWeight: number;
+  bloomWeight: number;
+};
+
+type StagelightsLaserFixture = {
+  cone: THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial>;
+  hotspot: THREE.Sprite;
+  /** -0.5 (left) .. 0.5 (right) fixed position within the laser fan. */
+  spreadT: number;
+  colorT: number;
+};
 
 export type Palette = [string, string, string];
 
@@ -49,6 +141,7 @@ export class Scene {
   soundwallGroup = new THREE.Group();
   geometrynebulaGroup = new THREE.Group();
   assetflowGroup = new THREE.Group();
+  stagelightsGroup = new THREE.Group();
   private xrControllerInputs: Array<{
     controller: THREE.Object3D;
     handedness: XRHandedness | "";
@@ -79,11 +172,47 @@ export class Scene {
   private readonly xrPositionInterpolationSpeed = 7;
   private readonly xrRotationInterpolationSpeed = 8;
 
+  // demo-scene text overlay (global — applies on top of any view)
+  textOverlayGroup = new THREE.Group();
+  private textPlanes: TextPlaneEntry[] = [];
+  private textBuffer = new TextBuffer(
+    bofhTextSource,
+    BOFH_FALLBACK_EXCUSES,
+    "spectrum-aura:text-overlay-bofh-v1",
+  );
+  private textCurrentPhrase = "";
+  /** Most-recent-first phrase history, used by the "stack" echo-trail style. */
+  private textHistory: string[] = [];
+  private textLastPhase = 0;
+  private textLastSwapAt = -999;
+  private textLastRefillCheckAt = -999;
+  private textBounceState = { x: 0, y: 0, vx: 0.9, vy: 0.6, rotY: 0, rotX: 0 };
+  private textScrollX = 0;
+  private textOrbitAngle = 0;
+  private textOverlayCameraPos = new THREE.Vector3();
+  private textOverlayCameraQuat = new THREE.Quaternion();
+  private textOverlayForward = new THREE.Vector3();
+
   bars!: THREE.InstancedMesh;
   private barCount = 0;
   private dummy = new THREE.Object3D();
   private tmpColor = new THREE.Color();
   private torusAccentScratch = new THREE.Color();
+  private stagelightsScratch = new THREE.Color();
+  private stagelightsAimScratch = new THREE.Vector3();
+  private readonly stagelightsDownAxis = new THREE.Vector3(0, -1, 0);
+  private stagelightsFixtures: StagelightsFixture[] = [];
+  private stagelightsLaserFixtures: StagelightsLaserFixture[] = [];
+  private stagelightsFixtureCount = 3;
+  private stagelightsFixedColors: [THREE.Color, THREE.Color, THREE.Color] = [
+    new THREE.Color(STAGELIGHTS_COLORS[0]),
+    new THREE.Color(STAGELIGHTS_COLORS[1]),
+    new THREE.Color(STAGELIGHTS_COLORS[2]),
+  ];
+  private stagelightsHit = 0;
+  private stagelightsFanTimer = 0;
+  private stagelightsGradientTex?: THREE.Texture;
+  private stagelightsGlowTex?: THREE.Texture;
   private rippleColorScratch = new THREE.Color();
   private lastSceneBgColor = "";
   private white = new THREE.Color(1, 1, 1);
@@ -308,6 +437,8 @@ export class Scene {
     this.xrSceneRoot.add(this.geometrynebulaGroup);
     this.xrSceneRoot.add(this.reztubeGroup);
     this.xrSceneRoot.add(this.assetflowGroup);
+    this.xrSceneRoot.add(this.stagelightsGroup);
+    this.xrSceneRoot.add(this.textOverlayGroup);
     this.scene.add(this.xrSceneRoot);
     this.buildXrHud();
     this.scene.add(this.xrHudGroup);
@@ -324,6 +455,7 @@ export class Scene {
     this.geometrynebulaGroup.visible = false;
     this.reztubeGroup.visible = false;
     this.assetflowGroup.visible = false;
+    this.stagelightsGroup.visible = false;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.25);
     const dir = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -353,6 +485,8 @@ export class Scene {
     this.buildGeoNebula();
     this.buildReztube();
     this.buildAssetflow();
+    this.buildStagelights();
+    this.buildTextOverlay();
 
     // Ensure every view material/light starts with the active palette.
     this.setPalette(this.palette);
@@ -934,10 +1068,15 @@ export class Scene {
     return b.clone().lerp(c, (t - 0.5) * 2);
   }
 
-  private colorAtInto(t: number, out: THREE.Color): THREE.Color {
-    const [a, b, c] = this.paletteThree;
-    if (t < 0.5) return out.copy(a).lerp(b, t * 2);
-    return out.copy(b).lerp(c, (t - 0.5) * 2);
+  private colorAtInto(
+    t: number,
+    out: THREE.Color,
+    colors: readonly [THREE.Color, THREE.Color, THREE.Color] = this.paletteThree,
+  ): THREE.Color {
+    const [a, b, c] = colors;
+    const clamped = t < 0 ? 0 : t > 1 ? 1 : t;
+    if (clamped < 0.5) return out.copy(a).lerp(b, clamped * 2);
+    return out.copy(b).lerp(c, (clamped - 0.5) * 2);
   }
 
   buildDataStream(count: number = this.dataStreamCount) {
@@ -2643,6 +2782,10 @@ export class Scene {
         Math.cos(time * 0.31) * a * 0.3;
     };
 
+    // Global overlay — runs unconditionally (before the per-view branches,
+    // some of which `return` early for xrMode) so it applies to any visual.
+    this.updateTextOverlay(dt, time, audio, opts);
+
     if (opts.view === "classic") {
       if (this.classicGrid) this.classicGrid.visible = opts.grid;
       if (this.classicGridMat) this.classicGridMat.opacity = opts.gridOpacity;
@@ -3272,6 +3415,58 @@ export class Scene {
       this.camera.fov += (53 - bk * 8 - this.camera.fov) * Math.min(1, dt * 11);
       this.camera.updateProjectionMatrix();
       this.camera.lookAt(0, 0.6, 0);
+      return;
+    }
+
+    if (opts.view === "stagelights") {
+      if (opts.stagelightsFixtureCount !== this.stagelightsFixtureCount) {
+        this.buildStagelights(opts.stagelightsFixtureCount);
+      }
+      this.updateStagelights(dt, time, audio, {
+        stagelightsAmplitude: opts.stagelightsAmplitude,
+        stagelightsUsePalette: opts.stagelightsUsePalette,
+        stagelightsSweepSpeed: opts.stagelightsSweepSpeed,
+        stagelightsLasers: opts.stagelightsLasers,
+      });
+
+      if (xrMode) return;
+      if (opts.stagelightsFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (4.5 - this.camera.position.y) * follow;
+        this.camera.position.z += (17 - this.camera.position.z) * follow;
+        this.camera.fov += (55 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 3, -1);
+        return;
+      }
+
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom * 1.05;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          4.5 + Math.sin(this.mousePitch) * r * 0.4,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        // Radius and vertical bob both scale with orbitSpeed (not just angular
+        // rate) so Dynamic Mode drifting orbitSpeed reads as clearly more
+        // camera movement, not just a subtle spin-rate change.
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.9 + 0.05);
+        const swing = 1 + opts.orbitSpeed * 1.4;
+        const rad = 14 + audio.bass * 1.2 + opts.orbitSpeed * 3.5;
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * rad,
+          4.5 + Math.sin(time * (0.25 + opts.orbitSpeed * 0.3)) * 1.2 * swing,
+          Math.cos(this.orbitAngle) * rad,
+        );
+      }
+      const bk = this.kick * beat;
+      applyCameraDrift(5.5);
+      this.camera.position.y += bk * 1.1;
+      this.camera.fov += (55 - bk * 6 - this.camera.fov) * Math.min(1, dt * 10);
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(0, 3, -1);
       return;
     }
 
@@ -4514,6 +4709,713 @@ export class Scene {
     }
   }
 
+  // ─── Stage Lights (three sweeping spotlight beams) ─────────────────────────
+
+  private createStagelightsGradientTexture(): THREE.Texture {
+    const width = 8;
+    const height = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d")!;
+    // Canvas row 0 (top) = texture V=1 = beam apex/lamp; bottom = far end.
+    const grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.35, "rgba(255,255,255,0.45)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  private createStagelightsGlowTexture(): THREE.Texture {
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.4, "rgba(255,255,255,0.5)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  private createStagelightsBeam(
+    color: THREE.Color,
+    withPool: boolean,
+  ): {
+    cone: THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial>;
+    hotspot: THREE.Sprite;
+    pool: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null;
+  } {
+    const coneHeight = 1;
+    // Apex at local origin extending toward local -Y; aimed each frame via quaternion.
+    const coneGeo = new THREE.ConeGeometry(1, coneHeight, 20, 1, true);
+    coneGeo.translate(0, -coneHeight / 2, 0);
+    const coneMat = new THREE.MeshBasicMaterial({
+      map: this.stagelightsGradientTex,
+      color: color.clone(),
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const cone = new THREE.Mesh(coneGeo, coneMat);
+    cone.frustumCulled = false;
+    this.stagelightsGroup.add(cone);
+
+    const hotspotMat = new THREE.SpriteMaterial({
+      map: this.stagelightsGlowTex,
+      color: color.clone(),
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const hotspot = new THREE.Sprite(hotspotMat);
+    hotspot.scale.setScalar(0.8);
+    this.stagelightsGroup.add(hotspot);
+
+    let pool: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null;
+    if (withPool) {
+      const poolMat = new THREE.MeshBasicMaterial({
+        map: this.stagelightsGlowTex,
+        color: color.clone(),
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      pool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), poolMat);
+      pool.rotation.x = -Math.PI / 2;
+      this.stagelightsGroup.add(pool);
+    }
+
+    return { cone, hotspot, pool };
+  }
+
+  private disposeStagelightsBeam(beam: {
+    cone: THREE.Mesh;
+    hotspot: THREE.Sprite;
+    pool: THREE.Mesh | null;
+  }) {
+    this.stagelightsGroup.remove(beam.cone, beam.hotspot);
+    beam.cone.geometry.dispose();
+    (beam.cone.material as THREE.Material).dispose();
+    (beam.hotspot.material as THREE.Material).dispose();
+    if (beam.pool) {
+      this.stagelightsGroup.remove(beam.pool);
+      beam.pool.geometry.dispose();
+      (beam.pool.material as THREE.Material).dispose();
+    }
+  }
+
+  buildStagelights(count: number = this.stagelightsFixtureCount) {
+    for (const fx of this.stagelightsFixtures) this.disposeStagelightsBeam(fx);
+    this.stagelightsFixtures = [];
+    for (const laser of this.stagelightsLaserFixtures) {
+      this.disposeStagelightsBeam({ cone: laser.cone, hotspot: laser.hotspot, pool: null });
+    }
+    this.stagelightsLaserFixtures = [];
+    this.stagelightsGradientTex?.dispose();
+    this.stagelightsGlowTex?.dispose();
+    this.stagelightsGradientTex = this.createStagelightsGradientTexture();
+    this.stagelightsGlowTex = this.createStagelightsGlowTexture();
+    // A rebuild (e.g. dragging the fixture-count slider mid-beat) must not
+    // leave the new fixtures snapping straight into a stale fan-out/hit pose.
+    this.stagelightsHit = 0;
+    this.stagelightsFanTimer = 0;
+
+    // Snap to odd counts (3/5/7) so there's always a true center (MID)
+    // fixture — mirrors store.ts's stagelightsFixtureCount normalization
+    // exactly so this stays self-contained/bounded for any caller.
+    const rounded = Math.round(count);
+    const n = Math.max(3, Math.min(7, Math.round((rounded - 3) / 2) * 2 + 3));
+    this.stagelightsFixtureCount = n;
+
+    for (let i = 0; i < n; i++) {
+      const bandPos = n <= 1 ? 0.5 : i / (n - 1);
+      const x = THREE.MathUtils.lerp(-STAGELIGHTS_RIG_SPAN, STAGELIGHTS_RIG_SPAN, bandPos);
+      const origin = new THREE.Vector3(x, STAGELIGHTS_RIG_Y, STAGELIGHTS_RIG_Z);
+      const color = this.colorAtInto(bandPos, new THREE.Color(), this.stagelightsFixedColors);
+
+      const beam = this.createStagelightsBeam(color, true);
+      beam.cone.position.copy(origin);
+      beam.hotspot.position.copy(origin);
+      beam.pool!.position.set(origin.x, STAGELIGHTS_FLOOR_Y, origin.z);
+
+      this.stagelightsFixtures.push({
+        cone: beam.cone,
+        hotspot: beam.hotspot,
+        pool: beam.pool!,
+        origin,
+        bandPos,
+        angle: 0,
+        speed: stagelightsTent3(...STAGELIGHTS_SWEEP_HZ, bandPos),
+        // Small per-index offset keeps fixtures that land at similar band
+        // positions from moving in perfect lockstep — only needed once
+        // count > 3 (at n=3 this must reduce to the exact anchor phases).
+        phase: stagelightsTent3(...STAGELIGHTS_SWEEP_PHASE, bandPos) + (n > 3 ? i * 0.37 : 0),
+        amplitude: stagelightsTent3(...STAGELIGHTS_SWEEP_AMPLITUDE, bandPos),
+        baseWidth: stagelightsTent3(...STAGELIGHTS_BASE_WIDTH, bandPos),
+        smoothed: 0,
+        highWeight: Math.max(0, Math.min(1, (bandPos - 0.5) * 2)),
+        bloomWeight: stagelightsTent3(1.1, 0.5, 0.4, bandPos),
+      });
+    }
+
+    for (let j = 0; j < STAGELIGHTS_LASER_COUNT; j++) {
+      const spreadT = STAGELIGHTS_LASER_COUNT <= 1 ? 0 : j / (STAGELIGHTS_LASER_COUNT - 1) - 0.5;
+      const colorT = spreadT + 0.5;
+      const color = this.colorAtInto(colorT, new THREE.Color(), this.stagelightsFixedColors);
+      const beam = this.createStagelightsBeam(color, false);
+      beam.cone.position.copy(STAGELIGHTS_LASER_ORIGIN);
+      beam.hotspot.position.copy(STAGELIGHTS_LASER_ORIGIN);
+      beam.hotspot.scale.setScalar(0.4);
+      beam.cone.visible = false;
+      beam.hotspot.visible = false;
+      this.stagelightsLaserFixtures.push({
+        cone: beam.cone,
+        hotspot: beam.hotspot,
+        spreadT,
+        colorT,
+      });
+    }
+  }
+
+  private updateStagelights(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: {
+      stagelightsAmplitude: number;
+      stagelightsUsePalette: boolean;
+      stagelightsSweepSpeed: number;
+      stagelightsLasers: boolean;
+    },
+  ) {
+    if (this.stagelightsFixtures.length === 0) return;
+    const amp = Math.max(0.05, opts.stagelightsAmplitude);
+    const sweepSpeed = Math.max(0.1, opts.stagelightsSweepSpeed);
+    const bass = Math.max(0, Math.min(1, audio.bass));
+    const mid = Math.max(0, Math.min(1, audio.mid));
+    const high = Math.max(0, Math.min(1, audio.high));
+
+    // Beat-triggered "hit": brief brighten + tighten, occasional fan-out on strong bass hits.
+    if (audio.beat) {
+      this.stagelightsHit = 1;
+      if (bass > 0.5) this.stagelightsFanTimer = STAGELIGHTS_FAN_DURATION;
+    }
+    this.stagelightsHit *= Math.exp(-dt * 8);
+    this.stagelightsFanTimer = Math.max(0, this.stagelightsFanTimer - dt);
+    const fanActive = this.stagelightsFanTimer > 0;
+    const hit = this.stagelightsHit;
+
+    const cosTilt = Math.cos(STAGELIGHTS_TILT);
+    const sinTilt = Math.sin(STAGELIGHTS_TILT);
+    let bloomBoost = 1;
+
+    for (let i = 0; i < this.stagelightsFixtures.length; i++) {
+      const fx = this.stagelightsFixtures[i]!;
+      const bp = fx.bandPos;
+      // Continuous blend of the 3 bands by this fixture's position in the row —
+      // a fixture between LOW and MID hears a mix of bass and mid, and so on.
+      const raw = stagelightsTent3(bass, mid, high, bp);
+      fx.smoothed += (raw - fx.smoothed) * Math.min(1, dt * 6);
+      const energy = normalizedBand(fx.smoothed);
+
+      // Sweep oscillator; on a strong beat all fixtures lock toward fan-out angles instead.
+      let targetAngle: number;
+      if (fanActive) {
+        targetAngle = (bp - 0.5) * STAGELIGHTS_FAN_SPREAD;
+      } else {
+        targetAngle =
+          Math.sin(time * fx.speed * sweepSpeed + fx.phase) * fx.amplitude * (1 - hit * 0.5);
+        if (fx.highWeight > 0) {
+          // Deterministic (non-random) shimmer so HIGH-aligned fixtures jitter without flicker.
+          targetAngle +=
+            (Math.sin(time * 13.7 + i) * 0.6 + Math.sin(time * 27.3 + i * 1.7) * 0.4) *
+            0.06 *
+            energy *
+            fx.highWeight;
+        }
+      }
+      fx.angle += (targetAngle - fx.angle) * Math.min(1, dt * (fanActive ? 3.2 : 2.4));
+
+      const dir = this.stagelightsAimScratch
+        .set(Math.sin(fx.angle) * cosTilt, -sinTilt, Math.cos(fx.angle) * cosTilt)
+        .normalize();
+      fx.cone.quaternion.setFromUnitVectors(this.stagelightsDownAxis, dir);
+
+      const widthGain = fanActive ? 0.7 : 1;
+      const width = fx.baseWidth * (0.55 + energy * 0.75) * widthGain * amp;
+      const length = STAGELIGHTS_BASE_LENGTH * (0.82 + energy * 0.26);
+      fx.cone.scale.set(width, length, width);
+
+      // Standby floor keeps the rig visibly "on" during quiet passages instead
+      // of fading to nothing — real stage lights don't switch off between beats.
+      // `amp` scales the shaped brightness *after* the curve so high Amplitude
+      // settings add headroom instead of just saturating the curve sooner.
+      const shaped = Math.pow(Math.max(0, Math.min(1, energy)), 1.4);
+      const intensity = Math.min(1.5, (0.22 + shaped * 0.95) * amp + hit * 0.55);
+      fx.cone.material.opacity = Math.min(1, intensity * 0.85);
+      const hotspotMat = fx.hotspot.material as THREE.SpriteMaterial;
+      hotspotMat.opacity = Math.min(1, 0.4 + intensity * 0.7);
+      fx.hotspot.scale.setScalar(0.6 + intensity * 0.5);
+
+      if (opts.stagelightsUsePalette) {
+        this.colorAtInto(bp, this.stagelightsScratch);
+      } else {
+        this.colorAtInto(bp, this.stagelightsScratch, this.stagelightsFixedColors);
+      }
+      fx.cone.material.color.copy(this.stagelightsScratch);
+      hotspotMat.color.copy(this.stagelightsScratch);
+      fx.pool.material.color.copy(this.stagelightsScratch);
+
+      // Light pool where the beam axis crosses the stage floor plane.
+      if (dir.y < -0.01) {
+        const tLen = (STAGELIGHTS_FLOOR_Y - fx.origin.y) / dir.y;
+        fx.pool.position.set(
+          fx.origin.x + dir.x * tLen,
+          STAGELIGHTS_FLOOR_Y + 0.01,
+          fx.origin.z + dir.z * tLen,
+        );
+        const poolScale = Math.max(0.6, width * 1.8);
+        fx.pool.scale.set(poolScale, poolScale, 1);
+        fx.pool.material.opacity = Math.min(0.8, intensity * 0.6);
+      } else {
+        fx.pool.material.opacity = 0;
+      }
+
+      // LOW-aligned fixtures drive bloom the most, HIGH-aligned the least (same
+      // anchor values the original fixed 3-light version used); scaled by 3/n
+      // so total bloom stays around the same tuned ceiling regardless of how
+      // many fixtures are on the rig instead of growing with fixture count.
+      bloomBoost += energy * fx.bloomWeight * (3 / this.stagelightsFixtures.length);
+    }
+
+    const laserBloom = this.updateStagelightsLasers({
+      time,
+      enabled: opts.stagelightsLasers,
+      mid,
+      high,
+      hit,
+      fanActive,
+      amp,
+      sweepSpeed,
+      usePalette: opts.stagelightsUsePalette,
+    });
+
+    this.postFxBoost.bloom = bloomBoost + hit * 0.6 + laserBloom;
+    this.postFxBoost.glitch = 0;
+  }
+
+  /** Optional laser-show accent: a fixed fan of thin, bright, upward beams from
+   * a downstage floor projector, layered on top of the overhead floodlights.
+   * Returns an extra bloom contribution (0 when disabled). */
+  private updateStagelightsLasers(opts: {
+    time: number;
+    enabled: boolean;
+    mid: number;
+    high: number;
+    hit: number;
+    fanActive: boolean;
+    amp: number;
+    sweepSpeed: number;
+    usePalette: boolean;
+  }): number {
+    const { time, enabled, mid, high, hit, fanActive, amp, sweepSpeed, usePalette } = opts;
+    if (this.stagelightsLaserFixtures.length === 0) return 0;
+    if (!enabled) {
+      for (const laser of this.stagelightsLaserFixtures) {
+        laser.cone.visible = false;
+        laser.hotspot.visible = false;
+      }
+      return 0;
+    }
+
+    const energy = normalizedBand(Math.max(0, Math.min(1, mid * 0.35 + high * 0.65)));
+    const fanBoost = fanActive ? 1.6 : 1;
+    const yaw = time * (0.22 + high * 0.5) * sweepSpeed;
+    const shaped = Math.pow(Math.max(0, Math.min(1, energy)), 1.2);
+    const intensity = Math.min(1.5, (0.3 + shaped * 0.9) * amp + hit * 0.7);
+    const width = STAGELIGHTS_LASER_RADIUS * (0.85 + energy * 0.5) * amp;
+    const length = STAGELIGHTS_LASER_LENGTH * (0.9 + energy * 0.15);
+
+    for (const laser of this.stagelightsLaserFixtures) {
+      laser.cone.visible = true;
+      laser.hotspot.visible = true;
+
+      // Fan spreads mostly upward from the projector; on a beat it briefly flares wider.
+      const wiggle = Math.sin(time * (3.1 + high * 4) + laser.spreadT * 9.7) * 0.09;
+      const spread = laser.spreadT * STAGELIGHTS_LASER_FAN * fanBoost + wiggle;
+      const dir = this.stagelightsAimScratch
+        .set(Math.sin(spread) * Math.cos(yaw), Math.cos(spread), Math.sin(spread) * Math.sin(yaw))
+        .normalize();
+      laser.cone.quaternion.setFromUnitVectors(this.stagelightsDownAxis, dir);
+      laser.cone.scale.set(width, length, width);
+
+      laser.cone.material.opacity = Math.min(1, intensity * 0.95);
+      const hotspotMat = laser.hotspot.material as THREE.SpriteMaterial;
+      hotspotMat.opacity = Math.min(1, 0.35 + intensity * 0.65);
+      laser.hotspot.scale.setScalar(0.35 + intensity * 0.35);
+
+      if (usePalette) {
+        this.colorAtInto(laser.colorT, this.stagelightsScratch);
+      } else {
+        // Saturated hue-cycling rainbow — the classic laser-show look.
+        this.stagelightsScratch.setHSL((laser.colorT + time * 0.05) % 1, 1, 0.55);
+      }
+      laser.cone.material.color.copy(this.stagelightsScratch);
+      hotspotMat.color.copy(this.stagelightsScratch);
+    }
+
+    return energy * 0.5;
+  }
+
+  private buildTextOverlay() {
+    for (let i = 0; i < MAX_TEXT_PLANES; i++) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1024;
+      canvas.height = 512;
+      const ctx = canvas.getContext("2d");
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 2), material);
+      mesh.visible = false;
+      this.textOverlayGroup.add(mesh);
+      this.textPlanes.push({
+        mesh,
+        canvas,
+        ctx,
+        texture,
+        lastDrawnText: "",
+        scrambleStartedAt: -999,
+      });
+    }
+    this.textOverlayGroup.visible = false;
+  }
+
+  /** Draws `text` (or a partially-scrambled version, `revealChars` characters
+   * in from the left) onto a plane's canvas and flags its texture for
+   * upload. Only called when content actually changes — see `ensureTextPlaneContent`. */
+  private drawTextOverlayPlane(
+    entry: TextPlaneEntry,
+    text: string,
+    colorT: number,
+    revealChars: number,
+  ) {
+    const ctx = entry.ctx;
+    if (!ctx) return;
+    const { width, height } = entry.canvas;
+    ctx.clearRect(0, 0, width, height);
+    if (!text) return;
+
+    const shown =
+      revealChars >= text.length
+        ? text
+        : text
+            .split("")
+            .map((ch, i) =>
+              i < revealChars || ch === " "
+                ? ch
+                : TEXT_SCRAMBLE_CHARS[Math.floor(Math.random() * TEXT_SCRAMBLE_CHARS.length)],
+            )
+            .join("");
+
+    const hex = `#${this.colorAt(colorT).getHexString()}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = hex;
+    ctx.shadowColor = hex;
+    ctx.shadowBlur = 26;
+    let fontSize = 96;
+    ctx.font = `700 ${fontSize}px "Courier New", monospace`;
+    while (ctx.measureText(shown).width > width * 0.92 && fontSize > 28) {
+      fontSize -= 4;
+      ctx.font = `700 ${fontSize}px "Courier New", monospace`;
+    }
+    ctx.fillText(shown, width / 2, height / 2);
+    entry.texture.needsUpdate = true;
+  }
+
+  /** Redraws a plane's canvas only when its target text changes, then (if
+   * `scramble`) keeps redrawing for `TEXT_SCRAMBLE_DURATION` seconds as the
+   * text resolves from scrambled glyphs, then stops — zero canvas cost on
+   * every other frame. */
+  private ensureTextPlaneContent(
+    entry: TextPlaneEntry,
+    text: string,
+    colorT: number,
+    time: number,
+    scramble: boolean,
+  ) {
+    if (entry.lastDrawnText !== text) {
+      entry.lastDrawnText = text;
+      entry.scrambleStartedAt = scramble ? time : -999;
+    }
+    if (entry.scrambleStartedAt >= 0 && time - entry.scrambleStartedAt < TEXT_SCRAMBLE_DURATION) {
+      const t = THREE.MathUtils.clamp(
+        (time - entry.scrambleStartedAt) / TEXT_SCRAMBLE_DURATION,
+        0,
+        1,
+      );
+      this.drawTextOverlayPlane(entry, text, colorT, Math.floor(t * text.length));
+    } else if (entry.scrambleStartedAt !== -1) {
+      this.drawTextOverlayPlane(entry, text, colorT, text.length);
+      entry.scrambleStartedAt = -1;
+    }
+  }
+
+  private hideTextPlanesFrom(startIndex: number) {
+    for (let i = startIndex; i < this.textPlanes.length; i++) {
+      this.textPlanes[i]!.mesh.visible = false;
+    }
+  }
+
+  /** Positions/orients the whole overlay group a fixed distance in front of
+   * the live camera each frame (same "derive a point from the camera
+   * transform" technique the XR HUD uses to track the headset), converted
+   * into `xrSceneRoot`-local space since the group is parented there. Normal
+   * depth-testing stays on, so the active visual's geometry can occlude it —
+   * that's what makes this feel embedded rather than a HUD floating on top. */
+  private positionTextOverlayGroup(distance: number) {
+    this.camera.getWorldPosition(this.textOverlayCameraPos);
+    this.camera.getWorldQuaternion(this.textOverlayCameraQuat);
+    this.textOverlayForward.set(0, 0, -1).applyQuaternion(this.textOverlayCameraQuat);
+    this.textOverlayGroup.position
+      .copy(this.textOverlayCameraPos)
+      .addScaledVector(this.textOverlayForward, distance)
+      .sub(this.xrSceneRoot.position);
+    this.textOverlayGroup.quaternion.copy(this.textOverlayCameraQuat);
+  }
+
+  private updateTextOverlayBounce(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: SceneUpdateOpts,
+    scale: number,
+    intensity: number,
+    displayText: (raw: string) => string,
+  ) {
+    this.hideTextPlanesFrom(1);
+    const entry = this.textPlanes[0];
+    if (!entry) return;
+    entry.mesh.visible = true;
+
+    const boundsX = 2.1;
+    const boundsY = 1.15;
+    const state = this.textBounceState;
+    state.x += state.vx * dt;
+    state.y += state.vy * dt;
+    if (state.x > boundsX || state.x < -boundsX) {
+      state.vx *= -1;
+      state.x = THREE.MathUtils.clamp(state.x, -boundsX, boundsX);
+    }
+    if (state.y > boundsY || state.y < -boundsY) {
+      state.vy *= -1;
+      state.y = THREE.MathUtils.clamp(state.y, -boundsY, boundsY);
+    }
+    state.rotY += dt * 0.5;
+    state.rotX += dt * 0.31;
+
+    const jitter = (Math.random() - 0.5) * 0.05 * intensity * audio.high;
+    entry.mesh.position.set(state.x + jitter, state.y + jitter, 0);
+    entry.mesh.rotation.set(Math.sin(state.rotX) * 0.35, state.rotY, 0);
+    entry.mesh.scale.setScalar(scale * (1 + audio.bass * 0.3 * intensity));
+    entry.mesh.material.opacity = THREE.MathUtils.clamp(0.6 + audio.mid * 0.4, 0, 1);
+
+    this.ensureTextPlaneContent(
+      entry,
+      displayText(this.textCurrentPhrase),
+      0.5,
+      time,
+      opts.textOverlayScramble,
+    );
+  }
+
+  private updateTextOverlayScroller(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: SceneUpdateOpts,
+    scale: number,
+    intensity: number,
+    displayText: (raw: string) => string,
+  ) {
+    this.hideTextPlanesFrom(1);
+    const entry = this.textPlanes[0];
+    if (!entry) return;
+    entry.mesh.visible = true;
+
+    const text = displayText(this.textCurrentPhrase);
+    this.ensureTextPlaneContent(entry, text, 0.35, time, opts.textOverlayScramble);
+
+    const speed = 1.6 + audio.mid * 1.4 * intensity;
+    const halfWidth = 2.6 + text.length * 0.05;
+    this.textScrollX -= speed * dt;
+    if (this.textScrollX < -halfWidth) this.textScrollX = halfWidth;
+
+    const bob = Math.sin(time * 1.3) * 0.12 * (1 + intensity * 0.5);
+    const jitter = (Math.random() - 0.5) * 0.03 * intensity * audio.high;
+    entry.mesh.position.set(this.textScrollX + jitter, bob, 0);
+    entry.mesh.rotation.set(0, 0.12, 0);
+    entry.mesh.scale.setScalar(scale * (1 + audio.bass * 0.15 * intensity));
+    entry.mesh.material.opacity = THREE.MathUtils.clamp(0.65 + audio.mid * 0.35, 0, 1);
+  }
+
+  private updateTextOverlayStack(
+    _dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: SceneUpdateOpts,
+    scale: number,
+    intensity: number,
+    displayText: (raw: string) => string,
+  ) {
+    const layers = Math.min(this.textHistory.length, 5, this.textPlanes.length);
+    this.hideTextPlanesFrom(layers);
+    for (let i = 0; i < layers; i++) {
+      const entry = this.textPlanes[i]!;
+      entry.mesh.visible = true;
+      const text = displayText(this.textHistory[i] ?? "");
+      this.ensureTextPlaneContent(
+        entry,
+        text,
+        layers <= 1 ? 0 : i / (layers - 1),
+        time,
+        i === 0 && opts.textOverlayScramble,
+      );
+      const bassPulse = i === 0 ? 1 + audio.bass * 0.2 * intensity : 1;
+      entry.mesh.position.set(0, 1.1 - i * 0.55, -i * 0.35);
+      entry.mesh.rotation.set(0, 0, 0);
+      entry.mesh.scale.setScalar(Math.max(0.15, scale * (1 - i * 0.13) * bassPulse));
+      entry.mesh.material.opacity = i === 0 ? 0.95 : Math.max(0.08, 0.6 - i * 0.14);
+    }
+  }
+
+  private updateTextOverlayOrbit(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: SceneUpdateOpts,
+    scale: number,
+    intensity: number,
+    displayText: (raw: string) => string,
+  ) {
+    const words = displayText(this.textCurrentPhrase)
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, this.textPlanes.length);
+    const count = words.length;
+    this.hideTextPlanesFrom(count);
+    this.textOrbitAngle += dt * (0.5 + audio.mid * 0.6 * intensity);
+    const radius = 1.8 + audio.bass * 0.9 * intensity;
+    for (let i = 0; i < count; i++) {
+      const entry = this.textPlanes[i]!;
+      entry.mesh.visible = true;
+      this.ensureTextPlaneContent(
+        entry,
+        words[i]!,
+        count <= 1 ? 0 : i / (count - 1),
+        time,
+        opts.textOverlayScramble,
+      );
+      const angle = this.textOrbitAngle + (i / count) * Math.PI * 2;
+      entry.mesh.position.set(
+        Math.cos(angle) * radius,
+        Math.sin(angle * 1.3 + i) * 0.4,
+        Math.sin(angle) * radius * 0.6,
+      );
+      entry.mesh.rotation.set(0, -angle, 0);
+      entry.mesh.scale.setScalar(scale * 0.55);
+      entry.mesh.material.opacity = 0.85;
+    }
+  }
+
+  /** Global text overlay — layers demo-scene phrases over whichever visual
+   * is active. Called unconditionally from `update()` (not gated by
+   * `opts.view`); must stay cheap when disabled. */
+  private updateTextOverlay(dt: number, time: number, audio: AudioBands, opts: SceneUpdateOpts) {
+    if (!opts.textOverlayEnabled) {
+      if (this.textOverlayGroup.visible) this.textOverlayGroup.visible = false;
+      return;
+    }
+    this.textOverlayGroup.visible = true;
+
+    // Opportunistic, cooldown-gated refill — TextBuffer.maybeRefill() never
+    // blocks or throws into the render loop.
+    if (time - this.textLastRefillCheckAt > 5) {
+      this.textLastRefillCheckAt = time;
+      void this.textBuffer.maybeRefill();
+    }
+
+    if (!this.textCurrentPhrase) {
+      this.textCurrentPhrase = this.textBuffer.next();
+      this.textHistory.unshift(this.textCurrentPhrase);
+    }
+
+    // Self-contained beat-edge detection — deliberately not `this.kick`,
+    // which only updates when the unrelated `cameraBeat` camera-shake toggle
+    // is on. Same wrap-edge shape as that logic, just decoupled from it.
+    const bpmConfident = audio.bpm > 0 && audio.bpmConfidence > 0.45;
+    const minGap = Math.max(0.4, opts.textOverlayPhraseInterval);
+    const swapReady = time - this.textLastSwapAt >= minGap;
+    let swap = false;
+    if (bpmConfident) {
+      const phase = audio.beatPhase;
+      if (swapReady && phase < this.textLastPhase && this.textLastPhase > 0.5) swap = true;
+      this.textLastPhase = phase;
+    } else if (swapReady && audio.beat) {
+      swap = true;
+    }
+    if (swap) {
+      this.textLastSwapAt = time;
+      this.textCurrentPhrase = this.textBuffer.next();
+      this.textHistory.unshift(this.textCurrentPhrase);
+      if (this.textHistory.length > 5) this.textHistory.length = 5;
+    }
+
+    const anchor = TEXT_OVERLAY_VIEW_ANCHOR[opts.view] ?? TEXT_OVERLAY_DEFAULT_ANCHOR;
+    this.positionTextOverlayGroup(anchor.distance);
+
+    const intensity = Math.max(0, opts.textOverlayIntensity);
+    const displayText = (raw: string) => (opts.textOverlayAllCaps ? raw.toUpperCase() : raw);
+
+    switch (opts.textOverlayStyle) {
+      case "scroller":
+        this.updateTextOverlayScroller(dt, time, audio, opts, anchor.scale, intensity, displayText);
+        break;
+      case "stack":
+        this.updateTextOverlayStack(dt, time, audio, opts, anchor.scale, intensity, displayText);
+        break;
+      case "orbit":
+        this.updateTextOverlayOrbit(dt, time, audio, opts, anchor.scale, intensity, displayText);
+        break;
+      default:
+        this.updateTextOverlayBounce(dt, time, audio, opts, anchor.scale, intensity, displayText);
+        break;
+    }
+  }
+
   resize(w: number, h: number) {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -4532,6 +5434,12 @@ export class Scene {
       this.xrHudPanel.material.dispose();
     }
     this.xrHudTexture?.dispose();
+    for (const entry of this.textPlanes) {
+      entry.mesh.geometry.dispose();
+      entry.mesh.material.dispose();
+      entry.texture.dispose();
+    }
+    this.textPlanes = [];
     this.bars.geometry.dispose();
     (this.bars.material as THREE.Material).dispose();
     this.sphere.geometry.dispose();
@@ -4617,5 +5525,14 @@ export class Scene {
       layer.sprite.material.dispose();
     }
     for (const texture of this.assetflowTextures) texture.dispose();
+    // stage lights
+    for (const fx of this.stagelightsFixtures) this.disposeStagelightsBeam(fx);
+    this.stagelightsFixtures = [];
+    for (const laser of this.stagelightsLaserFixtures) {
+      this.disposeStagelightsBeam({ cone: laser.cone, hotspot: laser.hotspot, pool: null });
+    }
+    this.stagelightsLaserFixtures = [];
+    this.stagelightsGradientTex?.dispose();
+    this.stagelightsGlowTex?.dispose();
   }
 }

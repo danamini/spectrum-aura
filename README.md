@@ -13,7 +13,7 @@
 
 <img src="docs/readme-hero.svg" alt="Animated spectrum bars — Spectrum Aura" width="900"/>
 
-<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=14+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="14 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
+<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=15+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="15 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
 
 **[Open live demo](https://danamini.github.io/spectrum-aura/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [Docs](docs/README.md)
 
@@ -51,7 +51,7 @@ Depending on your hardware you may need to tune performance via the options in s
 - Browser-native real-time rendering with animated 3D scenes and post-processing.
 - Designed for live sessions: quick mode switching, keyboard-first controls, and preset slots.
 - **Musical sync:** experimental BPM detection, a 4/4 bar grid, manual beat/downbeat taps, and phrase-aware view cycling.
-- Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, and Asset-Flow.
+- Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, Asset-Flow, and Stage Lights.
 - Beat-aware motion and camera behavior that reacts to energy and musical phase, not just raw levels.
 - Works with microphone input or shared tab/system audio.
 - Retro post FX options including CRT scanline emulation and projector-film artifacts.
@@ -93,6 +93,7 @@ For shared tab/system audio in Chrome:
 - Terrain: wireframe waterfall displacement grid over spectrum history.
 - On-rails Tube: fly-through wire tunnel with beat-reactive pulse and twist.
 - Asset-Flow: music-reactive 3D model choreography over drifting layered 2D backgrounds.
+- Stage Lights: sweeping spotlight rig (3/5/7 fixtures, LOW/MID/HIGH-aligned) with an optional laser-fan accent.
 
 ### Beat, bars, and musical sync
 

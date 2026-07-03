@@ -152,6 +152,14 @@ export type Settings = {
   assetflowMovement: number;
   assetflowBackgroundDrift: number;
 
+  // stage lights view (sweeping spotlight beams)
+  stagelightsFullscreen: boolean;
+  stagelightsUsePalette: boolean;
+  stagelightsAmplitude: number;
+  stagelightsSweepSpeed: number;
+  stagelightsFixtureCount: number; // 3, 5, or 7 spotlights
+  stagelightsLasers: boolean; // add a laser-show fan of thin upward beams
+
   // 3D combo view
   comboSphereSize: number; // base sphere scale (1 = default)
   comboSphereSpinSpeed: number; // sphere rotation speed
@@ -231,6 +239,16 @@ export type Settings = {
   assetOverlayFx: boolean;
   assetOverlayAmount: number;
   assetOverlaySpeed: number;
+
+  /** Demo-scene text overlay — phrases from a pluggable text source (default:
+   * BOFH excuses), layered over whichever visual is active. Off by default;
+   * it's the only feature in the app that touches the network. */
+  textOverlayEnabled: boolean;
+  textOverlayStyle: "bounce" | "scroller" | "stack" | "orbit";
+  textOverlayIntensity: number; // 0..2, jitter/reactivity amount
+  textOverlayPhraseInterval: number; // seconds between phrase swaps
+  textOverlayAllCaps: boolean;
+  textOverlayScramble: boolean; // scramble-in/out effect on swap
 
   performance: boolean; // cap pixel ratio harder
 
@@ -375,6 +393,12 @@ export const DEFAULT_SETTINGS: Settings = {
   assetflowSpin: 1,
   assetflowMovement: 0.7,
   assetflowBackgroundDrift: 1,
+  stagelightsFullscreen: false,
+  stagelightsUsePalette: true,
+  stagelightsAmplitude: 1,
+  stagelightsSweepSpeed: 1,
+  stagelightsFixtureCount: 3,
+  stagelightsLasers: false,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,
@@ -468,6 +492,13 @@ export const DEFAULT_SETTINGS: Settings = {
   assetOverlayFx: false,
   assetOverlayAmount: 0.6,
   assetOverlaySpeed: 1,
+
+  textOverlayEnabled: false,
+  textOverlayStyle: "bounce",
+  textOverlayIntensity: 1,
+  textOverlayPhraseInterval: 6,
+  textOverlayAllCaps: true,
+  textOverlayScramble: true,
 
   performance: false,
   bgColor: "#05060a",
@@ -806,6 +837,7 @@ function normalizeAmplitudeFloor(settings: Settings): Settings {
     mandalaAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.mandalaAmplitude),
     terrainAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.terrainAmplitude),
     assetflowAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.assetflowAmplitude),
+    stagelightsAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.stagelightsAmplitude),
   };
 }
 
@@ -853,6 +885,14 @@ function normalizePostFxRanges(settings: Settings): Settings {
     assetflowSpin: Math.max(0, Math.min(3, settings.assetflowSpin)),
     assetflowMovement: Math.max(0.35, Math.min(1.8, settings.assetflowMovement)),
     assetflowBackgroundDrift: Math.max(0, Math.min(3, settings.assetflowBackgroundDrift)),
+    stagelightsSweepSpeed: Math.max(0.2, Math.min(3, settings.stagelightsSweepSpeed)),
+    // snap to odd counts (3/5/7) so there's always a true center fixture
+    stagelightsFixtureCount: Math.max(
+      3,
+      Math.min(7, Math.round((settings.stagelightsFixtureCount - 3) / 2) * 2 + 3),
+    ),
+    textOverlayIntensity: Math.max(0, Math.min(2, settings.textOverlayIntensity)),
+    textOverlayPhraseInterval: Math.max(3, Math.min(20, settings.textOverlayPhraseInterval)),
     glitchIntensity: Math.max(0, Math.min(1, settings.glitchIntensity)),
     evolveAmount: Math.max(0, Math.min(1, settings.evolveAmount)),
   };
@@ -1077,6 +1117,14 @@ export const settingsStore = {
       assetOverlayFx: assetflowActive ? true : b(0.45),
       assetOverlayAmount: r(0.12, 1.2),
       assetOverlaySpeed: r(0.3, 2.4),
+      // textOverlayEnabled is intentionally left out of randomize — it's the
+      // only feature that touches the network, so it should only turn on
+      // when the user opts in explicitly, never via a stray R keypress.
+      textOverlayStyle: pick(["bounce", "scroller", "stack", "orbit"] as const),
+      textOverlayIntensity: r(0.4, 1.8),
+      textOverlayPhraseInterval: r(4, 12),
+      textOverlayAllCaps: b(0.7),
+      textOverlayScramble: b(0.6),
     };
 
     const viewPatch: Partial<Settings> = includeViewSettings
@@ -1213,6 +1261,13 @@ export const settingsStore = {
           assetflowSpin: r(0.2, 2.8),
           assetflowMovement: r(0.45, 1.45),
           assetflowBackgroundDrift: r(0.2, 2.8),
+
+          // stage lights
+          stagelightsUsePalette: b(0.7),
+          stagelightsAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          stagelightsSweepSpeed: r(0.3, 2.5),
+          stagelightsFixtureCount: pick([3, 5, 7] as const),
+          stagelightsLasers: b(0.35),
         }
       : {};
 

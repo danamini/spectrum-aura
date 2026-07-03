@@ -88,6 +88,9 @@ describe("settingsStore randomize", () => {
     expect(state.assetflowModelScale).toBeGreaterThan(1.7);
     expect(state.assetflowMovement).toBeGreaterThan(1.4);
     expect(state.assetflowBackgroundDrift).toBeGreaterThan(2.7);
+    expect(state.stagelightsAmplitude).toBeGreaterThan(2.9);
+    expect(state.stagelightsSweepSpeed).toBeGreaterThan(2.4);
+    expect(state.stagelightsFixtureCount).toBe(7);
 
     randomSpy.mockRestore();
   });

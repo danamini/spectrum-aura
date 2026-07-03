@@ -88,7 +88,7 @@ Deep dive: [audio-analysis-pipeline.md](./audio-analysis-pipeline.md), [song-clo
 
 **Three.js Scene** (`engine/scene.ts`):
 
-- **14 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow
+- **15 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow, stagelights
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
 - **Post-processing**: Bloom, chromatic aberration, glitch, god rays, lens flare, etc. via Composer
@@ -118,6 +118,7 @@ Recent controls:
 - `assetflowBackgroundDrift`: Speed/intensity control for Asset-Flow's layered 2D background drift.
 - `assetflowSpriteAmount`: Controls layered 2D background presence/intensity in Asset-Flow.
 - Asset-Flow actor motion is intentionally biased toward vertical movement with smoothed horizontal follow to prevent visual left/right flicker.
+- **Stage Lights** view: a row of overhead spotlight beams (LOW/MID/HIGH-aligned by position, `stagelightsFixtureCount` 3/5/7) sweeping and fanning out on strong beats, plus an optional `stagelightsLasers` fan of thin upward beams from a downstage projector. Per-fixture tuning (sweep speed/phase/amplitude/width/color) is a continuous blend across the LOW/MID/HIGH anchors by each fixture's position (`stagelightsTent3` in `scene.ts`) rather than a fixed 3-way lookup, so extra fixtures land *between* bands instead of repeating them.
 - `kaleidoscope` / `kaleidoscopeSides` / `kaleidoscopeAngle`: mirrored radial wedge post-FX pass.
 - `mirrorFx` / `mirrorMode` / `mirrorOffset`: directional mirror post-FX pass.
 - `crtFx` / `crtScanlineIntensity` / `crtCurvature` / `crtVignette`: retro CRT post-FX pass.
@@ -132,6 +133,7 @@ Recent controls:
 - Vignette amount: [0.5, 1.25]
 - Bloom strength: ≤ 0.25 (unless bloomExtreme)
 - Asset-Flow movement intensity: [0.35, 1.8]
+- Stage Lights sweep speed: [0.2, 3]; fixture count snaps to 3/5/7
 
 ## Shortcut Map
 

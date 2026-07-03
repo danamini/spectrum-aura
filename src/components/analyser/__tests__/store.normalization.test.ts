@@ -101,6 +101,26 @@ describe("settingsStore normalization", () => {
     expect(state.glitchIntensity).toBe(1);
   });
 
+  it("clamps stagelightsSweepSpeed and snaps stagelightsFixtureCount to 3/5/7", async () => {
+    const { settingsStore } = await import("../store");
+
+    settingsStore.set({ stagelightsSweepSpeed: 10 });
+    expect(settingsStore.get().stagelightsSweepSpeed).toBe(3);
+    settingsStore.set({ stagelightsSweepSpeed: 0 });
+    expect(settingsStore.get().stagelightsSweepSpeed).toBe(0.2);
+
+    settingsStore.set({ stagelightsFixtureCount: 3 });
+    expect(settingsStore.get().stagelightsFixtureCount).toBe(3);
+    settingsStore.set({ stagelightsFixtureCount: 4 });
+    expect(settingsStore.get().stagelightsFixtureCount).toBe(5);
+    settingsStore.set({ stagelightsFixtureCount: 6 });
+    expect(settingsStore.get().stagelightsFixtureCount).toBe(7);
+    settingsStore.set({ stagelightsFixtureCount: 20 });
+    expect(settingsStore.get().stagelightsFixtureCount).toBe(7);
+    settingsStore.set({ stagelightsFixtureCount: 0 });
+    expect(settingsStore.get().stagelightsFixtureCount).toBe(3);
+  });
+
   it("defaults glitchIntensity to 1 (matches pre-existing always-on behavior)", async () => {
     const { DEFAULT_SETTINGS } = await import("../store");
     expect(DEFAULT_SETTINGS.glitchIntensity).toBe(1);

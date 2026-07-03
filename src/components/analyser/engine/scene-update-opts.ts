@@ -118,6 +118,18 @@ export type SceneUpdateOpts = {
   assetflowSpin: number;
   assetflowMovement: number;
   assetflowBackgroundDrift: number;
+  stagelightsFullscreen: boolean;
+  stagelightsUsePalette: boolean;
+  stagelightsAmplitude: number;
+  stagelightsSweepSpeed: number;
+  stagelightsFixtureCount: number;
+  stagelightsLasers: boolean;
+  textOverlayEnabled: boolean;
+  textOverlayStyle: "bounce" | "scroller" | "stack" | "orbit";
+  textOverlayIntensity: number;
+  textOverlayPhraseInterval: number;
+  textOverlayAllCaps: boolean;
+  textOverlayScramble: boolean;
   bgColor: string;
   performance: boolean;
 };
@@ -239,6 +251,18 @@ export function createSceneUpdateOpts(initialView: ViewMode): SceneUpdateOpts {
     assetflowSpin: 0,
     assetflowMovement: 0,
     assetflowBackgroundDrift: 0,
+    stagelightsFullscreen: false,
+    stagelightsUsePalette: false,
+    stagelightsAmplitude: 0,
+    stagelightsSweepSpeed: 0,
+    stagelightsFixtureCount: 3,
+    stagelightsLasers: false,
+    textOverlayEnabled: false,
+    textOverlayStyle: "bounce",
+    textOverlayIntensity: 0,
+    textOverlayPhraseInterval: 6,
+    textOverlayAllCaps: false,
+    textOverlayScramble: false,
     bgColor: "#000000",
     performance: false,
   };
@@ -358,6 +382,18 @@ export function syncSceneUpdateOpts(
   o.assetflowSpin = s.assetflowSpin;
   o.assetflowMovement = s.assetflowMovement;
   o.assetflowBackgroundDrift = s.assetflowBackgroundDrift;
+  o.stagelightsFullscreen = s.stagelightsFullscreen;
+  o.stagelightsUsePalette = s.stagelightsUsePalette;
+  o.stagelightsAmplitude = s.stagelightsAmplitude;
+  o.stagelightsSweepSpeed = s.stagelightsSweepSpeed;
+  o.stagelightsFixtureCount = s.stagelightsFixtureCount;
+  o.stagelightsLasers = s.stagelightsLasers;
+  o.textOverlayEnabled = s.textOverlayEnabled;
+  o.textOverlayStyle = s.textOverlayStyle;
+  o.textOverlayIntensity = s.textOverlayIntensity;
+  o.textOverlayPhraseInterval = s.textOverlayPhraseInterval;
+  o.textOverlayAllCaps = s.textOverlayAllCaps;
+  o.textOverlayScramble = s.textOverlayScramble;
   o.comboSphereSize = s.comboSphereSize;
   o.comboSphereSpinSpeed = s.comboSphereSpinSpeed;
   o.comboSphereBassPunch = s.comboSphereBassPunch;

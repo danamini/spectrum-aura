@@ -51,6 +51,10 @@ export const EVOLUTION_TARGETS: Partial<Record<ViewMode, EvolutionTarget[]>> = {
     { key: "assetflowAmplitude", min: 0.1, max: 3 },
     { key: "assetflowMovement", min: 0.35, max: 1.8 },
   ],
+  stagelights: [
+    { key: "orbitSpeed", min: 0, max: 1.6 },
+    { key: "stagelightsSweepSpeed", min: 0.2, max: 3 },
+  ],
 };
 
 /** New waypoint picked every this many phrases (4 bars each) — a slow "progressive slide". */

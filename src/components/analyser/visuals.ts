@@ -137,6 +137,15 @@ export const BUILTIN_VISUALS = [
     order: 140,
     energy: "mid",
   },
+  {
+    id: "stagelights",
+    label: "Stage Lights",
+    settingsLabel: "Stage Lights settings",
+    fullscreenKey: "stagelightsFullscreen",
+    sceneGroupKey: "stagelightsGroup",
+    order: 150,
+    energy: "mid",
+  },
 ] as const;
 
 type BuiltinVisual = (typeof BUILTIN_VISUALS)[number];

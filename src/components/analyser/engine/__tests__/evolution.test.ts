@@ -99,6 +99,34 @@ describe("ViewEvolutionEngine", () => {
     expect(randomSpy).toHaveBeenCalled();
   });
 
+  it("drifts the shared orbitSpeed key for stagelights without bleeding into other views", () => {
+    // orbitSpeed (unlike every other EVOLUTION_TARGETS key) is a global camera
+    // setting read by every view's own camera code, not a view-namespaced
+    // setting — so drifting it from a "stagelights"-keyed target must not
+    // leave a lingering offset once the displayed view changes.
+    const engine = new ViewEvolutionEngine();
+    const stagelightsOpts = createSceneUpdateOpts("stagelights");
+    stagelightsOpts.orbitSpeed = 0.5;
+    const target = EVOLUTION_TARGETS.stagelights!.find((t) => t.key === "orbitSpeed")!;
+
+    let sawDrift = false;
+    for (let i = 0; i < 600; i++) {
+      stagelightsOpts.orbitSpeed = 0.5; // syncSceneUpdateOpts re-stamps this every frame in the app
+      engine.tick(stagelightsOpts, "stagelights", { phraseJustStarted: i % 90 === 0 }, 1 / 60, 1);
+      expect(stagelightsOpts.orbitSpeed).toBeGreaterThanOrEqual(target.min);
+      expect(stagelightsOpts.orbitSpeed).toBeLessThanOrEqual(target.max);
+      if (stagelightsOpts.orbitSpeed !== 0.5) sawDrift = true;
+    }
+    expect(sawDrift).toBe(true);
+
+    // Switching to a view with no whitelisted targets must leave orbitSpeed
+    // exactly at whatever the settings store re-stamps it to — no residual offset.
+    const otherOpts = createSceneUpdateOpts("classic");
+    otherOpts.orbitSpeed = 0.5;
+    engine.tick(otherOpts, "classic", { phraseJustStarted: false }, 1 / 60, 1);
+    expect(otherOpts.orbitSpeed).toBe(0.5);
+  });
+
   it("resets cleanly so re-enabling starts a fresh phrase count", () => {
     const engine = new ViewEvolutionEngine();
     const opts = createSceneUpdateOpts("mandala");

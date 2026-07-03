@@ -25,6 +25,7 @@ describe("visual registry", () => {
       "geometrynebula",
       "reztube",
       "assetflow",
+      "stagelights",
     ]);
     expect(DEFAULT_VISUAL_ID).toBe("combo");
     expect(getVisualDefinition("terrain")).toMatchObject({
