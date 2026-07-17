@@ -64,6 +64,12 @@ describe("ViewEvolutionEngine", () => {
   });
 
   it("keeps the view gently in motion between waypoints (continuous wobble)", () => {
+    // Pin the single waypoint draw to a neutral mid target: a high roll
+    // (target ≳ 0.89) pushes base + offset past the mandala clamp max for the
+    // whole sampling window, pinning every sample at exactly 3.0 and reading
+    // as zero spread — a ~1-in-9 flake. With the waypoint neutralized, the
+    // wobble is the only motion, which is what this test asserts.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
     const engine = new ViewEvolutionEngine();
     const opts = createSceneUpdateOpts("mandala");
 
