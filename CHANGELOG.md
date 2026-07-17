@@ -9,6 +9,10 @@ presets) may change between minor versions.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.3.0] - 2026-07-17
+
 ### Added
 
 - **Wiki-Chroma visual**: animated skeletal glTF actors (soldier / robot / fox
@@ -170,7 +174,8 @@ Three.js, and Vite — no backend, no upload flow.
 - `npm run check` runs typecheck + lint + tests; strict TypeScript
   (`noUnusedLocals` / `noUnusedParameters`) enabled.
 
-[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/danamini/spectrum-aura/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/danamini/spectrum-aura/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/danamini/spectrum-aura/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/danamini/spectrum-aura/releases/tag/v0.0.1
