@@ -300,6 +300,24 @@ describe("Shortcuts", () => {
     expect(container.textContent).toContain("BPM Grid");
   });
 
+  it("dims the restore pill when the mouse leaves the window and brightens on return", async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "g", bubbles: true }));
+    await tick();
+
+    const restore = container.querySelector(
+      "button[title='Show shortcuts (G)']",
+    ) as HTMLButtonElement | null;
+    expect(restore?.dataset.windowHovering).toBe("true");
+
+    document.documentElement.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+    await tick();
+    expect(restore?.dataset.windowHovering).toBe("false");
+
+    window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    await tick();
+    expect(restore?.dataset.windowHovering).toBe("true");
+  });
+
   it("marks View Cycle as active when view cycling is enabled", async () => {
     mocks.state.viewCycleMode = true;
 

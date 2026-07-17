@@ -9,7 +9,34 @@ presets) may change between minor versions.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Wiki-Chroma visual**: animated skeletal glTF actors (soldier / robot / fox
+  packs, multi-selectable) running in formation across three motion modes
+  (orbit / cogs / runner), with animation loops phase-locked to the SongClock
+  beat grid (1, 2, or 4 beats per loop) plus cog-ring, runner-rail, and
+  spark-cloud motifs. Actor models are fetched from their upstream sources on
+  first activation of the view — never at app startup — with a bundled local
+  fallback for the Fox and capsule stand-ins while models load.
+- **Public-domain text source**: the demo-scene text overlay now defaults to a
+  bundled, fully offline library of attributed public-domain snippets
+  (author, work, year, rights, credit line); the BOFH API source remains
+  selectable. Attribution for the current snippet appears in Stats for nerds.
+- **Asset overlay pack, families, and bias**: the Retro asset overlay now
+  draws from a larger local SVG pack described by a manifest with per-entry
+  family and attribution metadata, and picks distinct families per trio. A new
+  bias control (mixed / technical / organic / chaotic) steers the picker, and
+  each visual applies its own default bias on view switch (an explicitly
+  chosen bias in the same change is preserved).
+- **Optional Wikimedia Commons overlays**: opt-in, topic-based Commons imagery
+  (abstract / technical / organic) mixed into the asset overlay pool, with
+  per-image credit lines surfaced in Stats for nerds. Loads are gated behind
+  the toggle, back off on failure, and tolerate partially failed searches.
+- Stats for nerds: new Overlay FX, Text Overlay, and Wiki-Chroma sections with
+  live family/attribution readouts.
+- The render loop now survives a per-frame exception (logs and skips the
+  frame) instead of freezing the visualizer.
+- The shortcuts restore pill dims when the pointer leaves the window.
 
 ## [0.2.0] - 2026-07-03
 

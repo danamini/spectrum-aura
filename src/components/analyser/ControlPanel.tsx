@@ -1072,12 +1072,29 @@ export function ControlPanel() {
                         />
                       </ToggleRow>
                     </Disclosure>
-                    <Disclosure label="Demo-scene text overlay (BOFH excuses)">
+                    <Disclosure label="Demo-scene text overlay">
                       <ToggleRow
                         label="Text overlay"
                         enabled={s.textOverlayEnabled}
                         onToggle={(v) => set({ textOverlayEnabled: v })}
                       >
+                        <div className="grid grid-cols-2 gap-2">
+                          {(
+                            [
+                              ["public-domain", "Public Domain"],
+                              ["bofh", "BOFH API"],
+                            ] as const
+                          ).map(([source, label]) => (
+                            <Bn
+                              key={source}
+                              active={s.textOverlaySource === source}
+                              variant={s.textOverlaySource === source ? "default" : "outline"}
+                              onClick={() => set({ textOverlaySource: source })}
+                            >
+                              {label}
+                            </Bn>
+                          ))}
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
                           {(
                             [
@@ -1130,8 +1147,12 @@ export function ControlPanel() {
                         <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
                           <Label className="text-[11px]">Phrase source</Label>
                           <p className="mt-1 text-[10px] leading-relaxed text-white/60">
-                            Phrases come from bofh.bombeck.io in small batches and may require
-                            network; works fully offline from embedded fallback phrases.
+                            {s.textOverlaySource === "public-domain"
+                              ? "Curated public-domain snippets are bundled locally with author, work, rights, and provenance metadata."
+                              : "BOFH phrases come from bofh.bombeck.io in small batches and may require network; the fallback list stays available offline."}
+                          </p>
+                          <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+                            Current snippet attribution appears in Stats for nerds.
                           </p>
                         </div>
                       </ToggleRow>
@@ -1225,6 +1246,64 @@ export function ControlPanel() {
                         step={0.05}
                         onChange={(v) => set({ assetOverlaySpeed: v })}
                       />
+                      <div className="grid grid-cols-2 gap-2">
+                        {(
+                          [
+                            ["mixed", "Mixed"],
+                            ["technical", "Technical"],
+                            ["organic", "Organic"],
+                            ["chaotic", "Chaotic"],
+                          ] as const
+                        ).map(([bias, label]) => (
+                          <Bn
+                            key={bias}
+                            active={s.assetOverlayBias === bias}
+                            variant={s.assetOverlayBias === bias ? "default" : "outline"}
+                            onClick={() => set({ assetOverlayBias: bias })}
+                          >
+                            {label}
+                          </Bn>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Add Wikimedia Commons</Label>
+                        <Sw
+                          checked={s.assetOverlayCommonsEnabled}
+                          onCheckedChange={(v) => set({ assetOverlayCommonsEnabled: v })}
+                        />
+                      </div>
+                      {s.assetOverlayCommonsEnabled && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {(
+                            [
+                              ["abstract", "Abstract"],
+                              ["technical", "Technical"],
+                              ["organic", "Organic"],
+                            ] as const
+                          ).map(([topic, label]) => (
+                            <Bn
+                              key={topic}
+                              active={s.assetOverlayCommonsTopic === topic}
+                              variant={s.assetOverlayCommonsTopic === topic ? "default" : "outline"}
+                              onClick={() => set({ assetOverlayCommonsTopic: topic })}
+                            >
+                              {label}
+                            </Bn>
+                          ))}
+                        </div>
+                      )}
+                      <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+                        <p className="text-[10px] leading-relaxed text-white/60">
+                          Pulls from a larger local SVG overlay pack and shuffles across distinct
+                          families: grids, scanlines, circuit, halftone, chevrons, rings, starburst,
+                          and more. Bias steers the picker toward cleaner technical, softer organic,
+                          or rougher chaotic combinations.
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+                          Wikimedia Commons is optional and only loads when enabled. Current asset
+                          attribution is shown in Stats for nerds.
+                        </p>
+                      </div>
                     </ToggleRow>
                   </div>
                 )}

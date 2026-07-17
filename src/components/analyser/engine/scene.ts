@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
@@ -8,11 +9,16 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 import { sphereVertexShader, sphereFragmentShader } from "./shaders";
 import type { AudioBands } from "./audio";
 import type { SceneUpdateOpts } from "./scene-update-opts";
-import { settingsStore } from "../store";
+import { settingsStore, type WikichromaActorPack } from "../store";
 import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS, type ViewMode } from "../visuals";
 import { bipolarBand, normalizedBand } from "./loudness";
 import { TextBuffer } from "./text-sources/text-buffer";
 import { bofhTextSource, BOFH_FALLBACK_EXCUSES } from "./text-sources/bofh-source";
+import {
+  PUBLIC_DOMAIN_FALLBACK_SNIPPETS,
+  publicDomainTextSource,
+} from "./text-sources/public-domain-source";
+import type { TextSnippet } from "./text-sources/types";
 
 const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
 
@@ -27,6 +33,47 @@ const TEXT_SCRAMBLE_CHARS = "!<>-_\\/[]{}=+*^?#$%&ABCDEFGHIJKLMNOPQRSTUVWXYZ0123
  * inside the Torus tunnel) discovered during manual testing. */
 const TEXT_OVERLAY_DEFAULT_ANCHOR = { distance: 7, scale: 1 };
 const TEXT_OVERLAY_VIEW_ANCHOR: Partial<Record<ViewMode, { distance: number; scale: number }>> = {};
+
+/** Companion config per text source, keyed by the settings union — the buffer
+ * field initializer and `setTextSource` both read this, so fallback list and
+ * cache key can never drift between the two construction paths. Cache keys are
+ * versioned per payload shape (v2 = TextSnippet objects, v1 was raw strings). */
+const TEXT_OVERLAY_SOURCES = {
+  "public-domain": {
+    source: publicDomainTextSource,
+    fallback: PUBLIC_DOMAIN_FALLBACK_SNIPPETS,
+    cacheKey: "spectrum-aura:text-overlay-public-domain-v1",
+  },
+  bofh: {
+    source: bofhTextSource,
+    fallback: BOFH_FALLBACK_EXCUSES,
+    cacheKey: "spectrum-aura:text-overlay-bofh-v2",
+  },
+} as const;
+
+export type WikichromaDebugState = {
+  active: boolean;
+  mode: "orbit" | "cogs" | "runner";
+  selectedPacks: string[];
+  /** Model packs actually driving actor instances right now (loaded + assigned). */
+  activeModels: string[];
+  actorsActive: number;
+  beatLocked: boolean;
+  beatsPerLoop: number;
+  loopCount: number;
+};
+
+export type TextOverlayDebugState = {
+  enabled: boolean;
+  sourceId: "public-domain" | "bofh";
+  sourceLabel: string;
+  currentText: string;
+  author: string;
+  work: string;
+  rights: string;
+  creditLine: string;
+  sourceUrl: string;
+};
 
 type TextPlaneEntry = {
   mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
@@ -53,6 +100,37 @@ const ASSETFLOW_MODEL_PATHS = [
   "assets/models/quaternius/model-11.glb",
   "assets/models/kenney/model-12.glb",
 ];
+
+/** Animated skeletal glTF sources for Wiki-Chroma motion actors. Each entry is
+ * an "actor pack" the user can enable in any combination; instances are
+ * distributed round-robin across the enabled packs. `localFallbackUrl` is a
+ * bundled copy tried when the remote fetch fails (offline/CORS). */
+const WIKICHROMA_ANIMATED_GLTF_SOURCES = [
+  { id: "soldier", url: "https://threejs.org/examples/models/gltf/Soldier.glb", yawOffset: 0 },
+  {
+    id: "robot",
+    url: "https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
+    yawOffset: 0,
+  },
+  {
+    id: "fox",
+    url: "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Fox/glTF-Binary/Fox.glb",
+    yawOffset: 0,
+    // Same Khronos Fox asset shipped locally for Asset-Flow (see THIRD_PARTY_ASSETS.md).
+    localFallbackUrl: "assets/models/kenney/model-07.glb",
+  },
+] as const satisfies readonly {
+  // Ids must stay in lockstep with WIKICHROMA_ACTOR_PACKS in store.ts — the
+  // store strips unknown ids from settings, so a pack added here without a
+  // store entry could never be selected (and vice versa).
+  id: WikichromaActorPack;
+  url: string;
+  yawOffset: number;
+  localFallbackUrl?: string;
+}[];
+type WikichromaActorPackId = (typeof WIKICHROMA_ANIMATED_GLTF_SOURCES)[number]["id"];
+const WIKICHROMA_DEFAULT_PACKS: WikichromaActorPackId[] = ["soldier"];
+const WIKICHROMA_BEAT_LOOP_OPTIONS = [1, 2, 4] as const;
 
 /** Stage Lights: a row of coordinated spotlight beams driven by bass/mid/high —
  * LOW-aligned fixtures (left) lead with a slow wide sweep, MID (center) follows
@@ -141,6 +219,7 @@ export class Scene {
   soundwallGroup = new THREE.Group();
   geometrynebulaGroup = new THREE.Group();
   assetflowGroup = new THREE.Group();
+  wikichromaGroup = new THREE.Group();
   stagelightsGroup = new THREE.Group();
   private xrControllerInputs: Array<{
     controller: THREE.Object3D;
@@ -175,14 +254,16 @@ export class Scene {
   // demo-scene text overlay (global — applies on top of any view)
   textOverlayGroup = new THREE.Group();
   private textPlanes: TextPlaneEntry[] = [];
+  private textSourceId: "public-domain" | "bofh" = "bofh";
+  private textSourceLabel = bofhTextSource.label;
   private textBuffer = new TextBuffer(
-    bofhTextSource,
-    BOFH_FALLBACK_EXCUSES,
-    "spectrum-aura:text-overlay-bofh-v1",
+    TEXT_OVERLAY_SOURCES.bofh.source,
+    TEXT_OVERLAY_SOURCES.bofh.fallback,
+    TEXT_OVERLAY_SOURCES.bofh.cacheKey,
   );
-  private textCurrentPhrase = "";
+  private textCurrentItem: TextSnippet | null = null;
   /** Most-recent-first phrase history, used by the "stack" echo-trail style. */
-  private textHistory: string[] = [];
+  private textHistory: TextSnippet[] = [];
   private textLastPhase = 0;
   private textLastSwapAt = -999;
   private textLastRefillCheckAt = -999;
@@ -192,6 +273,32 @@ export class Scene {
   private textOverlayCameraPos = new THREE.Vector3();
   private textOverlayCameraQuat = new THREE.Quaternion();
   private textOverlayForward = new THREE.Vector3();
+
+  private setTextSource(sourceId: "public-domain" | "bofh") {
+    if (sourceId === this.textSourceId) return;
+    const config = TEXT_OVERLAY_SOURCES[sourceId];
+    this.textSourceId = sourceId;
+    this.textSourceLabel = config.source.label;
+    this.textBuffer = new TextBuffer(config.source, config.fallback, config.cacheKey);
+    this.textCurrentItem = null;
+    this.textHistory = [];
+    this.textLastSwapAt = -999;
+    this.textLastRefillCheckAt = -999;
+  }
+
+  getTextOverlayDebugState(): TextOverlayDebugState {
+    return {
+      enabled: this.textOverlayGroup.visible,
+      sourceId: this.textSourceId,
+      sourceLabel: this.textSourceLabel,
+      currentText: this.textCurrentItem?.text ?? "",
+      author: this.textCurrentItem?.author ?? "",
+      work: this.textCurrentItem?.work ?? "",
+      rights: this.textCurrentItem?.rights ?? "",
+      creditLine: this.textCurrentItem?.creditLine ?? "",
+      sourceUrl: this.textCurrentItem?.sourceUrl ?? "",
+    };
+  }
 
   bars!: THREE.InstancedMesh;
   private barCount = 0;
@@ -386,6 +493,68 @@ export class Scene {
   private assetflowModelScale = 1;
   private assetflowModelTemplates: Array<THREE.Object3D | undefined> = [];
 
+  // wiki-chroma view (animated runner actors + motion motifs)
+  private wikichromaBuildToken = 0;
+  private wikichromaCogMeshes: Array<THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>> = [];
+  private wikichromaRunnerRails: Array<THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>> =
+    [];
+  private wikichromaRunnerBeads: Array<{
+    mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+    lane: number;
+    phase: number;
+    speed: number;
+  }> = [];
+  private wikichromaSparkGeo?: THREE.BufferGeometry;
+  private wikichromaSparkMat?: THREE.PointsMaterial;
+  private wikichromaSparkPoints?: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+  private wikichromaSparkBase?: Float32Array;
+  private wikichromaAnimTemplates: Array<
+    | {
+        scene: THREE.Object3D;
+        clips: THREE.AnimationClip[];
+        yawOffset: number;
+      }
+    | undefined
+  > = [];
+  /** Actor packs currently selected in settings (validated, never empty). */
+  private wikichromaActorPackSelection: WikichromaActorPackId[] = [...WIKICHROMA_DEFAULT_PACKS];
+  /** Last raw packs array seen from settings — identity-compared per frame. */
+  private wikichromaLastPacksInput?: readonly string[];
+  private wikichromaTintScratch = new THREE.Color();
+  private wikichromaAnimActors: Array<{
+    root: THREE.Group;
+    fallback: THREE.Mesh<THREE.CapsuleGeometry, THREE.MeshBasicMaterial>;
+    lane: number;
+    phase: number;
+    bin: number;
+    /** Integrated path state — audio energy feeds the *rate*, never the
+     * absolute value, so energy spikes can't teleport actors mid-frame. */
+    angle: number;
+    dist: number;
+    /** Index into WIKICHROMA_ANIMATED_GLTF_SOURCES of the model currently
+     * cloned onto this actor, or -1 while on the capsule fallback. */
+    templateIndex: number;
+    model?: THREE.Object3D;
+    modelRestPos?: THREE.Vector3;
+    modelRestQuat?: THREE.Quaternion;
+    modelYawOffset: number;
+    mixer?: THREE.AnimationMixer;
+    action?: THREE.AnimationAction;
+  }> = [];
+  private wikichromaAnimLoadRequested = false;
+  private wikichromaBeatCycles = 0;
+  private wikichromaLastBeatPhase = 0;
+  private wikichromaDebug: WikichromaDebugState = {
+    active: false,
+    mode: "orbit",
+    selectedPacks: [...WIKICHROMA_DEFAULT_PACKS],
+    activeModels: [],
+    actorsActive: 0,
+    beatLocked: false,
+    beatsPerLoop: 2,
+    loopCount: 0,
+  };
+
   // rez tube view
   reztubeGroup = new THREE.Group();
   private reztubeLine?: LineSegments2;
@@ -437,6 +606,7 @@ export class Scene {
     this.xrSceneRoot.add(this.geometrynebulaGroup);
     this.xrSceneRoot.add(this.reztubeGroup);
     this.xrSceneRoot.add(this.assetflowGroup);
+    this.xrSceneRoot.add(this.wikichromaGroup);
     this.xrSceneRoot.add(this.stagelightsGroup);
     this.xrSceneRoot.add(this.textOverlayGroup);
     this.scene.add(this.xrSceneRoot);
@@ -455,6 +625,7 @@ export class Scene {
     this.geometrynebulaGroup.visible = false;
     this.reztubeGroup.visible = false;
     this.assetflowGroup.visible = false;
+    this.wikichromaGroup.visible = false;
     this.stagelightsGroup.visible = false;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.25);
@@ -485,6 +656,7 @@ export class Scene {
     this.buildGeoNebula();
     this.buildReztube();
     this.buildAssetflow();
+    this.buildWikichroma();
     this.buildStagelights();
     this.buildTextOverlay();
 
@@ -2691,6 +2863,12 @@ export class Scene {
   update(dt: number, time: number, audio: AudioBands, opts: SceneUpdateOpts) {
     // Keep scene visibility + branch view in lockstep with React settings every frame.
     this.setView(opts.view);
+    if (opts.view !== "wikichroma" && this.wikichromaDebug.active) {
+      this.wikichromaDebug.active = false;
+      // Forget the last beat phase so re-entering the view can't compare a
+      // stale value and count a spurious beat cycle.
+      this.wikichromaLastBeatPhase = 0;
+    }
 
     // Update background and fog colour.
     const xrMode = Boolean(opts.xrMode);
@@ -3415,6 +3593,43 @@ export class Scene {
       this.camera.fov += (53 - bk * 8 - this.camera.fov) * Math.min(1, dt * 11);
       this.camera.updateProjectionMatrix();
       this.camera.lookAt(0, 0.6, 0);
+      return;
+    }
+
+    if (opts.view === "wikichroma") {
+      this.updateWikichroma(dt, time, audio, opts);
+
+      if (xrMode) return;
+      if (opts.wikichromaFullscreen) {
+        const follow = Math.min(1, dt * 8);
+        this.camera.position.x += (0 - this.camera.position.x) * follow;
+        this.camera.position.y += (0.5 - this.camera.position.y) * follow;
+        this.camera.position.z += (14.5 - this.camera.position.z) * follow;
+        this.camera.fov += (47 - this.camera.fov) * Math.min(1, dt * 10);
+        this.camera.updateProjectionMatrix();
+        this.camera.lookAt(0, 0.2, 0);
+        return;
+      }
+
+      if (opts.cameraMouse) {
+        const r = this.mouseZoom;
+        this.camera.position.set(
+          Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+          1.2 + Math.sin(this.mousePitch) * r * 0.45,
+          Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
+        );
+      } else {
+        this.orbitAngle += dt * (opts.orbitSpeed * 0.7 + 0.08);
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 13,
+          2 + Math.sin(time * 0.35) * 1.4,
+          Math.cos(this.orbitAngle) * 13,
+        );
+      }
+      applyCameraDrift(4.8);
+      this.camera.fov += (54 - this.camera.fov) * Math.min(1, dt * 9);
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(0, 0.35, 0);
       return;
     }
 
@@ -4709,6 +4924,555 @@ export class Scene {
     }
   }
 
+  private pickWikichromaClip(clips: readonly THREE.AnimationClip[]) {
+    if (clips.length === 0) return null;
+    const byName = (needle: string) =>
+      clips.find((clip) => clip.name.toLowerCase().includes(needle.toLowerCase()));
+    return byName("run") ?? byName("walk") ?? byName("idle") ?? clips[0]!;
+  }
+
+  private normalizeWikichromaAnimatedTemplate(model: THREE.Object3D, targetHeight = 2.4) {
+    const bounds = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    bounds.getSize(size);
+    bounds.getCenter(center);
+    const scale = targetHeight / Math.max(size.y, 0.0001);
+    model.scale.setScalar(scale);
+
+    const scaledBounds = new THREE.Box3().setFromObject(model);
+    const scaledCenter = new THREE.Vector3();
+    scaledBounds.getCenter(scaledCenter);
+    model.position.x -= scaledCenter.x;
+    model.position.z -= scaledCenter.z;
+    model.position.y -= scaledBounds.min.y;
+  }
+
+  private cloneWikichromaAnimatedModel(template: THREE.Object3D) {
+    const clone = skeletonClone(template);
+    clone.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      if (Array.isArray(mesh.material)) {
+        mesh.material = mesh.material.map((material) => material.clone());
+      } else {
+        mesh.material = mesh.material.clone();
+      }
+      // Remember each clone's authored color so per-frame tinting can blend
+      // from the original absolutely instead of compounding lerps.
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        const lit = material as THREE.MeshStandardMaterial;
+        if (lit.color) lit.userData.baseColor = lit.color.clone();
+      }
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+    });
+    return clone;
+  }
+
+  private disposeWikichromaAnimatedActor(actor: {
+    root: THREE.Group;
+    fallback: THREE.Mesh<THREE.CapsuleGeometry, THREE.MeshBasicMaterial>;
+    templateIndex: number;
+    model?: THREE.Object3D;
+    modelRestPos?: THREE.Vector3;
+    modelRestQuat?: THREE.Quaternion;
+    mixer?: THREE.AnimationMixer;
+    action?: THREE.AnimationAction;
+  }) {
+    actor.mixer?.stopAllAction();
+    if (actor.model) {
+      actor.root.remove(actor.model);
+      actor.model.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const material = mesh.material;
+        if (Array.isArray(material)) {
+          material.forEach((m) => m.dispose());
+        } else if (material) {
+          material.dispose();
+        }
+      });
+      actor.model = undefined;
+    }
+    actor.mixer = undefined;
+    actor.action = undefined;
+    actor.modelRestPos = undefined;
+    actor.modelRestQuat = undefined;
+    actor.templateIndex = -1;
+    actor.fallback.visible = true;
+  }
+
+  /** Distributes the selected (and loaded) actor packs across the actor
+   * instances round-robin. Only actors whose assignment changed are re-cloned,
+   * so repeated calls (per template load / selection change) are cheap. */
+  private applyWikichromaAnimatedActors() {
+    const selectedLoaded = this.wikichromaActorPackSelection
+      .map((packId) => WIKICHROMA_ANIMATED_GLTF_SOURCES.findIndex((source) => source.id === packId))
+      .filter((index) => index >= 0 && Boolean(this.wikichromaAnimTemplates[index]));
+    // Graceful degrade: if nothing selected has loaded (yet), use any loaded pack.
+    const pool =
+      selectedLoaded.length > 0
+        ? selectedLoaded
+        : this.wikichromaAnimTemplates.flatMap((template, index) => (template ? [index] : []));
+    if (pool.length === 0) return;
+
+    for (let i = 0; i < this.wikichromaAnimActors.length; i++) {
+      const actor = this.wikichromaAnimActors[i]!;
+      const templateIndex = pool[i % pool.length]!;
+      if (actor.templateIndex === templateIndex && actor.model) continue;
+      const template = this.wikichromaAnimTemplates[templateIndex]!;
+      this.disposeWikichromaAnimatedActor(actor);
+      const model = this.cloneWikichromaAnimatedModel(template.scene);
+      actor.root.add(model);
+      actor.model = model;
+      actor.modelRestPos = model.position.clone();
+      actor.modelRestQuat = model.quaternion.clone();
+      actor.modelYawOffset = template.yawOffset;
+      actor.templateIndex = templateIndex;
+      actor.fallback.visible = false;
+
+      const clip = this.pickWikichromaClip(template.clips);
+      if (clip) {
+        const mixer = new THREE.AnimationMixer(model);
+        const action = mixer.clipAction(clip);
+        action.enabled = true;
+        action.setEffectiveWeight(1);
+        action.play();
+        actor.mixer = mixer;
+        actor.action = action;
+      }
+    }
+  }
+
+  /** Applies the actor-pack multi-select from settings; re-assigns models when
+   * the selection actually changed. */
+  private setWikichromaActorPacks(packs: readonly string[]) {
+    // Per-frame caller: the store keeps a stable array reference when the
+    // selection is unchanged, so identity is the cheap no-change fast path.
+    if (packs === this.wikichromaLastPacksInput) return;
+    this.wikichromaLastPacksInput = packs;
+    const valid = WIKICHROMA_ANIMATED_GLTF_SOURCES.map((source) => source.id).filter((id) =>
+      packs.includes(id),
+    );
+    const next = valid.length > 0 ? valid : [...WIKICHROMA_DEFAULT_PACKS];
+    if (next.join(",") === this.wikichromaActorPackSelection.join(",")) return;
+    this.wikichromaActorPackSelection = next;
+    this.applyWikichromaAnimatedActors();
+  }
+
+  private requestWikichromaAnimatedActors(buildToken: number) {
+    if (this.wikichromaAnimLoadRequested) return;
+    this.wikichromaAnimLoadRequested = true;
+    this.wikichromaAnimTemplates = new Array(WIKICHROMA_ANIMATED_GLTF_SOURCES.length);
+    const loader = new GLTFLoader();
+
+    WIKICHROMA_ANIMATED_GLTF_SOURCES.forEach((source, sourceIndex) => {
+      const onLoaded = (gltf: { scene: THREE.Object3D; animations: THREE.AnimationClip[] }) => {
+        if (buildToken !== this.wikichromaBuildToken) return;
+        const scene = gltf.scene;
+        this.normalizeWikichromaAnimatedTemplate(scene);
+        this.wikichromaAnimTemplates[sourceIndex] = {
+          scene,
+          clips: gltf.animations,
+          yawOffset: source.yawOffset,
+        };
+        this.applyWikichromaAnimatedActors();
+      };
+      const localFallbackUrl = "localFallbackUrl" in source ? source.localFallbackUrl : undefined;
+      loader.load(source.url, onLoaded, undefined, () => {
+        if (buildToken !== this.wikichromaBuildToken || !localFallbackUrl) return;
+        // Remote fetch failed — try the bundled copy before giving up.
+        // Public assets resolve through the Vite base like assetflow's models,
+        // not relative to the current page URL.
+        const baseUrl = (import.meta.env.BASE_URL || "/").replace(/\/*$/, "/");
+        loader.load(
+          `${baseUrl}${localFallbackUrl.replace(/^\/+/, "")}`,
+          onLoaded,
+          undefined,
+          () => {
+            // Keep fallback runner capsules if animated models fail to load.
+          },
+        );
+      });
+    });
+  }
+
+  /** Builds the (cheap, local) wikichroma motifs. Called exactly once from the
+   * constructor; the remote actor models load lazily on first activation via
+   * `requestWikichromaAnimatedActors`. If a rebuild trigger is ever added,
+   * reinstate a teardown mirroring the wikichroma block in dispose(). */
+  private buildWikichroma() {
+    // Motion motifs: rotating cog rings + runner rails/beads + spark cloud.
+    for (let i = 0; i < 3; i++) {
+      const cog = new THREE.Mesh(
+        new THREE.TorusGeometry(2.2 + i * 1.5, 0.11 + i * 0.03, 16, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0x7ad8ff,
+          transparent: true,
+          opacity: 0.5,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      cog.position.set(0, 1.5 - i * 1.5, -1.2 + i * 0.8);
+      cog.rotation.x = Math.PI * 0.5;
+      this.wikichromaGroup.add(cog);
+      this.wikichromaCogMeshes.push(cog);
+    }
+
+    for (let lane = 0; lane < 3; lane++) {
+      const y = 1.8 - lane * 1.75;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(
+          [-6.2, y, -2.6 + lane * 1.8, 6.2, y, -2.6 + lane * 1.8],
+          3,
+        ),
+      );
+      const rail = new THREE.Line(
+        geo,
+        new THREE.LineBasicMaterial({
+          color: 0x8be7ff,
+          transparent: true,
+          opacity: 0.2,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      this.wikichromaGroup.add(rail);
+      this.wikichromaRunnerRails.push(rail);
+
+      for (let i = 0; i < 5; i++) {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.09, 10, 10),
+          new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.75,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        mesh.position.set(-6 + i * 2.6, y, -2.6 + lane * 1.8);
+        this.wikichromaGroup.add(mesh);
+        this.wikichromaRunnerBeads.push({
+          mesh,
+          lane,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.55 + i * 0.09,
+        });
+      }
+    }
+
+    const sparkCount = 180;
+    const sparkBase = new Float32Array(sparkCount * 3);
+    for (let i = 0; i < sparkCount; i++) {
+      const idx = i * 3;
+      const a = Math.random() * Math.PI * 2;
+      const r = 2.2 + Math.random() * 5.3;
+      sparkBase[idx] = Math.cos(a) * r;
+      sparkBase[idx + 1] = -2 + Math.random() * 4;
+      sparkBase[idx + 2] = Math.sin(a) * r;
+    }
+    const sparkPos = new Float32Array(sparkBase);
+    const sparkGeo = new THREE.BufferGeometry();
+    sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3));
+    const sparkMat = new THREE.PointsMaterial({
+      color: 0x9de8ff,
+      size: 0.07,
+      transparent: true,
+      opacity: 0.65,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const sparks = new THREE.Points(sparkGeo, sparkMat);
+    this.wikichromaGroup.add(sparks);
+    this.wikichromaSparkBase = sparkBase;
+    this.wikichromaSparkGeo = sparkGeo;
+    this.wikichromaSparkMat = sparkMat;
+    this.wikichromaSparkPoints = sparks;
+
+    const actorCount = 5;
+    for (let i = 0; i < actorCount; i++) {
+      const root = new THREE.Group();
+      const fallback = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.35, 1.35, 6, 12),
+        new THREE.MeshBasicMaterial({
+          color: 0xc0f6ff,
+          transparent: true,
+          opacity: 0.8,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      root.add(fallback);
+      this.wikichromaGroup.add(root);
+      this.wikichromaAnimActors.push({
+        root,
+        fallback,
+        lane: i % 3,
+        phase: (i / actorCount) * Math.PI * 2,
+        bin: 8 + i * 12,
+        angle: (i / actorCount) * Math.PI * 2,
+        dist: (i * 12.4) / actorCount,
+        templateIndex: -1,
+        modelYawOffset: 0,
+      });
+    }
+  }
+
+  private updateWikichroma(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: Pick<
+      SceneUpdateOpts,
+      | "wikichromaUsePalette"
+      | "wikichromaAmplitude"
+      | "wikichromaMotionMode"
+      | "wikichromaMotionSpeed"
+      | "wikichromaFlowStrength"
+      | "wikichromaBeatsPerLoop"
+      | "wikichromaActorPacks"
+    >,
+  ) {
+    // Remote actor models load lazily on the first frame the view is active
+    // (internally guarded one-shot) — never at app startup.
+    this.requestWikichromaAnimatedActors(this.wikichromaBuildToken);
+    this.setWikichromaActorPacks(opts.wikichromaActorPacks);
+    const bins = audio.bins;
+    const amp = Math.max(0.05, opts.wikichromaAmplitude);
+    // Motion speed maps linearly onto every rate below — no energy term ever
+    // multiplies `motion`, so the slider feels proportional at the top end.
+    const motion = THREE.MathUtils.clamp(opts.wikichromaMotionSpeed, 0.2, 3);
+    const flow = THREE.MathUtils.clamp(opts.wikichromaFlowStrength, 0, 2);
+    const pulse = this.kick * 0.45 + audio.bass * 0.35;
+    const mode = opts.wikichromaMotionMode;
+    // Shared travel-rate energy term: one value for every actor, so the pack
+    // holds formation instead of bunching when individual bins spike.
+    const drive = audio.mid;
+    const beatsPerLoop = (WIKICHROMA_BEAT_LOOP_OPTIONS as readonly number[]).includes(
+      Math.round(opts.wikichromaBeatsPerLoop),
+    )
+      ? Math.round(opts.wikichromaBeatsPerLoop)
+      : 2;
+    const bpmConfident = audio.bpm > 0 && audio.bpmConfidence > 0.45;
+    if (bpmConfident) {
+      if (audio.beatPhase < this.wikichromaLastBeatPhase && this.wikichromaLastBeatPhase > 0.5) {
+        this.wikichromaBeatCycles += 1;
+      }
+      this.wikichromaLastBeatPhase = audio.beatPhase;
+    } else {
+      this.wikichromaLastBeatPhase = audio.beatPhase;
+    }
+    const showCogs = mode === "cogs";
+    const showRunner = mode === "runner";
+    for (let i = 0; i < this.wikichromaCogMeshes.length; i++) {
+      const cog = this.wikichromaCogMeshes[i]!;
+      cog.visible = showCogs;
+      if (!showCogs) continue;
+      // One shared spin direction — the whole scene circulates the same way.
+      cog.rotation.z += dt * motion * (0.5 + audio.mid * 1.2 + i * 0.15);
+      cog.material.color.copy(this.colorAtInto((time * 0.03 + i * 0.2) % 1, this.tmpColor));
+      cog.material.opacity = THREE.MathUtils.clamp(0.2 + audio.mid * 0.6 + pulse * 0.3, 0.08, 1);
+      const s = 1 + (audio.bass * 0.06 + pulse * 0.08) * amp;
+      cog.scale.setScalar(s);
+    }
+    for (const rail of this.wikichromaRunnerRails) {
+      rail.visible = showRunner;
+      if (!showRunner) continue;
+      rail.material.color.copy(this.colorAtInto((time * 0.05) % 1, this.tmpColor));
+      rail.material.opacity = THREE.MathUtils.clamp(0.12 + audio.mid * 0.35, 0.06, 0.85);
+    }
+    for (const bead of this.wikichromaRunnerBeads) {
+      bead.mesh.visible = showRunner;
+      if (!showRunner) continue;
+      const laneY = 1.8 - bead.lane * 1.75;
+      const span = 12;
+      // Integrated one-direction travel; highs speed beads up but never snap them.
+      bead.phase += dt * motion * bead.speed * (0.8 + audio.high * 0.9 * flow);
+      const x = (((bead.phase % span) + span) % span) - span * 0.5;
+      bead.mesh.position.set(x, laneY, -2.6 + bead.lane * 1.8);
+      bead.mesh.material.color.copy(
+        this.colorAtInto(((bead.lane + 1) * 0.21 + time * 0.09) % 1, this.tmpColor),
+      );
+      bead.mesh.material.opacity = THREE.MathUtils.clamp(0.35 + audio.high * 0.6, 0.15, 1);
+      const s = 0.8 + (audio.bass * 1.4 + pulse) * 0.2;
+      bead.mesh.scale.setScalar(s);
+    }
+    if (this.wikichromaSparkGeo && this.wikichromaSparkBase && this.wikichromaSparkPoints) {
+      const pos = this.wikichromaSparkGeo.attributes.position.array as Float32Array;
+      for (let i = 0; i < this.wikichromaSparkBase.length; i += 3) {
+        const id = i / 3;
+        pos[i] =
+          this.wikichromaSparkBase[i]! +
+          Math.sin(time * (0.8 + audio.mid * 0.9) + id * 0.37) * 0.15 * amp;
+        pos[i + 1] =
+          this.wikichromaSparkBase[i + 1]! +
+          Math.sin(time * (1.35 + audio.high * 1.3) + id * 0.41) * (0.2 + audio.bass * 0.25) * amp;
+        pos[i + 2] =
+          this.wikichromaSparkBase[i + 2]! +
+          Math.cos(time * (0.95 + audio.mid * 0.7) + id * 0.29) * 0.15 * amp;
+      }
+      this.wikichromaSparkGeo.attributes.position.needsUpdate = true;
+      this.wikichromaSparkPoints.material.color.copy(
+        this.colorAtInto((time * 0.04) % 1, this.tmpColor),
+      );
+      this.wikichromaSparkPoints.material.opacity = THREE.MathUtils.clamp(
+        0.22 + audio.high * 0.55 + pulse * 0.2,
+        0.15,
+        1,
+      );
+      this.wikichromaSparkPoints.visible = true;
+      this.wikichromaSparkPoints.rotation.y += dt * (0.05 + motion * 0.08);
+    }
+
+    const smoothYaw = (current: number, target: number, rate: number) => {
+      const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+      return current + delta * Math.min(1, dt * rate);
+    };
+
+    let actorsActive = 0;
+    for (let i = 0; i < this.wikichromaAnimActors.length; i++) {
+      const actor = this.wikichromaAnimActors[i]!;
+      actor.root.visible = true;
+      actorsActive += 1;
+      const actorBin = bins.length > 0 ? bins[Math.min(actor.bin, bins.length - 1)]! / 255 : 0;
+      const energy = normalizedBand(actorBin);
+      if (actor.action && actor.mixer) {
+        if (bpmConfident) {
+          // Beat-phase-locked clip playback: all actors share the loop phase so
+          // cycles land together on the bar grid (SongClock-injected beatPhase).
+          const beatProgress = (this.wikichromaBeatCycles + audio.beatPhase) / beatsPerLoop;
+          const loopPhase = ((beatProgress % 1) + 1) % 1;
+          const clipDuration = actor.action.getClip().duration;
+          // Must stay unpaused: AnimationMixer.setTime advances actions by
+          // time * effectiveTimeScale, and a paused action's timescale is 0 —
+          // paused + setTime pins the pose to the clip's first frame forever.
+          actor.action.paused = false;
+          actor.mixer.setTime(loopPhase * clipDuration);
+        } else {
+          // Free-running: linear in the motion slider, gently energy-assisted.
+          // Shared `drive` keeps every actor's stride rate identical.
+          actor.action.paused = false;
+          actor.action.setEffectiveTimeScale(1);
+          actor.mixer.update(dt * (0.45 + motion * 0.35 + flow * drive * 0.3));
+        }
+      }
+      if (actor.model && actor.modelRestPos && actor.modelRestQuat) {
+        // Keep root-motion clips from pulling actors off the authored trajectory.
+        actor.model.position.copy(actor.modelRestPos);
+        actor.model.quaternion.copy(actor.modelRestQuat);
+      }
+
+      // All paths integrate their own state with dt so audio energy only bends
+      // the *rate* of travel — positions and headings stay continuous even when
+      // the spectrum spikes (no spin jitter / teleporting at high intensity).
+      // Every actor travels the SAME direction at the SAME rate (shared
+      // `drive`), on paths concentric with the central rings/cogs, heading
+      // tangent-locked to the direction of travel — a pack running in
+      // formation rather than actors scattering on individual trajectories.
+      let targetYaw = actor.root.rotation.y;
+      if (mode === "runner") {
+        // Strict one-direction lane loop: run left → right, wrap, repeat.
+        const laneY = 1.8 - actor.lane * 1.75;
+        const span = 12.4;
+        actor.dist += dt * (motion * 1.5 + flow * drive * 0.8);
+        const x = (((actor.dist % span) + span) % span) - span * 0.5;
+        actor.root.position.set(x, laneY - 1.05, -2.2 + actor.lane * 1.7);
+        targetYaw = Math.PI * 0.5; // constant heading — never flips
+      } else if (mode === "cogs") {
+        // Tangential travel around the cog rings, all one direction.
+        const ring = 2.8 + (i % 3) * 1.25;
+        actor.angle += dt * (motion * 0.26 + flow * drive * 0.12);
+        const a = actor.angle;
+        actor.root.position.set(Math.cos(a) * ring, -1.35 + (i % 3) * 0.4, Math.sin(a) * ring);
+        targetYaw = Math.atan2(-Math.sin(a), Math.cos(a));
+      } else {
+        // Orbit: slow, single-direction circulation, tangent-locked heading.
+        const orbit = 4.8 + (i % 2) * 1.6;
+        actor.angle += dt * (motion * 0.11 + flow * drive * 0.05);
+        const a = actor.angle;
+        actor.root.position.set(Math.cos(a) * orbit, -1.15, Math.sin(a) * orbit);
+        targetYaw = Math.atan2(-Math.sin(a), Math.cos(a));
+      }
+
+      actor.root.rotation.y = smoothYaw(
+        actor.root.rotation.y,
+        targetYaw + actor.modelYawOffset,
+        6.5,
+      );
+
+      const actorScale = 0.45 + amp * 0.16 + (energy * 0.16 + pulse * 0.07) * flow;
+      actor.root.scale.setScalar(actorScale);
+
+      const tint = opts.wikichromaUsePalette
+        ? this.colorAtInto(
+            i / Math.max(1, this.wikichromaAnimActors.length - 1),
+            this.wikichromaTintScratch,
+          )
+        : this.white;
+      if (actor.model) {
+        actor.model.traverse((obj) => {
+          const mesh = obj as THREE.Mesh;
+          if (!mesh.isMesh || !mesh.material) return;
+          const tintMaterial = (material: THREE.Material) => {
+            const lit = material as THREE.MeshStandardMaterial;
+            // Absolute blend from the authored color captured at clone time —
+            // a relative lerp on the live color compounds across frames and
+            // bleaches the model within a second.
+            const base = lit.userData.baseColor as THREE.Color | undefined;
+            if (lit.color && base) {
+              lit.color.copy(base).lerp(tint, opts.wikichromaUsePalette ? 0.35 : 0.08);
+            }
+            if (lit.emissive) {
+              lit.emissive.copy(tint);
+              lit.emissiveIntensity = 0.2 + energy * 0.6;
+            }
+          };
+          if (Array.isArray(mesh.material)) mesh.material.forEach(tintMaterial);
+          else tintMaterial(mesh.material);
+        });
+      } else {
+        actor.fallback.material.color.copy(tint);
+        actor.fallback.material.opacity = THREE.MathUtils.clamp(0.35 + energy * 0.55, 0.2, 1);
+      }
+    }
+
+    // Only cheap scalar writes per frame — the pack/model arrays are assembled
+    // on demand in getWikichromaDebugState (stats panel polls at 10Hz).
+    const debug = this.wikichromaDebug;
+    debug.active = true;
+    debug.mode = mode;
+    debug.actorsActive = actorsActive;
+    debug.beatLocked = bpmConfident;
+    debug.beatsPerLoop = beatsPerLoop;
+    debug.loopCount = Math.floor(this.wikichromaBeatCycles / beatsPerLoop);
+
+    this.postFxBoost.bloom = 1.08 + audio.bass * 1.35 + audio.mid * 0.5;
+    this.postFxBoost.glitch = Math.max(0, audio.high - 0.75) * 0.2;
+  }
+
+  getWikichromaDebugState(): WikichromaDebugState {
+    const activeModelIds = new Set<string>();
+    for (const actor of this.wikichromaAnimActors) {
+      if (actor.model && actor.templateIndex >= 0) {
+        activeModelIds.add(WIKICHROMA_ANIMATED_GLTF_SOURCES[actor.templateIndex]!.id);
+      }
+    }
+    return {
+      ...this.wikichromaDebug,
+      selectedPacks: [...this.wikichromaActorPackSelection],
+      activeModels:
+        activeModelIds.size === 0 && this.wikichromaDebug.actorsActive > 0
+          ? ["fallback-capsules"]
+          : [...activeModelIds],
+    };
+  }
+
   // ─── Stage Lights (three sweeping spotlight beams) ─────────────────────────
 
   private createStagelightsGradientTexture(): THREE.Texture {
@@ -5245,7 +6009,7 @@ export class Scene {
 
     this.ensureTextPlaneContent(
       entry,
-      displayText(this.textCurrentPhrase),
+      displayText(this.textCurrentItem?.text ?? ""),
       0.5,
       time,
       opts.textOverlayScramble,
@@ -5266,7 +6030,7 @@ export class Scene {
     if (!entry) return;
     entry.mesh.visible = true;
 
-    const text = displayText(this.textCurrentPhrase);
+    const text = displayText(this.textCurrentItem?.text ?? "");
     this.ensureTextPlaneContent(entry, text, 0.35, time, opts.textOverlayScramble);
 
     const speed = 1.6 + audio.mid * 1.4 * intensity;
@@ -5296,7 +6060,7 @@ export class Scene {
     for (let i = 0; i < layers; i++) {
       const entry = this.textPlanes[i]!;
       entry.mesh.visible = true;
-      const text = displayText(this.textHistory[i] ?? "");
+      const text = displayText(this.textHistory[i]?.text ?? "");
       this.ensureTextPlaneContent(
         entry,
         text,
@@ -5321,7 +6085,7 @@ export class Scene {
     intensity: number,
     displayText: (raw: string) => string,
   ) {
-    const words = displayText(this.textCurrentPhrase)
+    const words = displayText(this.textCurrentItem?.text ?? "")
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, this.textPlanes.length);
@@ -5355,6 +6119,7 @@ export class Scene {
    * is active. Called unconditionally from `update()` (not gated by
    * `opts.view`); must stay cheap when disabled. */
   private updateTextOverlay(dt: number, time: number, audio: AudioBands, opts: SceneUpdateOpts) {
+    if (opts.textOverlaySource !== this.textSourceId) this.setTextSource(opts.textOverlaySource);
     if (!opts.textOverlayEnabled) {
       if (this.textOverlayGroup.visible) this.textOverlayGroup.visible = false;
       return;
@@ -5368,9 +6133,9 @@ export class Scene {
       void this.textBuffer.maybeRefill();
     }
 
-    if (!this.textCurrentPhrase) {
-      this.textCurrentPhrase = this.textBuffer.next();
-      this.textHistory.unshift(this.textCurrentPhrase);
+    if (!this.textCurrentItem) {
+      this.textCurrentItem = this.textBuffer.next();
+      if (this.textCurrentItem) this.textHistory.unshift(this.textCurrentItem);
     }
 
     // Self-contained beat-edge detection — deliberately not `this.kick`,
@@ -5389,8 +6154,8 @@ export class Scene {
     }
     if (swap) {
       this.textLastSwapAt = time;
-      this.textCurrentPhrase = this.textBuffer.next();
-      this.textHistory.unshift(this.textCurrentPhrase);
+      this.textCurrentItem = this.textBuffer.next();
+      if (this.textCurrentItem) this.textHistory.unshift(this.textCurrentItem);
       if (this.textHistory.length > 5) this.textHistory.length = 5;
     }
 
@@ -5525,6 +6290,39 @@ export class Scene {
       layer.sprite.material.dispose();
     }
     for (const texture of this.assetflowTextures) texture.dispose();
+    // wiki-chroma — invalidate in-flight GLTF callbacks first so a model
+    // resolving after teardown can't re-clone actors onto the disposed scene.
+    this.wikichromaBuildToken += 1;
+    for (const cog of this.wikichromaCogMeshes) {
+      cog.geometry.dispose();
+      cog.material.dispose();
+    }
+    for (const rail of this.wikichromaRunnerRails) {
+      rail.geometry.dispose();
+      rail.material.dispose();
+    }
+    for (const bead of this.wikichromaRunnerBeads) {
+      bead.mesh.geometry.dispose();
+      bead.mesh.material.dispose();
+    }
+    for (const actor of this.wikichromaAnimActors) {
+      this.disposeWikichromaAnimatedActor(actor);
+      actor.fallback.geometry.dispose();
+      actor.fallback.material.dispose();
+    }
+    for (const template of this.wikichromaAnimTemplates) {
+      if (!template) continue;
+      template.scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const material = mesh.material;
+        if (Array.isArray(material)) material.forEach((m) => m.dispose());
+        else if (material) material.dispose();
+      });
+    }
+    this.wikichromaSparkGeo?.dispose();
+    this.wikichromaSparkMat?.dispose();
     // stage lights
     for (const fx of this.stagelightsFixtures) this.disposeStagelightsBeam(fx);
     this.stagelightsFixtures = [];

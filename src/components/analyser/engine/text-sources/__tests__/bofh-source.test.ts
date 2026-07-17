@@ -26,7 +26,11 @@ describe("bofhTextSource", () => {
     const phrases = await bofhTextSource.prefetch(2);
 
     expect(fetchMock).toHaveBeenCalledWith("https://bofh.bombeck.io/v1/excuses/random?count=2");
-    expect(phrases).toEqual(["The router is meditating.", "Cosmic rays flipped a bit."]);
+    expect(phrases.map((entry) => entry.text)).toEqual([
+      "The router is meditating.",
+      "Cosmic rays flipped a bit.",
+    ]);
+    expect(phrases[0]?.sourceUrl).toBe("https://bofh.bombeck.io/");
   });
 
   it("throws when the API responds with a non-OK status, so callers fall back", async () => {
@@ -56,8 +60,9 @@ describe("bofhTextSource", () => {
   it("ships a healthy embedded fallback list", () => {
     expect(BOFH_FALLBACK_EXCUSES.length).toBeGreaterThanOrEqual(50);
     for (const excuse of BOFH_FALLBACK_EXCUSES) {
-      expect(typeof excuse).toBe("string");
-      expect(excuse.length).toBeGreaterThan(0);
+      expect(typeof excuse.text).toBe("string");
+      expect(excuse.text.length).toBeGreaterThan(0);
+      expect(excuse.rights.length).toBeGreaterThan(0);
     }
   });
 });

@@ -95,6 +95,31 @@ describe("settingsStore randomize", () => {
     randomSpy.mockRestore();
   });
 
+  it("randomizes the wikichroma actor controls within their valid ranges", async () => {
+    const { settingsStore, WIKICHROMA_ACTOR_PACKS } = await import("../store");
+
+    settingsStore.set({ randomizeViewSettings: true });
+
+    // High roll: every b() is false, pick() lands on the last option — the
+    // pack subset comes up empty and must fall back to a single valid pack.
+    const highSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    settingsStore.randomize();
+    let state = settingsStore.get();
+    expect(state.wikichromaFlowStrength).toBeGreaterThan(1.6);
+    expect(state.wikichromaFlowStrength).toBeLessThanOrEqual(2);
+    expect(state.wikichromaBeatsPerLoop).toBe(4);
+    expect(state.wikichromaActorPacks).toEqual(["fox"]);
+    highSpy.mockRestore();
+
+    // Low roll: every b() is true — all packs selected.
+    const lowSpy = vi.spyOn(Math, "random").mockReturnValue(0.1);
+    settingsStore.randomize();
+    state = settingsStore.get();
+    expect(state.wikichromaBeatsPerLoop).toBe(1);
+    expect(state.wikichromaActorPacks).toEqual([...WIKICHROMA_ACTOR_PACKS]);
+    lowSpy.mockRestore();
+  });
+
   it("randomize sets lensFlare and lensFlareAmount in postFx patch", async () => {
     const { settingsStore } = await import("../store");
 
@@ -128,6 +153,9 @@ describe("settingsStore randomize", () => {
     expect(state.randomizeViewSettings).toBe(false);
     expect(state.view).toBe("assetflow");
     expect(state.assetOverlayFx).toBe(true);
+    expect(["mixed", "technical", "organic", "chaotic"]).toContain(state.assetOverlayBias);
+    expect(state.assetOverlayCommonsEnabled).toBe(false);
+    expect(state.textOverlaySource).toBe("public-domain");
     randomSpy.mockRestore();
   });
 });

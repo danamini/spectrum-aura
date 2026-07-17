@@ -267,6 +267,39 @@ describe("analyser store utility functions", () => {
     expect(state[landed!.fullscreenKey! as keyof typeof state]).toBe(false);
   });
 
+  it("applies the visual's default overlay bias when switching views manually", async () => {
+    const { settingsStore } = await import("../store");
+
+    settingsStore.set({ assetOverlayBias: "mixed" });
+    settingsStore.set({ view: "classic" });
+    expect(settingsStore.get().assetOverlayBias).toBe("technical");
+
+    settingsStore.set({ view: "nebula" });
+    expect(settingsStore.get().assetOverlayBias).toBe("organic");
+  });
+
+  it("preserves an explicit overlay bias when switching views", async () => {
+    const { settingsStore } = await import("../store");
+
+    settingsStore.set({ view: "classic", assetOverlayBias: "chaotic" });
+    expect(settingsStore.get().assetOverlayBias).toBe("chaotic");
+  });
+
+  it("applies the next visual's overlay bias during auto cycle", async () => {
+    const { settingsStore } = await import("../store");
+
+    settingsStore.set({ view: "classic", viewCycleRandomize: false, assetOverlayBias: "mixed" });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+
+    settingsStore.cycleRandomView();
+    const state = settingsStore.get();
+
+    expect(state.view).not.toBe("classic");
+    expect(state.assetOverlayBias).toBe("organic");
+
+    randomSpy.mockRestore();
+  });
+
   it("reset restores default settings", async () => {
     const { settingsStore } = await import("../store");
 

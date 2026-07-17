@@ -26,9 +26,13 @@ Manual taps (`T`, `⇧T`) override grid position. Audio analysis estimates tempo
 ## Demo-scene text overlay
 
 The "Demo-scene text overlay" (Post FX tab) layers moving/bouncing/scrolling
-phrases on top of whichever visual is active. Phrases come from
-[bofh.bombeck.io](https://bofh.bombeck.io) in small batches (`engine/text-sources/`)
-and may require network; it works fully offline via an embedded fallback
-phrase list, and the phrase source is a swappable `TextSource` interface
-(`engine/text-sources/types.ts`) so another source can replace it later
-without touching rendering code.
+phrases on top of whichever visual is active. Two sources are available via a
+swappable `TextSource` interface (`engine/text-sources/types.ts`):
+
+- **Public Domain Library** (default): curated snippets bundled locally with
+  author/work/rights metadata — fully offline.
+- **BOFH API**: phrases from [bofh.bombeck.io](https://bofh.bombeck.io) in
+  small batches; may require network, with an embedded offline fallback list.
+
+Every snippet carries attribution metadata (`TextSnippet`), and the current
+snippet's credit line is surfaced in the Stats for nerds panel.

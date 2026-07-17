@@ -1,4 +1,4 @@
-import type { TextSource } from "./types";
+import type { TextSnippet, TextSource } from "./types";
 
 const API_URL = "https://bofh.bombeck.io/v1/excuses/random";
 
@@ -8,7 +8,7 @@ type BofhResponse = {
 
 /** Embedded so the overlay works with zero network dependency — used when
  * the API is unreachable and no cached batch exists yet. */
-export const BOFH_FALLBACK_EXCUSES: string[] = [
+const BOFH_FALLBACK_STRINGS: string[] = [
   "Someone unplugged the internet to charge their phone.",
   "The backup backup generator needs a backup.",
   "A raccoon got into the server room again.",
@@ -62,16 +62,44 @@ export const BOFH_FALLBACK_EXCUSES: string[] = [
   "It's not down, it's just very, very slow at being up.",
 ];
 
+export const BOFH_FALLBACK_EXCUSES: TextSnippet[] = BOFH_FALLBACK_STRINGS.map((text, index) => ({
+  id: `bofh-fallback-${index + 1}`,
+  text,
+  work: "BOFH Excuses",
+  author: "bofh.bombeck.io",
+  sourceUrl: "https://bofh.bombeck.io/",
+  rights: "API content; verify downstream use before redistribution.",
+  creditLine: "Source: bofh.bombeck.io",
+  attributionRequired: false,
+  notes: "Network source with bundled fallback text.",
+}));
+
 /** BOFH excuses API — https://bofh.bombeck.io. CORS-open, ~1000 req/15min. */
 export const bofhTextSource: TextSource = {
   id: "bofh",
   label: "BOFH Excuses",
-  async prefetch(count: number): Promise<string[]> {
+  async prefetch(count: number): Promise<TextSnippet[]> {
     const response = await fetch(`${API_URL}?count=${count}`);
     if (!response.ok) throw new Error(`bofh excuses request failed: ${response.status}`);
     const body = (await response.json()) as BofhResponse;
-    const excuses = body.data?.map((entry) => entry.excuse).filter(Boolean) ?? [];
-    if (excuses.length === 0) throw new Error("bofh excuses response had no usable phrases");
-    return excuses;
+    const excuses: Array<TextSnippet | null> =
+      body.data?.map((entry, index) =>
+        entry.excuse
+          ? {
+              id: `bofh-${entry.id ?? index}`,
+              text: entry.excuse,
+              work: "BOFH Excuses",
+              author: "bofh.bombeck.io",
+              sourceUrl: "https://bofh.bombeck.io/",
+              rights: "API content; verify downstream use before redistribution.",
+              creditLine: "Source: bofh.bombeck.io",
+              attributionRequired: false,
+              notes: "Live network source.",
+            }
+          : null,
+      ) ?? [];
+    const usable = excuses.filter((entry): entry is TextSnippet => entry !== null);
+    if (usable.length === 0) throw new Error("bofh excuses response had no usable phrases");
+    return usable;
   },
 };

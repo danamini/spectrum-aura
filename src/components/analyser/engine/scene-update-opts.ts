@@ -1,4 +1,4 @@
-import type { Settings } from "../store";
+import type { Settings, WikichromaActorPack } from "../store";
 import type { ViewMode } from "../visuals";
 
 /** Mutable settings bag passed into Scene.update each frame — reused to avoid per-frame allocation. */
@@ -118,6 +118,14 @@ export type SceneUpdateOpts = {
   assetflowSpin: number;
   assetflowMovement: number;
   assetflowBackgroundDrift: number;
+  wikichromaFullscreen: boolean;
+  wikichromaUsePalette: boolean;
+  wikichromaAmplitude: number;
+  wikichromaMotionMode: "orbit" | "cogs" | "runner";
+  wikichromaMotionSpeed: number;
+  wikichromaFlowStrength: number;
+  wikichromaBeatsPerLoop: number;
+  wikichromaActorPacks: readonly WikichromaActorPack[];
   stagelightsFullscreen: boolean;
   stagelightsUsePalette: boolean;
   stagelightsAmplitude: number;
@@ -125,6 +133,7 @@ export type SceneUpdateOpts = {
   stagelightsFixtureCount: number;
   stagelightsLasers: boolean;
   textOverlayEnabled: boolean;
+  textOverlaySource: "public-domain" | "bofh";
   textOverlayStyle: "bounce" | "scroller" | "stack" | "orbit";
   textOverlayIntensity: number;
   textOverlayPhraseInterval: number;
@@ -251,6 +260,14 @@ export function createSceneUpdateOpts(initialView: ViewMode): SceneUpdateOpts {
     assetflowSpin: 0,
     assetflowMovement: 0,
     assetflowBackgroundDrift: 0,
+    wikichromaFullscreen: false,
+    wikichromaUsePalette: false,
+    wikichromaAmplitude: 0,
+    wikichromaMotionMode: "orbit",
+    wikichromaMotionSpeed: 0,
+    wikichromaFlowStrength: 1,
+    wikichromaBeatsPerLoop: 2,
+    wikichromaActorPacks: [],
     stagelightsFullscreen: false,
     stagelightsUsePalette: false,
     stagelightsAmplitude: 0,
@@ -258,6 +275,7 @@ export function createSceneUpdateOpts(initialView: ViewMode): SceneUpdateOpts {
     stagelightsFixtureCount: 3,
     stagelightsLasers: false,
     textOverlayEnabled: false,
+    textOverlaySource: "public-domain",
     textOverlayStyle: "bounce",
     textOverlayIntensity: 0,
     textOverlayPhraseInterval: 6,
@@ -382,6 +400,14 @@ export function syncSceneUpdateOpts(
   o.assetflowSpin = s.assetflowSpin;
   o.assetflowMovement = s.assetflowMovement;
   o.assetflowBackgroundDrift = s.assetflowBackgroundDrift;
+  o.wikichromaFullscreen = s.wikichromaFullscreen;
+  o.wikichromaUsePalette = s.wikichromaUsePalette;
+  o.wikichromaAmplitude = s.wikichromaAmplitude;
+  o.wikichromaMotionMode = s.wikichromaMotionMode;
+  o.wikichromaMotionSpeed = s.wikichromaMotionSpeed;
+  o.wikichromaFlowStrength = s.wikichromaFlowStrength;
+  o.wikichromaBeatsPerLoop = s.wikichromaBeatsPerLoop;
+  o.wikichromaActorPacks = s.wikichromaActorPacks;
   o.stagelightsFullscreen = s.stagelightsFullscreen;
   o.stagelightsUsePalette = s.stagelightsUsePalette;
   o.stagelightsAmplitude = s.stagelightsAmplitude;
@@ -389,6 +415,7 @@ export function syncSceneUpdateOpts(
   o.stagelightsFixtureCount = s.stagelightsFixtureCount;
   o.stagelightsLasers = s.stagelightsLasers;
   o.textOverlayEnabled = s.textOverlayEnabled;
+  o.textOverlaySource = s.textOverlaySource;
   o.textOverlayStyle = s.textOverlayStyle;
   o.textOverlayIntensity = s.textOverlayIntensity;
   o.textOverlayPhraseInterval = s.textOverlayPhraseInterval;

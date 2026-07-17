@@ -24,11 +24,61 @@ import {
   CRTCShader,
   ProjectorFilmShader,
 } from "./shaders";
+import {
+  fetchWikimediaCommonsOverlayAssets,
+  type CommonsOverlayAsset,
+  type CommonsOverlayTopic,
+} from "./commons-overlay-source";
+import { getOverlayTextureManifest, pickDistinctOverlaySlots } from "./overlay-manifest";
 import { BLOOM_STRENGTH_MAX_NORMAL, type Settings } from "../store";
 import { MotionTrailPass } from "./MotionTrailPass";
 
+type OverlayTextureMeta = {
+  kind: "generated" | "local" | "commons";
+  family: string;
+  label: string;
+  source: string;
+  license: string;
+  attributionRequired: boolean;
+  author?: string;
+  sourceUrl?: string;
+  creditLine?: string;
+};
+
+type AssetOverlayDebugEntry = {
+  label: string;
+  family: string;
+  creditLine: string;
+  sourceUrl: string;
+};
+
+export type AssetOverlayDebugState = {
+  enabled: boolean;
+  bias: Settings["assetOverlayBias"];
+  commonsEnabled: boolean;
+  commonsTopic: Settings["assetOverlayCommonsTopic"];
+  currentFamilies: [string, string, string];
+  nextFamilies: [string, string, string];
+  currentEntries: [AssetOverlayDebugEntry, AssetOverlayDebugEntry, AssetOverlayDebugEntry];
+  transition: number;
+};
+
+const DEFAULT_OVERLAY_META: OverlayTextureMeta = {
+  kind: "generated",
+  family: "generated-grid",
+  label: "Generated overlay",
+  source: "Spectrum Aura",
+  license: "Internal generated",
+  attributionRequired: false,
+  creditLine: "Spectrum Aura generated overlay",
+};
+
 /** Glitch duty-cycle window length in frames (~1s at 60fps) — see `glitchIntensity`. */
 const GLITCH_DUTY_WINDOW_FRAMES = 60;
+
+/** Minimum wait before re-trying a failed Wikimedia Commons load — matches the
+ * TextBuffer refill cooldown so no network source is hammered on failure. */
+const COMMONS_RETRY_COOLDOWN_MS = 45_000;
 
 /**
  * AssetOverlay texture-swap timing. Two independent estimates of "how long to
@@ -120,12 +170,19 @@ export class Composer {
   private assetOverlayTime = 0;
   private assetOverlayTextures: THREE.Texture[] = [];
   private assetOverlayPool: THREE.Texture[] = [];
+  private assetOverlayMeta: OverlayTextureMeta[] = [];
   private assetOverlayCurrentSlots: [number, number, number] = [0, 1, 2];
   private assetOverlayNextSlots: [number, number, number] = [0, 1, 2];
   private assetOverlayTransition = 1;
   private assetOverlaySwitchElapsed = 0;
   private assetOverlaySwitchEvery = 1.35;
   private assetOverlayBeatHoldoff = 0;
+  private assetOverlayLoadToken = 0;
+  private assetOverlayCommonsToken = 0;
+  private assetOverlayCommonsPendingTopic: CommonsOverlayTopic | null = null;
+  private assetOverlayCommonsLoadedTopic: CommonsOverlayTopic | null = null;
+  private assetOverlayCommonsFailedTopic: CommonsOverlayTopic | null = null;
+  private assetOverlayCommonsRetryAt = 0;
   private retroFxTime = 0;
   private glitchDutyFrame = 0;
 
@@ -170,6 +227,11 @@ export class Composer {
     const overlayTextures = this.createOverlayTextures();
     this.assetOverlayTextures = overlayTextures;
     this.assetOverlayPool = [...overlayTextures];
+    this.assetOverlayMeta = [
+      { ...DEFAULT_OVERLAY_META, family: "generated-grid", label: "Generated grid" },
+      { ...DEFAULT_OVERLAY_META, family: "generated-radial", label: "Generated radial" },
+      { ...DEFAULT_OVERLAY_META, family: "generated-diagonal", label: "Generated diagonal" },
+    ];
     this.assetOverlay.uniforms.tOverlayA.value = overlayTextures[0] ?? null;
     this.assetOverlay.uniforms.tOverlayB.value = overlayTextures[1] ?? null;
     this.assetOverlay.uniforms.tOverlayC.value = overlayTextures[2] ?? null;
@@ -302,36 +364,165 @@ export class Composer {
   }
 
   private loadExternalOverlayTextures() {
-    const baseUrl = (import.meta.env.BASE_URL || "/").replace(/\/*$/, "/");
-    const toPublicUrl = (path: string) => `${baseUrl}${path.replace(/^\/+/, "")}`;
-    const imagePaths = [
-      "assets/textures/overlay-grid.svg",
-      "assets/textures/overlay-circles.svg",
-      "assets/textures/overlay-hud.svg",
-      "assets/animations/svg/layer-wave.svg",
-      "assets/animations/svg/layer-scanlines.svg",
-      "assets/animations/svg/layer-circuit.svg",
-      "assets/animations/svg/layer-spiral.svg",
-    ];
+    const loadToken = ++this.assetOverlayLoadToken;
+    const manifest = getOverlayTextureManifest(import.meta.env.BASE_URL || "/");
     const loader = new THREE.TextureLoader();
-    imagePaths.forEach((path) => {
+    manifest.forEach(
+      ({
+        author,
+        attributionRequired,
+        creditLine,
+        family,
+        label,
+        license,
+        publicUrl,
+        source,
+        sourceUrl,
+      }) => {
+        loader.load(
+          publicUrl,
+          (texture) => {
+            if (loadToken !== this.assetOverlayLoadToken) {
+              texture.dispose();
+              return;
+            }
+            this.normalizeOverlayTexture(texture);
+            this.assetOverlayPool.push(texture);
+            this.assetOverlayMeta.push({
+              kind: "local",
+              family,
+              label,
+              source,
+              license,
+              attributionRequired,
+              author,
+              sourceUrl: sourceUrl ?? publicUrl,
+              creditLine: creditLine ?? `${label} — ${license}`,
+            });
+          },
+          undefined,
+          () => {
+            // Keep generated fallback textures when optional overlays are missing.
+          },
+        );
+      },
+    );
+  }
+
+  private normalizeOverlayTexture(texture: THREE.Texture) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+  }
+
+  private resetAssetOverlaySlots() {
+    this.assetOverlayCurrentSlots = [0, 1, 2];
+    this.assetOverlayNextSlots = [0, 1, 2];
+    this.assetOverlayTransition = 1;
+    if (this.assetOverlayPool.length >= 3) {
+      this.setAssetOverlaySlots(this.assetOverlayCurrentSlots, "current");
+      this.setAssetOverlaySlots(this.assetOverlayCurrentSlots, "next");
+    }
+    this.assetOverlay.uniforms.transition.value = 1;
+  }
+
+  private clearCommonsOverlayTextures() {
+    const nextPool: THREE.Texture[] = [];
+    const nextMeta: OverlayTextureMeta[] = [];
+    for (let i = 0; i < this.assetOverlayPool.length; i += 1) {
+      const meta = this.assetOverlayMeta[i] ?? DEFAULT_OVERLAY_META;
+      const texture = this.assetOverlayPool[i]!;
+      if (meta.kind === "commons") {
+        texture.dispose();
+        continue;
+      }
+      nextPool.push(texture);
+      nextMeta.push(meta);
+    }
+    const removedAny = nextPool.length !== this.assetOverlayPool.length;
+    this.assetOverlayPool = nextPool;
+    this.assetOverlayMeta = nextMeta;
+    if (removedAny) this.resetAssetOverlaySlots();
+  }
+
+  private loadCommonsOverlayAssets(assets: CommonsOverlayAsset[], token: number) {
+    const loader = new THREE.TextureLoader();
+    assets.forEach((asset) => {
       loader.load(
-        toPublicUrl(path),
+        asset.publicUrl,
         (texture) => {
-          texture.colorSpace = THREE.SRGBColorSpace;
-          texture.wrapS = THREE.RepeatWrapping;
-          texture.wrapT = THREE.RepeatWrapping;
-          texture.minFilter = THREE.LinearFilter;
-          texture.magFilter = THREE.LinearFilter;
-          texture.generateMipmaps = false;
+          if (token !== this.assetOverlayCommonsToken) {
+            texture.dispose();
+            return;
+          }
+          this.normalizeOverlayTexture(texture);
           this.assetOverlayPool.push(texture);
+          this.assetOverlayMeta.push(asset);
         },
         undefined,
         () => {
-          // Keep generated fallback textures when optional overlays are missing.
+          // Keep local overlays when remote Commons assets fail.
         },
       );
     });
+  }
+
+  private syncCommonsOverlayTextures(s: Settings) {
+    // Commons textures only matter while the asset overlay renders; treat a
+    // disabled overlay FX like a disabled Commons toggle so a stale opt-in
+    // can't keep fetching remote images invisibly.
+    if (!s.assetOverlayCommonsEnabled || !s.assetOverlayFx) {
+      if (this.assetOverlayCommonsLoadedTopic || this.assetOverlayCommonsPendingTopic) {
+        this.assetOverlayCommonsPendingTopic = null;
+        this.assetOverlayCommonsLoadedTopic = null;
+        this.assetOverlayCommonsToken += 1;
+        this.clearCommonsOverlayTextures();
+      }
+      this.assetOverlayCommonsFailedTopic = null;
+      this.assetOverlayCommonsRetryAt = 0;
+      return;
+    }
+
+    if (
+      this.assetOverlayCommonsLoadedTopic === s.assetOverlayCommonsTopic ||
+      this.assetOverlayCommonsPendingTopic === s.assetOverlayCommonsTopic
+    ) {
+      return;
+    }
+
+    // This runs every frame, so a failed load must not retry until the
+    // cooldown elapses (switching topics retries immediately).
+    if (
+      this.assetOverlayCommonsFailedTopic === s.assetOverlayCommonsTopic &&
+      Date.now() < this.assetOverlayCommonsRetryAt
+    ) {
+      return;
+    }
+
+    const token = ++this.assetOverlayCommonsToken;
+    this.assetOverlayCommonsPendingTopic = s.assetOverlayCommonsTopic;
+    this.assetOverlayCommonsLoadedTopic = null;
+    this.clearCommonsOverlayTextures();
+    void fetchWikimediaCommonsOverlayAssets(s.assetOverlayCommonsTopic, 9)
+      .then((assets) => {
+        if (token !== this.assetOverlayCommonsToken) return;
+        this.assetOverlayCommonsPendingTopic = null;
+        this.assetOverlayCommonsLoadedTopic = s.assetOverlayCommonsTopic;
+        this.assetOverlayCommonsFailedTopic = null;
+        this.assetOverlayCommonsRetryAt = 0;
+        this.loadCommonsOverlayAssets(assets, token);
+      })
+      .catch((error) => {
+        if (token !== this.assetOverlayCommonsToken) return;
+        this.assetOverlayCommonsPendingTopic = null;
+        this.assetOverlayCommonsLoadedTopic = null;
+        this.assetOverlayCommonsFailedTopic = s.assetOverlayCommonsTopic;
+        this.assetOverlayCommonsRetryAt = Date.now() + COMMONS_RETRY_COOLDOWN_MS;
+        console.warn("[asset-overlay] wikimedia commons load failed", error);
+      });
   }
 
   private setAssetOverlaySlots(slots: [number, number, number], target: "current" | "next") {
@@ -351,6 +542,7 @@ export class Composer {
   }
 
   apply(s: Settings, reactive: PostFxReactiveState) {
+    this.syncCommonsOverlayTextures(s);
     const bass = reactive.bass ?? 0;
     const mid = reactive.mid ?? 0;
     const high = reactive.high ?? 0;
@@ -482,15 +674,15 @@ export class Composer {
         this.assetOverlaySwitchElapsed >= Math.min(0.33, this.assetOverlaySwitchEvery * 0.55);
 
       if (readyForTimedSwitch || readyForBeatSwitch) {
-        const len = this.assetOverlayPool.length;
         const strideA = 1 + Math.floor(THREE.MathUtils.clamp(high * 4 + pulse * 2, 0, 5));
         const strideB = 2 + Math.floor(THREE.MathUtils.clamp(mid * 5 + pulse * 1.5, 0, 5));
         const strideC = 3 + Math.floor(THREE.MathUtils.clamp(bass * 6 + centroid * 2, 0, 6));
-        this.assetOverlayNextSlots = [
-          (this.assetOverlayCurrentSlots[0] + strideA) % len,
-          (this.assetOverlayCurrentSlots[1] + strideB) % len,
-          (this.assetOverlayCurrentSlots[2] + strideC) % len,
-        ];
+        this.assetOverlayNextSlots = pickDistinctOverlaySlots(
+          this.assetOverlayCurrentSlots,
+          this.assetOverlayMeta.map((entry) => entry.family),
+          [strideA, strideB, strideC],
+          s.assetOverlayBias,
+        );
         this.setAssetOverlaySlots(this.assetOverlayNextSlots, "next");
         this.assetOverlayTransition = 0;
         this.assetOverlaySwitchElapsed = 0;
@@ -627,15 +819,51 @@ export class Composer {
     this.composer.render(delta);
   }
 
+  getAssetOverlayDebugState(s: Settings): AssetOverlayDebugState {
+    const pickMeta = (idx: number) => this.assetOverlayMeta[idx] ?? DEFAULT_OVERLAY_META;
+    const toEntry = (meta: OverlayTextureMeta): AssetOverlayDebugEntry => ({
+      label: meta.label,
+      family: meta.family,
+      creditLine:
+        meta.creditLine ?? [meta.label, meta.author, meta.license].filter(Boolean).join(" — "),
+      sourceUrl: meta.sourceUrl ?? "",
+    });
+    return {
+      enabled: s.assetOverlayFx,
+      bias: s.assetOverlayBias,
+      commonsEnabled: s.assetOverlayCommonsEnabled,
+      commonsTopic: s.assetOverlayCommonsTopic,
+      currentFamilies: [
+        pickMeta(this.assetOverlayCurrentSlots[0]).family,
+        pickMeta(this.assetOverlayCurrentSlots[1]).family,
+        pickMeta(this.assetOverlayCurrentSlots[2]).family,
+      ],
+      nextFamilies: [
+        pickMeta(this.assetOverlayNextSlots[0]).family,
+        pickMeta(this.assetOverlayNextSlots[1]).family,
+        pickMeta(this.assetOverlayNextSlots[2]).family,
+      ],
+      currentEntries: [
+        toEntry(pickMeta(this.assetOverlayCurrentSlots[0])),
+        toEntry(pickMeta(this.assetOverlayCurrentSlots[1])),
+        toEntry(pickMeta(this.assetOverlayCurrentSlots[2])),
+      ],
+      transition: this.assetOverlayTransition,
+    };
+  }
+
   resetTemporalEffects() {
     this.motionTrails.reset(this.renderer);
   }
 
   dispose() {
+    this.assetOverlayLoadToken += 1;
+    this.assetOverlayCommonsToken += 1;
     const textures = new Set([...this.assetOverlayTextures, ...this.assetOverlayPool]);
     textures.forEach((texture) => texture.dispose());
     this.assetOverlayTextures = [];
     this.assetOverlayPool = [];
+    this.assetOverlayMeta = [];
     this.motionTrails.dispose();
     this.ssao.dispose();
     this.composer.dispose();

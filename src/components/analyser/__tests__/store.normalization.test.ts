@@ -65,6 +65,8 @@ describe("settingsStore normalization", () => {
       sobelFillMix: 2,
       assetOverlayAmount: 10,
       assetOverlaySpeed: 0,
+      assetOverlayBias: "impossible" as never,
+      assetOverlayCommonsTopic: "mystery" as never,
       assetflowModelScale: 10,
       assetflowSpriteAmount: 0,
       assetflowModelCount: 99,
@@ -73,6 +75,7 @@ describe("settingsStore normalization", () => {
       assetflowMovement: 99,
       assetflowBackgroundDrift: -1,
       glitchIntensity: 5,
+      textOverlaySource: "mystery" as never,
     });
 
     const state = settingsStore.get();
@@ -91,6 +94,8 @@ describe("settingsStore normalization", () => {
     expect(state.sobelFillMix).toBe(1);
     expect(state.assetOverlayAmount).toBe(2);
     expect(state.assetOverlaySpeed).toBe(0.1);
+    expect(state.assetOverlayBias).toBe("mixed");
+    expect(state.assetOverlayCommonsTopic).toBe("abstract");
     expect(state.assetflowModelScale).toBe(2.2);
     expect(state.assetflowSpriteAmount).toBe(0.2);
     expect(state.assetflowModelCount).toBe(24);
@@ -99,6 +104,65 @@ describe("settingsStore normalization", () => {
     expect(state.assetflowMovement).toBe(1.8);
     expect(state.assetflowBackgroundDrift).toBe(0);
     expect(state.glitchIntensity).toBe(1);
+    expect(state.textOverlaySource).toBe("public-domain");
+  });
+
+  it("clamps the wikichroma actor controls", async () => {
+    const { settingsStore, DEFAULT_SETTINGS } = await import("../store");
+
+    expect(DEFAULT_SETTINGS.wikichromaFlowStrength).toBe(1);
+    expect(DEFAULT_SETTINGS.wikichromaBeatsPerLoop).toBe(2);
+    expect(DEFAULT_SETTINGS.wikichromaActorPacks).toEqual(["soldier"]);
+
+    settingsStore.set({
+      wikichromaFlowStrength: 5,
+      wikichromaBeatsPerLoop: 3,
+      wikichromaMotionSpeed: 99,
+      wikichromaMotionMode: "warp" as never,
+    });
+    let state = settingsStore.get();
+    expect(state.wikichromaFlowStrength).toBe(2);
+    expect(state.wikichromaBeatsPerLoop).toBe(2);
+    expect(state.wikichromaMotionSpeed).toBe(3);
+    expect(state.wikichromaMotionMode).toBe("orbit");
+
+    settingsStore.set({
+      wikichromaFlowStrength: -1,
+      wikichromaBeatsPerLoop: 4,
+      wikichromaMotionSpeed: 0,
+    });
+    state = settingsStore.get();
+    expect(state.wikichromaFlowStrength).toBe(0);
+    expect(state.wikichromaBeatsPerLoop).toBe(4);
+    expect(state.wikichromaMotionSpeed).toBe(0.2);
+
+    settingsStore.set({ wikichromaBeatsPerLoop: 1.2 });
+    expect(settingsStore.get().wikichromaBeatsPerLoop).toBe(1);
+
+    settingsStore.set({ wikichromaMotionMode: "runner" });
+    expect(settingsStore.get().wikichromaMotionMode).toBe("runner");
+  });
+
+  it("filters wikichroma actor packs to known ids and never leaves them empty", async () => {
+    const { settingsStore } = await import("../store");
+
+    // Unknown entries dropped, duplicates removed, canonical order kept.
+    settingsStore.set({
+      wikichromaActorPacks: ["fox", "dragon", "fox", "soldier"] as never,
+    });
+    expect(settingsStore.get().wikichromaActorPacks).toEqual(["soldier", "fox"]);
+
+    // Deselecting everything falls back to the default pack.
+    settingsStore.set({ wikichromaActorPacks: [] });
+    expect(settingsStore.get().wikichromaActorPacks).toEqual(["soldier"]);
+
+    // Garbage input falls back too.
+    settingsStore.set({ wikichromaActorPacks: "robot" as never });
+    expect(settingsStore.get().wikichromaActorPacks).toEqual(["soldier"]);
+
+    // A valid multi-selection is preserved as-is.
+    settingsStore.set({ wikichromaActorPacks: ["soldier", "robot", "fox"] });
+    expect(settingsStore.get().wikichromaActorPacks).toEqual(["soldier", "robot", "fox"]);
   });
 
   it("clamps stagelightsSweepSpeed and snaps stagelightsFixtureCount to 3/5/7", async () => {

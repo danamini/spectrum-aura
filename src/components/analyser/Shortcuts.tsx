@@ -71,6 +71,7 @@ export function Shortcuts() {
   const slots = preset.slots;
   const settings = useSettings();
   const [visible, setVisible] = useState(true);
+  const [windowHovering, setWindowHovering] = useState(true);
   const [xrActive, setXrActive] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
@@ -102,6 +103,22 @@ export function Shortcuts() {
     };
     window.addEventListener(WEBXR_STATE_EVENT, onWebXrState);
     return () => window.removeEventListener(WEBXR_STATE_EVENT, onWebXrState);
+  }, []);
+
+  useEffect(() => {
+    const onPointerMove = () => {
+      setWindowHovering((current) => (current ? current : true));
+    };
+    const onMouseLeave = () => {
+      setWindowHovering(false);
+    };
+
+    window.addEventListener("mousemove", onPointerMove, true);
+    document.documentElement.addEventListener("mouseleave", onMouseLeave);
+    return () => {
+      window.removeEventListener("mousemove", onPointerMove, true);
+      document.documentElement.removeEventListener("mouseleave", onMouseLeave);
+    };
   }, []);
 
   const doRandomize = () => {
@@ -827,7 +844,12 @@ export function Shortcuts() {
           type="button"
           onClick={doToggleHints}
           title={xrActive ? "Show shortcuts" : "Show shortcuts (G)"}
-          className="pointer-events-auto fixed inset-x-0 bottom-1 z-[100] mx-auto block w-fit rounded-full border border-white/10 bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.22em] text-white/45 backdrop-blur hover:border-white/20 hover:text-white/80"
+          data-window-hovering={windowHovering ? "true" : "false"}
+          className={`pointer-events-auto fixed inset-x-0 bottom-1 z-[100] mx-auto block w-fit rounded-full border bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.22em] backdrop-blur transition-opacity duration-300 hover:border-white/20 hover:text-white/80 ${
+            windowHovering
+              ? "border-white/10 text-white/45 opacity-65"
+              : "border-white/5 text-white/15 opacity-10"
+          }`}
         >
           shortcuts · g
         </button>

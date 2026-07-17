@@ -1,4 +1,5 @@
 import type { Settings } from "../store";
+import { WIKICHROMA_ACTOR_PACKS } from "../store";
 import { CLASSIC_PEAK_SWATCHES } from "../theme";
 import { Bn, Label, Row, S, Sw, ToggleRow } from "./primitives";
 
@@ -854,6 +855,90 @@ export function ViewSettings({ s, set }: { s: Settings; set: (patch: Partial<Set
             <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
               Full ledger: docs/THIRD_PARTY_ASSETS.md
             </p>
+          </div>
+        </>
+      )}
+      {s.view === "wikichroma" && (
+        <>
+          <S
+            label="Amplitude"
+            value={s.wikichromaAmplitude}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ wikichromaAmplitude: v })}
+          />
+          <S
+            label="Motion speed"
+            value={s.wikichromaMotionSpeed}
+            min={0.2}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ wikichromaMotionSpeed: v })}
+          />
+          <Row label="Motion mode">
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["orbit", "cogs", "runner"] as const).map((mode) => (
+                <Bn
+                  key={mode}
+                  active={s.wikichromaMotionMode === mode}
+                  onClick={() => set({ wikichromaMotionMode: mode })}
+                >
+                  {mode}
+                </Bn>
+              ))}
+            </div>
+          </Row>
+          <S
+            label="Actor flow strength"
+            value={s.wikichromaFlowStrength}
+            min={0}
+            max={2}
+            step={0.05}
+            onChange={(v) => set({ wikichromaFlowStrength: v })}
+          />
+          <Row label="Beats per loop">
+            <div className="grid grid-cols-3 gap-1.5">
+              {([1, 2, 4] as const).map((beats) => (
+                <Bn
+                  key={beats}
+                  active={s.wikichromaBeatsPerLoop === beats}
+                  onClick={() => set({ wikichromaBeatsPerLoop: beats })}
+                >
+                  {beats}
+                </Bn>
+              ))}
+            </div>
+          </Row>
+          <Row label="Actor packs (multi-select)">
+            <div className="grid grid-cols-3 gap-1.5">
+              {WIKICHROMA_ACTOR_PACKS.map((pack) => {
+                const selected = s.wikichromaActorPacks.includes(pack);
+                return (
+                  <Bn
+                    key={pack}
+                    active={selected}
+                    onClick={() => {
+                      // Keep at least one pack selected.
+                      if (selected && s.wikichromaActorPacks.length === 1) return;
+                      const next = selected
+                        ? s.wikichromaActorPacks.filter((p) => p !== pack)
+                        : [...s.wikichromaActorPacks, pack];
+                      set({ wikichromaActorPacks: next });
+                    }}
+                  >
+                    {pack}
+                  </Bn>
+                );
+              })}
+            </div>
+          </Row>
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Use selected palette</Label>
+            <Sw
+              checked={s.wikichromaUsePalette}
+              onCheckedChange={(v) => set({ wikichromaUsePalette: v })}
+            />
           </div>
         </>
       )}

@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "overlays": [
+    {
+      "path": "assets/textures/overlay-grid.svg",
+      "label": "Overlay grid",
+      "family": "grid",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/textures/overlay-grid.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/textures/overlay-circles.svg",
+      "label": "Overlay circles",
+      "family": "radial",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/textures/overlay-circles.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/textures/overlay-diag-grid.svg",
+      "label": "Overlay diagonal grid",
+      "family": "grid",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/textures/overlay-diag-grid.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/textures/overlay-hud.svg",
+      "label": "Overlay HUD",
+      "family": "hud",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/textures/overlay-hud.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-wave.svg",
+      "label": "Wave layer",
+      "family": "wave",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-wave.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-scanlines.svg",
+      "label": "Scanlines layer",
+      "family": "scanlines",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-scanlines.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-circuit.svg",
+      "label": "Circuit layer",
+      "family": "circuit",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-circuit.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-spiral.svg",
+      "label": "Spiral layer",
+      "family": "spiral",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-spiral.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-chevrons.svg",
+      "label": "Chevrons layer",
+      "family": "angular",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-chevrons.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-diagonal.svg",
+      "label": "Diagonal layer",
+      "family": "angular",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-diagonal.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-flare.svg",
+      "label": "Flare layer",
+      "family": "flare",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-flare.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-grid-hex.svg",
+      "label": "Hex grid layer",
+      "family": "grid",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-grid-hex.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-halftone.svg",
+      "label": "Halftone layer",
+      "family": "halftone",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-halftone.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-noise-dots.svg",
+      "label": "Noise dots layer",
+      "family": "noise",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-noise-dots.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-rings.svg",
+      "label": "Rings layer",
+      "family": "radial",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-rings.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/layer-starburst.svg",
+      "label": "Starburst layer",
+      "family": "burst",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/layer-starburst.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    }
+  ]
+}

@@ -328,7 +328,7 @@ export function useAnalyserEngine(params: {
     };
     window.addEventListener(WEBXR_BACKGROUND_EVENT, onWebXrBackground);
 
-    const loop = (now: number, _frame?: XRFrame) => {
+    const frameBody = (now: number, _frame?: XRFrame) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       xrRuntime.tick(dt);
@@ -541,6 +541,9 @@ export function useAnalyserEngine(params: {
         if (now - lastStatsCommitAt >= 100) {
           lastStatsCommitAt = now;
           statsUpdateCount += 1;
+          const overlayDebug = composer.getAssetOverlayDebugState(settingsRef.current);
+          const textDebug = scene.getTextOverlayDebugState();
+          const wikiDebug = scene.getWikichromaDebugState();
           setStats({
             fps: smoothedFps,
             frameMs: smoothedFps > 0 ? 1000 / smoothedFps : 0,
@@ -585,12 +588,49 @@ export function useAnalyserEngine(params: {
             signalToRenderMs: smoothedLatency.signalToRenderMs,
             baseLatencyMs: bands.timing.baseLatencyMs,
             fftWindowMs: bands.timing.fftWindowMs,
+            assetOverlayEnabled: overlayDebug.enabled,
+            assetOverlayBias: overlayDebug.bias,
+            assetOverlayCommonsEnabled: overlayDebug.commonsEnabled,
+            assetOverlayCommonsTopic: overlayDebug.commonsTopic,
+            assetOverlayCurrentFamilies: overlayDebug.currentFamilies,
+            assetOverlayNextFamilies: overlayDebug.nextFamilies,
+            assetOverlayCurrentEntries: overlayDebug.currentEntries,
+            assetOverlayTransition: overlayDebug.transition,
+            textOverlayEnabled: textDebug.enabled,
+            textOverlaySourceLabel: textDebug.sourceLabel,
+            textOverlayCurrentText: textDebug.currentText,
+            textOverlayAuthor: textDebug.author,
+            textOverlayWork: textDebug.work,
+            textOverlayRights: textDebug.rights,
+            textOverlayCreditLine: textDebug.creditLine,
+            textOverlaySourceUrl: textDebug.sourceUrl,
+            wikichromaActive: wikiDebug.active,
+            wikichromaMode: wikiDebug.mode,
+            wikichromaSelectedPacks: wikiDebug.selectedPacks,
+            wikichromaActiveModels: wikiDebug.activeModels,
+            wikichromaActorsActive: wikiDebug.actorsActive,
+            wikichromaBeatLocked: wikiDebug.beatLocked,
+            wikichromaBeatsPerLoop: wikiDebug.beatsPerLoop,
+            wikichromaLoopCount: wikiDebug.loopCount,
           });
         }
       }
-
-      if (!xrRuntime.active) {
-        raf = requestAnimationFrame(desktopLoop);
+    };
+    let lastLoopErrorAt = -Infinity;
+    const loop = (now: number, frame?: XRFrame) => {
+      try {
+        frameBody(now, frame);
+      } catch (error) {
+        // A throw here would otherwise skip the re-arm below and permanently
+        // freeze the visualizer at the last rendered frame.
+        if (now - lastLoopErrorAt > 5000) {
+          lastLoopErrorAt = now;
+          console.error("[analyser] render loop error (frame skipped)", error);
+        }
+      } finally {
+        if (!xrRuntime.active) {
+          raf = requestAnimationFrame(desktopLoop);
+        }
       }
     };
     raf = requestAnimationFrame(desktopLoop);

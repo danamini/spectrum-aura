@@ -1,3 +1,5 @@
+import type { AssetOverlayDebugState } from "../engine/composer";
+
 export type NerdStats = {
   fps: number;
   frameMs: number;
@@ -42,6 +44,30 @@ export type NerdStats = {
   signalToRenderMs: number;
   baseLatencyMs: number;
   fftWindowMs: number;
+  assetOverlayEnabled: boolean;
+  assetOverlayBias: "mixed" | "technical" | "organic" | "chaotic";
+  assetOverlayCommonsEnabled: boolean;
+  assetOverlayCommonsTopic: "abstract" | "technical" | "organic";
+  assetOverlayCurrentFamilies: [string, string, string];
+  assetOverlayNextFamilies: [string, string, string];
+  assetOverlayCurrentEntries: AssetOverlayDebugState["currentEntries"];
+  assetOverlayTransition: number;
+  textOverlayEnabled: boolean;
+  textOverlaySourceLabel: string;
+  textOverlayCurrentText: string;
+  textOverlayAuthor: string;
+  textOverlayWork: string;
+  textOverlayRights: string;
+  textOverlayCreditLine: string;
+  textOverlaySourceUrl: string;
+  wikichromaActive: boolean;
+  wikichromaMode: string;
+  wikichromaSelectedPacks: string[];
+  wikichromaActiveModels: string[];
+  wikichromaActorsActive: number;
+  wikichromaBeatLocked: boolean;
+  wikichromaBeatsPerLoop: number;
+  wikichromaLoopCount: number;
 };
 
 export const EMPTY_STATS: NerdStats = {
@@ -88,6 +114,34 @@ export const EMPTY_STATS: NerdStats = {
   signalToRenderMs: 0,
   baseLatencyMs: 0,
   fftWindowMs: 0,
+  assetOverlayEnabled: false,
+  assetOverlayBias: "mixed",
+  assetOverlayCommonsEnabled: false,
+  assetOverlayCommonsTopic: "abstract",
+  assetOverlayCurrentFamilies: ["n/a", "n/a", "n/a"],
+  assetOverlayNextFamilies: ["n/a", "n/a", "n/a"],
+  assetOverlayCurrentEntries: [
+    { label: "n/a", family: "n/a", creditLine: "", sourceUrl: "" },
+    { label: "n/a", family: "n/a", creditLine: "", sourceUrl: "" },
+    { label: "n/a", family: "n/a", creditLine: "", sourceUrl: "" },
+  ],
+  assetOverlayTransition: 1,
+  textOverlayEnabled: false,
+  textOverlaySourceLabel: "",
+  textOverlayCurrentText: "",
+  textOverlayAuthor: "",
+  textOverlayWork: "",
+  textOverlayRights: "",
+  textOverlayCreditLine: "",
+  textOverlaySourceUrl: "",
+  wikichromaActive: false,
+  wikichromaMode: "orbit",
+  wikichromaSelectedPacks: [],
+  wikichromaActiveModels: [],
+  wikichromaActorsActive: 0,
+  wikichromaBeatLocked: false,
+  wikichromaBeatsPerLoop: 2,
+  wikichromaLoopCount: 0,
 };
 
 export type LatencyHudState = {

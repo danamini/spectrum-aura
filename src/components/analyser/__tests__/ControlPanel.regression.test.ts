@@ -52,6 +52,10 @@ describe("ControlPanel decomposition regression", () => {
       "geometrynebulaAmplitude",
       "reztubeAmplitude",
       "assetflowAmplitude",
+      "wikichromaAmplitude",
+      "wikichromaFlowStrength",
+      "wikichromaBeatsPerLoop",
+      "wikichromaActorPacks",
       "stagelightsAmplitude",
       "stagelightsFixtureCount",
       "stagelightsLasers",
@@ -104,6 +108,7 @@ describe("ControlPanel decomposition regression", () => {
       "geometrynebula",
       "reztube",
       "assetflow",
+      "wikichroma",
       "stagelights",
     ];
     for (const view of views) {

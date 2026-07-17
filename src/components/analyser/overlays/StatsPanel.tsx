@@ -238,6 +238,60 @@ export function StatsForNerdsPanel({
           <Stat label="BPM" value={stats.bpm > 0 ? `${stats.bpm} bpm` : "detecting"} />
           <Stat label="BPM confidence" value={fmt(stats.bpmConfidence * 100, 0) + "%"} />
         </StatSection>
+
+        <StatSection title="Overlay FX">
+          <Stat label="Asset overlay" value={stats.assetOverlayEnabled ? "enabled" : "disabled"} />
+          <Stat label="Bias" value={stats.assetOverlayBias} />
+          <Stat
+            label="Commons"
+            value={stats.assetOverlayCommonsEnabled ? stats.assetOverlayCommonsTopic : "off"}
+          />
+          <Stat label="Current trio" value={stats.assetOverlayCurrentFamilies.join(" / ")} />
+          <Stat label="Next trio" value={stats.assetOverlayNextFamilies.join(" / ")} />
+          <Stat label="Transition" value={fmt(stats.assetOverlayTransition, 2)} />
+          {stats.assetOverlayCurrentEntries.map((entry, index) => (
+            <MetaRow
+              key={`${entry.label}-${index}`}
+              label={`Asset ${index + 1}`}
+              value={entry.creditLine}
+            />
+          ))}
+        </StatSection>
+
+        {stats.wikichromaActive && (
+          <StatSection title="Wiki-Chroma">
+            <Stat label="Motion mode" value={stats.wikichromaMode} />
+            <Stat
+              label="Packs selected"
+              value={stats.wikichromaSelectedPacks.join(" / ") || "n/a"}
+            />
+            <Stat
+              label="Models active"
+              value={stats.wikichromaActiveModels.join(" / ") || "loading"}
+            />
+            <Stat label="Actors" value={String(stats.wikichromaActorsActive)} />
+            <Stat label="Beat lock" value={stats.wikichromaBeatLocked ? "locked" : "free"} />
+            <Stat label="Beats / loop" value={String(stats.wikichromaBeatsPerLoop)} />
+            <Stat label="Loops" value={String(stats.wikichromaLoopCount)} />
+          </StatSection>
+        )}
+
+        <StatSection title="Text Overlay">
+          <Stat label="Enabled" value={stats.textOverlayEnabled ? "enabled" : "disabled"} />
+          <Stat label="Source" value={stats.textOverlaySourceLabel || "n/a"} />
+          <MetaRow label="Snippet" value={stats.textOverlayCurrentText || "n/a"} />
+          <MetaRow
+            label="Attribution"
+            value={
+              stats.textOverlayCreditLine ||
+              [stats.textOverlayAuthor, stats.textOverlayWork, stats.textOverlayRights]
+                .filter(Boolean)
+                .join(" — ") ||
+              "n/a"
+            }
+          />
+          <MetaRow label="Source URL" value={stats.textOverlaySourceUrl || "n/a"} />
+        </StatSection>
       </div>
 
       {!fullscreen && (
@@ -249,6 +303,17 @@ export function StatsForNerdsPanel({
           onPointerCancel={onResizePointerUp}
         />
       )}
+    </div>
+  );
+}
+
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
+      <div className="mb-0.5 text-white/45">{label}</div>
+      <div className="break-words text-[9px] normal-case tracking-normal text-white/88">
+        {value}
+      </div>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import type { OverlayBias } from "./engine/overlay-manifest";
+
 export const DEFAULT_VISUAL_ID = "combo" as const;
 
 /** Rough visual-intensity tier, used to keep music-reactive view cycling from
@@ -14,6 +16,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "group",
     order: 10,
     energy: "mid",
+    overlayBiasDefault: "mixed",
   },
   {
     id: "classic",
@@ -24,6 +27,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "classicGroup",
     order: 20,
     energy: "mid",
+    overlayBiasDefault: "technical",
   },
   {
     id: "ripple",
@@ -34,6 +38,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "rippleGroup",
     order: 30,
     energy: "calm",
+    overlayBiasDefault: "organic",
   },
   {
     id: "datastream",
@@ -43,6 +48,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "dataStreamGroup",
     order: 40,
     energy: "high",
+    overlayBiasDefault: "technical",
   },
   {
     id: "nebula",
@@ -53,6 +59,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "nebulaGroup",
     order: 50,
     energy: "calm",
+    overlayBiasDefault: "organic",
   },
   {
     id: "monolith",
@@ -63,6 +70,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "monolithGroup",
     order: 60,
     energy: "mid",
+    overlayBiasDefault: "technical",
   },
   {
     id: "mandala",
@@ -72,6 +80,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "mandalaGroup",
     order: 70,
     energy: "calm",
+    overlayBiasDefault: "organic",
   },
   {
     id: "terrain",
@@ -82,6 +91,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "terrainGroup",
     order: 80,
     energy: "mid",
+    overlayBiasDefault: "organic",
   },
   {
     id: "obsidian",
@@ -91,6 +101,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "obsidianGroup",
     order: 90,
     energy: "high",
+    overlayBiasDefault: "chaotic",
   },
   {
     id: "torus",
@@ -100,6 +111,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "torusGroup",
     order: 100,
     energy: "high",
+    overlayBiasDefault: "technical",
   },
   {
     id: "soundwall",
@@ -109,6 +121,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "soundwallGroup",
     order: 110,
     energy: "high",
+    overlayBiasDefault: "technical",
   },
   {
     id: "geometrynebula",
@@ -118,6 +131,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "geometrynebulaGroup",
     order: 120,
     energy: "mid",
+    overlayBiasDefault: "chaotic",
   },
   {
     id: "reztube",
@@ -127,6 +141,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "reztubeGroup",
     order: 130,
     energy: "high",
+    overlayBiasDefault: "technical",
   },
   {
     id: "assetflow",
@@ -136,6 +151,17 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "assetflowGroup",
     order: 140,
     energy: "mid",
+    overlayBiasDefault: "chaotic",
+  },
+  {
+    id: "wikichroma",
+    label: "Wiki-Chroma",
+    settingsLabel: "Wiki-Chroma settings",
+    fullscreenKey: "wikichromaFullscreen",
+    sceneGroupKey: "wikichromaGroup",
+    order: 145,
+    energy: "mid",
+    overlayBiasDefault: "organic",
   },
   {
     id: "stagelights",
@@ -145,6 +171,7 @@ export const BUILTIN_VISUALS = [
     sceneGroupKey: "stagelightsGroup",
     order: 150,
     energy: "mid",
+    overlayBiasDefault: "chaotic",
   },
 ] as const;
 
@@ -161,6 +188,7 @@ export type VisualDefinition = {
   sceneGroupKey?: string;
   order: number;
   energy: ViewEnergy;
+  overlayBiasDefault?: OverlayBias;
 };
 
 type RuntimeVisualModule = {
@@ -194,6 +222,7 @@ function normalizeVisualDefinition(
     sceneGroupKey: visual.sceneGroupKey ?? fallback?.sceneGroupKey,
     order: visual.order ?? fallback?.order ?? 1000,
     energy: visual.energy ?? fallback?.energy ?? "mid",
+    overlayBiasDefault: visual.overlayBiasDefault ?? fallback?.overlayBiasDefault,
   };
 }
 
@@ -221,6 +250,10 @@ export const VISUALS: VisualDefinition[] = Array.from(mergedVisuals.values()).so
 
 export function getVisualDefinition(view: string): VisualDefinition | undefined {
   return VISUALS.find((visual) => visual.id === view);
+}
+
+export function getVisualOverlayBiasDefault(view: string): OverlayBias | undefined {
+  return getVisualDefinition(view)?.overlayBiasDefault;
 }
 
 /**

@@ -25,6 +25,7 @@ describe("visual registry", () => {
       "geometrynebula",
       "reztube",
       "assetflow",
+      "wikichroma",
       "stagelights",
     ]);
     expect(DEFAULT_VISUAL_ID).toBe("combo");

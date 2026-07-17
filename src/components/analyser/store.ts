@@ -1,9 +1,15 @@
 import { useSyncExternalStore } from "react";
 import type { ViewMode } from "./visuals";
-import { VISUALS, pickNextView } from "./visuals";
+import { VISUALS, getVisualOverlayBiasDefault, pickNextView } from "./visuals";
 import defaultSaves from "./default-saves.json";
+import type { OverlayCommonsTopic } from "./engine/overlay-manifest";
 
 export type { ViewMode } from "./visuals";
+
+/** Wiki-Chroma animated actor packs (skeletal glTF sources in scene.ts). */
+export const WIKICHROMA_ACTOR_PACKS = ["soldier", "robot", "fox"] as const;
+export type WikichromaActorPack = (typeof WIKICHROMA_ACTOR_PACKS)[number];
+export const DEFAULT_WIKICHROMA_ACTOR_PACKS: WikichromaActorPack[] = ["soldier"];
 
 export type Settings = {
   // view
@@ -152,6 +158,16 @@ export type Settings = {
   assetflowMovement: number;
   assetflowBackgroundDrift: number;
 
+  // wiki-chroma view (animated runner actors + motion motifs)
+  wikichromaFullscreen: boolean;
+  wikichromaUsePalette: boolean;
+  wikichromaAmplitude: number;
+  wikichromaMotionMode: "orbit" | "cogs" | "runner";
+  wikichromaMotionSpeed: number;
+  wikichromaFlowStrength: number; // how much audio energy modulates actor motion (0–2)
+  wikichromaBeatsPerLoop: number; // beat-locked clip loop length: 1, 2, or 4 beats
+  wikichromaActorPacks: WikichromaActorPack[]; // one or more animated model packs
+
   // stage lights view (sweeping spotlight beams)
   stagelightsFullscreen: boolean;
   stagelightsUsePalette: boolean;
@@ -239,11 +255,17 @@ export type Settings = {
   assetOverlayFx: boolean;
   assetOverlayAmount: number;
   assetOverlaySpeed: number;
+  assetOverlayBias: "mixed" | "technical" | "organic" | "chaotic";
+  assetOverlayCommonsEnabled: boolean;
+  assetOverlayCommonsTopic: OverlayCommonsTopic;
 
-  /** Demo-scene text overlay — phrases from a pluggable text source (default:
-   * BOFH excuses), layered over whichever visual is active. Off by default;
-   * it's the only feature in the app that touches the network. */
+  /** Demo-scene text overlay — phrases from a pluggable text source, layered
+   * over whichever visual is active. Off by default. Network access anywhere
+   * in the app requires an explicit user action: this overlay's BOFH source,
+   * the Wikimedia Commons overlay toggle, and the Wiki-Chroma visual's actor
+   * models (fetched on first activation of that view). */
   textOverlayEnabled: boolean;
+  textOverlaySource: "public-domain" | "bofh";
   textOverlayStyle: "bounce" | "scroller" | "stack" | "orbit";
   textOverlayIntensity: number; // 0..2, jitter/reactivity amount
   textOverlayPhraseInterval: number; // seconds between phrase swaps
@@ -393,6 +415,14 @@ export const DEFAULT_SETTINGS: Settings = {
   assetflowSpin: 1,
   assetflowMovement: 0.7,
   assetflowBackgroundDrift: 1,
+  wikichromaFullscreen: false,
+  wikichromaUsePalette: true,
+  wikichromaAmplitude: 1,
+  wikichromaMotionMode: "cogs",
+  wikichromaMotionSpeed: 1,
+  wikichromaFlowStrength: 1,
+  wikichromaBeatsPerLoop: 2,
+  wikichromaActorPacks: DEFAULT_WIKICHROMA_ACTOR_PACKS,
   stagelightsFullscreen: false,
   stagelightsUsePalette: true,
   stagelightsAmplitude: 1,
@@ -492,8 +522,12 @@ export const DEFAULT_SETTINGS: Settings = {
   assetOverlayFx: false,
   assetOverlayAmount: 0.6,
   assetOverlaySpeed: 1,
+  assetOverlayBias: "mixed",
+  assetOverlayCommonsEnabled: false,
+  assetOverlayCommonsTopic: "abstract",
 
   textOverlayEnabled: false,
+  textOverlaySource: "public-domain",
   textOverlayStyle: "bounce",
   textOverlayIntensity: 1,
   textOverlayPhraseInterval: 6,
@@ -837,6 +871,7 @@ function normalizeAmplitudeFloor(settings: Settings): Settings {
     mandalaAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.mandalaAmplitude),
     terrainAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.terrainAmplitude),
     assetflowAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.assetflowAmplitude),
+    wikichromaAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.wikichromaAmplitude),
     stagelightsAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.stagelightsAmplitude),
   };
 }
@@ -849,6 +884,20 @@ function normalizeVignetteAmount(settings: Settings): Settings {
       Math.min(VIGNETTE_AMOUNT_MAX, settings.vignetteAmount),
     ),
   };
+}
+
+/** Filters the actor-pack multi-select to known packs (deduped, canonical
+ * order) and falls back to the default single pack when nothing valid is
+ * left. Returns the input array untouched when it is already canonical so
+ * repeated normalization keeps a stable reference. */
+function normalizeWikichromaActorPacks(packs: unknown): WikichromaActorPack[] {
+  const input = Array.isArray(packs) ? packs : [];
+  const valid = WIKICHROMA_ACTOR_PACKS.filter((pack) => input.includes(pack));
+  if (valid.length === 0) return DEFAULT_WIKICHROMA_ACTOR_PACKS;
+  if (input.length === valid.length && valid.every((pack, index) => input[index] === pack)) {
+    return packs as WikichromaActorPack[];
+  }
+  return valid;
 }
 
 function normalizePostFxRanges(settings: Settings): Settings {
@@ -878,6 +927,17 @@ function normalizePostFxRanges(settings: Settings): Settings {
     sobelFillMix: Math.max(0, Math.min(1, settings.sobelFillMix)),
     assetOverlayAmount: Math.max(0, Math.min(2, settings.assetOverlayAmount)),
     assetOverlaySpeed: Math.max(0.1, Math.min(3, settings.assetOverlaySpeed)),
+    assetOverlayBias: (["mixed", "technical", "organic", "chaotic"] as const).includes(
+      settings.assetOverlayBias,
+    )
+      ? settings.assetOverlayBias
+      : "mixed",
+    assetOverlayCommonsEnabled: Boolean(settings.assetOverlayCommonsEnabled),
+    assetOverlayCommonsTopic: (["abstract", "technical", "organic"] as const).includes(
+      settings.assetOverlayCommonsTopic,
+    )
+      ? settings.assetOverlayCommonsTopic
+      : "abstract",
     assetflowModelScale: Math.max(0.4, Math.min(2.2, settings.assetflowModelScale)),
     assetflowSpriteAmount: Math.max(0.2, Math.min(2.5, settings.assetflowSpriteAmount)),
     assetflowModelCount: Math.max(1, Math.min(24, Math.round(settings.assetflowModelCount))),
@@ -885,12 +945,28 @@ function normalizePostFxRanges(settings: Settings): Settings {
     assetflowSpin: Math.max(0, Math.min(3, settings.assetflowSpin)),
     assetflowMovement: Math.max(0.35, Math.min(1.8, settings.assetflowMovement)),
     assetflowBackgroundDrift: Math.max(0, Math.min(3, settings.assetflowBackgroundDrift)),
+    wikichromaMotionSpeed: Math.max(0.2, Math.min(3, settings.wikichromaMotionSpeed)),
+    wikichromaMotionMode: (["orbit", "cogs", "runner"] as const).includes(
+      settings.wikichromaMotionMode,
+    )
+      ? settings.wikichromaMotionMode
+      : "orbit",
+    wikichromaFlowStrength: Math.max(0, Math.min(2, settings.wikichromaFlowStrength)),
+    wikichromaBeatsPerLoop: ([1, 2, 4] as const).includes(
+      Math.round(settings.wikichromaBeatsPerLoop) as 1 | 2 | 4,
+    )
+      ? Math.round(settings.wikichromaBeatsPerLoop)
+      : 2,
+    wikichromaActorPacks: normalizeWikichromaActorPacks(settings.wikichromaActorPacks),
     stagelightsSweepSpeed: Math.max(0.2, Math.min(3, settings.stagelightsSweepSpeed)),
     // snap to odd counts (3/5/7) so there's always a true center fixture
     stagelightsFixtureCount: Math.max(
       3,
       Math.min(7, Math.round((settings.stagelightsFixtureCount - 3) / 2) * 2 + 3),
     ),
+    textOverlaySource: (["public-domain", "bofh"] as const).includes(settings.textOverlaySource)
+      ? settings.textOverlaySource
+      : "public-domain",
     textOverlayIntensity: Math.max(0, Math.min(2, settings.textOverlayIntensity)),
     textOverlayPhraseInterval: Math.max(3, Math.min(20, settings.textOverlayPhraseInterval)),
     glitchIntensity: Math.max(0, Math.min(1, settings.glitchIntensity)),
@@ -1024,9 +1100,17 @@ export const settingsStore = {
   set: (patch: Partial<Settings>) => {
     // any manual edit clears the active preset (unless caller sets it)
     const clearPreset = !("activePreset" in patch);
+    // Only an actual view *switch* pulls in the visual's default overlay bias;
+    // re-selecting the current view (or toggling its fullscreen variant) must
+    // not clobber a bias the user chose.
+    const visualDefaultBias =
+      patch.view && patch.view !== state.view && !("assetOverlayBias" in patch)
+        ? getVisualOverlayBiasDefault(patch.view)
+        : undefined;
     state = normalizeSettings({
       ...state,
       ...patch,
+      ...(visualDefaultBias ? { assetOverlayBias: visualDefaultBias } : {}),
       ...(clearPreset ? { activePreset: null } : {}),
     });
     emit();
@@ -1117,9 +1201,16 @@ export const settingsStore = {
       assetOverlayFx: assetflowActive ? true : b(0.45),
       assetOverlayAmount: r(0.12, 1.2),
       assetOverlaySpeed: r(0.3, 2.4),
-      // textOverlayEnabled is intentionally left out of randomize — it's the
-      // only feature that touches the network, so it should only turn on
-      // when the user opts in explicitly, never via a stray R keypress.
+      assetOverlayBias: pick(["mixed", "technical", "organic", "chaotic"] as const),
+      // Network opt-ins are preserved, never toggled, by randomize: a stray R
+      // keypress must neither enable a network feature nor revoke an explicit
+      // opt-in (same rule as textOverlayEnabled below).
+      assetOverlayCommonsEnabled: state.assetOverlayCommonsEnabled,
+      assetOverlayCommonsTopic: state.assetOverlayCommonsTopic,
+      // textOverlayEnabled is intentionally left out of randomize — network
+      // features only turn on when the user opts in explicitly, never via a
+      // stray R keypress.
+      textOverlaySource: state.textOverlaySource,
       textOverlayStyle: pick(["bounce", "scroller", "stack", "orbit"] as const),
       textOverlayIntensity: r(0.4, 1.8),
       textOverlayPhraseInterval: r(4, 12),
@@ -1262,6 +1353,19 @@ export const settingsStore = {
           assetflowMovement: r(0.45, 1.45),
           assetflowBackgroundDrift: r(0.2, 2.8),
 
+          // wiki-chroma
+          wikichromaUsePalette: b(0.75),
+          wikichromaAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
+          wikichromaMotionMode: pick(["orbit", "cogs", "runner"] as const),
+          wikichromaMotionSpeed: r(0.25, 2.8),
+          wikichromaFlowStrength: r(0.3, 1.7),
+          wikichromaBeatsPerLoop: pick([1, 2, 4] as const),
+          // random non-empty subset of the actor packs
+          wikichromaActorPacks: (() => {
+            const subset = WIKICHROMA_ACTOR_PACKS.filter(() => b(0.55));
+            return subset.length > 0 ? subset : [pick(WIKICHROMA_ACTOR_PACKS)];
+          })(),
+
           // stage lights
           stagelightsUsePalette: b(0.7),
           stagelightsAmplitude: r(MIN_VIEW_AMPLITUDE, 3),
@@ -1294,6 +1398,9 @@ export const settingsStore = {
     state = normalizeSettings({
       ...state,
       view: next,
+      ...(getVisualOverlayBiasDefault(next)
+        ? { assetOverlayBias: getVisualOverlayBiasDefault(next) }
+        : {}),
       activePreset: null,
       ...(fullscreenKey ? { [fullscreenKey]: false } : {}),
     });
