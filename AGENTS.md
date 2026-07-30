@@ -6,6 +6,15 @@ Instructions for Cursor, Claude Code, and other coding agents working in this re
 
 Browser-only React + Three.js audio visualizer. No backend. Real-time FFT → features → **SongClock** (authoritative bar/beat grid) → scene + post-FX.
 
+**Workspace layout** (npm workspaces): the engine is a separate package so multiple frontends can share it.
+
+- `packages/engine` — `@spectrum-aura/engine`: audio analysis, SongClock, scene views, composer post-FX, MIDI, visual registry, settings schema. No React, no app-store, no theme imports — keep it that way.
+- `src/` — the visualizer app (React UI, settings store/persistence, control panel, shortcuts).
+- `examples/ui-kit` — minimal second frontend: engine bands drive plain UI via CSS variables (`npm run example:ui-kit`).
+- `examples/video-loop` — third frontend: local video through the engine Composer's post-FX presets; YouTube embeds via CSS FX + share-tab audio (`npm run example:video-loop`).
+
+App code imports the engine as `@spectrum-aura/engine/<module>`; the app-side `store.ts` re-exports the settings schema for legacy imports.
+
 ## Read first
 
 | Priority | Document                                                                                      |
@@ -66,22 +75,24 @@ Analyser.tsx (orchestrator)
 | Panel primitives       | `src/components/analyser/control-panel/primitives.tsx`           |
 | BPM readout            | `src/components/analyser/TempoReadout.tsx`                       |
 | Design tokens          | `src/components/analyser/theme.ts`                               |
-| Song clock             | `src/components/analyser/engine/song-clock.ts`                   |
-| Bar types alias        | `src/components/analyser/engine/bar-clock.ts`                    |
-| BPM estimate           | `src/components/analyser/engine/bpm-detector.ts`                 |
-| Onsets                 | `src/components/analyser/engine/beat-matcher.ts`                 |
-| Audio read             | `src/components/analyser/engine/audio.ts`                        |
-| Scene / views          | `src/components/analyser/engine/scene.ts`                        |
-| Post-FX / quality tiers| `src/components/analyser/engine/composer.ts`                     |
-| Loudness curve         | `src/components/analyser/engine/loudness.ts`                     |
-| Dynamic Mode drift     | `src/components/analyser/engine/evolution.ts`                    |
-| View cycle             | `src/components/analyser/engine/view-cycle-controller.ts`        |
-| Visual registry        | `src/components/analyser/visuals.ts`                             |
+| Song clock             | `packages/engine/src/song-clock.ts`                   |
+| Bar types alias        | `packages/engine/src/bar-clock.ts`                    |
+| BPM estimate           | `packages/engine/src/bpm-detector.ts`                 |
+| Onsets                 | `packages/engine/src/beat-matcher.ts`                 |
+| Audio read             | `packages/engine/src/audio.ts`                        |
+| Scene / views          | `packages/engine/src/scene.ts`                        |
+| Post-FX / quality tiers| `packages/engine/src/composer.ts`                     |
+| Loudness curve         | `packages/engine/src/loudness.ts`                     |
+| Dynamic Mode drift     | `packages/engine/src/evolution.ts`                    |
+| View cycle             | `packages/engine/src/view-cycle-controller.ts`        |
+| Visual registry        | `packages/engine/src/visuals.ts`                             |
 | HUD                    | `src/components/analyser/BarTimingHud.tsx`                       |
-| Live tempo bus         | `src/components/analyser/engine/live-tempo.ts`                   |
-| Latency metrics        | `src/components/analyser/engine/latency-metrics.ts`              |
+| Live tempo bus         | `packages/engine/src/live-tempo.ts`                   |
+| Latency metrics        | `packages/engine/src/latency-metrics.ts`              |
 | Shortcuts              | `src/components/analyser/Shortcuts.tsx`                          |
-| Settings               | `src/components/analyser/store.ts`                               |
+| MIDI control           | `packages/engine/src/midi.ts` + `src/components/analyser/hooks/useMidiControl.ts` |
+| Settings schema        | `packages/engine/src/settings.ts`                                |
+| Settings store         | `src/components/analyser/store.ts`                               |
 | UI primitives (shadcn) | `src/components/ui/` — `label`, `sheet`, `slider`, `switch` only |
 
 ## Tests
@@ -95,7 +106,7 @@ npm run check       # typecheck + lint + test
 **Layout:** all tests live in `__tests__/` folders:
 
 - `src/components/analyser/__tests__/` — UI, store, shortcuts, regression
-- `src/components/analyser/engine/__tests__/` — engine units + sync invariants
+- `packages/engine/src/__tests__/` — engine units + sync invariants
 
 **Critical suites:**
 
@@ -112,9 +123,9 @@ npm run check       # typecheck + lint + test
 - `composer.test.ts` — auto quality-tier thresholds and hysteresis
 - `BarTimingHud.test.tsx` — BPM lock indicator states
 
-Shared harness: `engine/__tests__/helpers/song-clock.harness.ts`
+Shared harness: `packages/engine/src/__tests__/helpers/song-clock.harness.ts`
 
-Vitest config: `include: ["src/**/__tests__/**/*.{test,spec}.{ts,tsx}"]`
+Vitest config includes both `src/**/__tests__/**` and `packages/*/src/**/__tests__/**`.
 
 ## Shortcuts (user-facing)
 

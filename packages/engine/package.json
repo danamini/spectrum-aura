@@ -1,0 +1,15 @@
+{
+  "name": "@spectrum-aura/engine",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Audio-reactive rendering engine: FFT analysis, beat/BPM detection, SongClock bar/beat grid, Three.js scene views, and the post-FX composer.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  }
+}

@@ -23,6 +23,7 @@ import {
   MirrorShader,
   CRTCShader,
   ProjectorFilmShader,
+  AsciiShader,
 } from "./shaders";
 import {
   fetchWikimediaCommonsOverlayAssets,
@@ -30,7 +31,7 @@ import {
   type CommonsOverlayTopic,
 } from "./commons-overlay-source";
 import { getOverlayTextureManifest, pickDistinctOverlaySlots } from "./overlay-manifest";
-import { BLOOM_STRENGTH_MAX_NORMAL, type Settings } from "../store";
+import { BLOOM_STRENGTH_MAX_NORMAL, type Settings } from "./settings";
 import { MotionTrailPass } from "./MotionTrailPass";
 
 type OverlayTextureMeta = {
@@ -161,6 +162,7 @@ export class Composer {
   mirrorFx: ShaderPass;
   crtFx: ShaderPass;
   projectorFilmFx: ShaderPass;
+  asciiFx: ShaderPass;
   radialBlur: ShaderPass;
   grade: ShaderPass;
   sobel: ShaderPass;
@@ -289,6 +291,13 @@ export class Composer {
     this.smaa = new SMAAPass();
     this.smaa.setSize(width, height);
     this.composer.addPass(this.smaa);
+
+    // ASCII re-renders the composited frame as glyph cells, so it must stay
+    // the final pass — any pass added after it would draw over the terminal
+    // look and break the effect.
+    this.asciiFx = new ShaderPass(AsciiShader);
+    this.asciiFx.uniforms.resolution.value.set(width, height);
+    this.composer.addPass(this.asciiFx);
   }
 
   private createOverlayTexture(variant: number) {
@@ -770,6 +779,17 @@ export class Composer {
     // downgrade (below) doesn't leave it permanently off after recovery.
     this.smaa.enabled = true;
 
+    this.asciiFx.enabled = s.asciiFx;
+    this.asciiFx.uniforms.cellSize.value = THREE.MathUtils.clamp(s.asciiCellSize, 4, 32);
+    this.asciiFx.uniforms.colored.value = s.asciiColored ? 1 : 0;
+    // Glyph ramp breathes with the music: kicks push cells up a brightness
+    // level, quiet passages settle back down.
+    this.asciiFx.uniforms.gain.value = THREE.MathUtils.clamp(
+      0.9 + pulse * 0.3 + bass * 0.15,
+      0.5,
+      1.6,
+    );
+
     this.sobel.enabled = s.sobelMode;
     this.sobel.uniforms.edgeStrength.value = THREE.MathUtils.clamp(
       s.sobelStrength * (0.8 + high * 0.8),
@@ -809,6 +829,7 @@ export class Composer {
     (this.pixelate.uniforms.resolution.value as [number, number]) = [w, h];
     this.crtFx.uniforms.resolution.value.set(w, h);
     this.sobel.uniforms.resolution.value.set(w, h);
+    this.asciiFx.uniforms.resolution.value.set(w, h);
     this.bloom.setSize(w, h);
     this.ssao.setSize(w, h);
     this.motionTrails.setSize(w, h);

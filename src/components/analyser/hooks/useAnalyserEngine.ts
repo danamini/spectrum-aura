@@ -1,20 +1,23 @@
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import * as THREE from "three";
-import { Scene } from "../engine/scene";
-import { Composer, computeQualityTier } from "../engine/composer";
-import { AudioEngine } from "../engine/audio";
-import { ViewCycleController } from "../engine/view-cycle-controller";
-import { SongClock } from "../engine/song-clock";
-import { dispatchLiveTempo, setLiveTempoFrame } from "../engine/live-tempo";
-import { createSceneUpdateOpts, syncSceneUpdateOpts } from "../engine/scene-update-opts";
-import { ViewEvolutionEngine } from "../engine/evolution";
-import { measureFrameLatency, smoothLatency } from "../engine/latency-metrics";
+import { Scene } from "@spectrum-aura/engine/scene";
+import { Composer, computeQualityTier } from "@spectrum-aura/engine/composer";
+import { AudioEngine } from "@spectrum-aura/engine/audio";
+import { ViewCycleController } from "@spectrum-aura/engine/view-cycle-controller";
+import { SongClock } from "@spectrum-aura/engine/song-clock";
+import { dispatchLiveTempo, setLiveTempoFrame } from "@spectrum-aura/engine/live-tempo";
+import {
+  createSceneUpdateOpts,
+  syncSceneUpdateOpts,
+} from "@spectrum-aura/engine/scene-update-opts";
+import { ViewEvolutionEngine } from "@spectrum-aura/engine/evolution";
+import { measureFrameLatency, smoothLatency } from "@spectrum-aura/engine/latency-metrics";
 import {
   WEBXR_BACKGROUND_EVENT,
   WEBXR_REQUEST_EVENT,
   WEBXR_STATE_EVENT,
   WebXrRuntime,
-} from "../engine/xr";
+} from "@spectrum-aura/engine/xr";
 import { PALETTES, settingsStore, type Settings, type ViewMode } from "../store";
 import type { LatencyHudState, NerdStats } from "../overlays/stats-types";
 
@@ -78,6 +81,7 @@ export function useAnalyserEngine(params: {
     container.appendChild(renderer.domElement);
 
     const scene = new Scene(width, height);
+    scene.onRequestViewChange = (view) => settingsStore.set({ view });
     scene.setPalette(PALETTES[settingsRef.current.paletteIndex]?.colors ?? PALETTES[0].colors);
     const composer = new Composer(renderer, scene.scene, scene.camera, width, height);
     rendererRef.current = renderer;

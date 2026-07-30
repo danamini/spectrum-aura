@@ -1,4 +1,4 @@
-import type { OverlayBias } from "./engine/overlay-manifest";
+import type { OverlayBias } from "./overlay-manifest";
 
 export const DEFAULT_VISUAL_ID = "combo" as const;
 

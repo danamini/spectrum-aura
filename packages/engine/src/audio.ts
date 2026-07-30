@@ -110,6 +110,12 @@ export class AudioEngine {
     }
   }
 
+  /** Attach an arbitrary MediaStream — e.g. `videoElement.captureStream()` —
+   * for frontends that analyse media they are also playing. */
+  startStream(stream: MediaStream, options?: { latencyOptimized?: boolean }) {
+    this.attach(stream, options);
+  }
+
   private attach(stream: MediaStream, options?: { latencyOptimized?: boolean }) {
     this.stop();
     const latencyOptimized = options?.latencyOptimized ?? true;

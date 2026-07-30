@@ -1,5 +1,5 @@
-import { BEATS_PER_PHRASE, type BarTiming } from "./engine/bar-clock";
-import { useLiveTempoFrame } from "./engine/live-tempo";
+import { BEATS_PER_PHRASE, type BarTiming } from "@spectrum-aura/engine/bar-clock";
+import { useLiveTempoFrame } from "./hooks/useLiveTempoFrame";
 
 /**
  * Visual "is it locked yet" cue: spins while the detector searches, with spin

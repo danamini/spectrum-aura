@@ -187,4 +187,4 @@ Toggle with `L`. Stats panel (`N`) shows the same metrics under **Timing**.
 3. Compare tap grid (`M`) vs heard downbeat — if grid leads audio, output latency dominates
 4. If FPS < 60, SongClock phase updates coarser (engine-bound) — HUD rAF may repeat stale frames
 
-See [latency-metrics.test.ts](../src/components/analyser/engine/__tests__/latency-metrics.test.ts) and [latency-benchmark.test.ts](../src/components/analyser/engine/__tests__/latency-benchmark.test.ts).
+See [latency-metrics.test.ts](../packages/engine/src/__tests__/latency-metrics.test.ts) and [latency-benchmark.test.ts](../packages/engine/src/__tests__/latency-benchmark.test.ts).

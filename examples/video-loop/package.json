@@ -1,0 +1,11 @@
+{
+  "name": "@spectrum-aura/example-video-loop",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Example frontend: music-reactive video loops. Local files render through the engine's full post-FX composer (VHS/CRT/glitch presets); YouTube embeds get engine-driven CSS overlay effects with share-tab audio capture.",
+  "dependencies": {
+    "@spectrum-aura/engine": "*",
+    "three": "*"
+  }
+}

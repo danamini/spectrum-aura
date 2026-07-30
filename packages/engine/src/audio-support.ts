@@ -1,4 +1,4 @@
-import { LOCAL_DEV_URL } from "../theme";
+export const LOCAL_DEV_URL = "http://localhost:6789";
 
 export type AudioCaptureSupport = {
   ok: boolean;

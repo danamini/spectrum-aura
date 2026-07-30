@@ -184,7 +184,7 @@ Settings panel and flyout behavior:
 
 ### Adding a New Visualization Mode
 
-1. Add a visual manifest to `src/components/analyser/visuals.ts` or a new `src/components/analyser/visuals/*.visual.ts` file.
+1. Add a visual manifest to `packages/engine/src/visuals.ts` or a new `src/components/analyser/visuals/*.visual.ts` file.
 2. Create `buildXXX()` and `updateXXX()` in `scene.ts` and bind the manifest `sceneGroupKey` to the owning `THREE.Group`.
 3. Add settings in `store.ts` for customization, including the `...Fullscreen` or `...Wireframe` keys referenced by the manifest when needed.
 4. Add per-view controls in `control-panel/ViewSettings.tsx`. Shell layout and flyout tabs stay in `ControlPanel.tsx`. View labels, cycle order, and fullscreen wiring come from the visual registry automatically.
@@ -192,7 +192,7 @@ Settings panel and flyout behavior:
 
 Runtime registry notes:
 
-- `src/components/analyser/visuals.ts` is the canonical visual registry used by the control panel, shortcuts, and XR view cycle.
+- `packages/engine/src/visuals.ts` is the canonical visual registry used by the control panel, shortcuts, and XR view cycle.
 - Any `src/components/analyser/visuals/*.visual.ts` module exporting `visual` or a default object with an `id` is loaded at startup via `import.meta.glob(..., { eager: true })`.
 - Runtime manifests can override labels, settings labels, fullscreen keys, wireframe keys, scene group keys, and order without re-editing the UI lists.
 - Rendering logic still lives in `scene.ts`, so new runtime-picked visuals need a matching scene group and update branch before they can draw.
@@ -233,7 +233,7 @@ All tests live under `__tests__/` (see `vitest.config.ts`):
 | Location                     | Suites                                                                                                                                 |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `analyser/__tests__/`        | `Analyser.regression`, `ControlPanel.regression`, `usePresetActions`, `theme`, `Shortcuts`, `store.*`, `visuals`, `BarTimingHud`      |
-| `analyser/engine/__tests__/` | `song-clock`, `sync-invariants`, `bpm-detector`, `bpm-detector.realistic`, `beat-matcher`, `latency-metrics`, `view-cycle-controller`, `latency-benchmark`, `loudness`, `evolution`, `composer`, `xr` |
+| `packages/engine/src/__tests__/` | `song-clock`, `sync-invariants`, `bpm-detector`, `bpm-detector.realistic`, `beat-matcher`, `latency-metrics`, `view-cycle-controller`, `latency-benchmark`, `loudness`, `evolution`, `composer`, `xr` |
 
 Shared fixtures: `__tests__/helpers/test-helpers.ts`, `engine/__tests__/helpers/song-clock.harness.ts`.
 

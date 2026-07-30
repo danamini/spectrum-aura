@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aura UI Kit — engine-reactive components</title>
+    <style>
+      :root {
+        --aura-0: #ff71ce;
+        --aura-1: #01cdfe;
+        --aura-2: #05ffa1;
+        --bass: 0;
+        --mid: 0;
+        --high: 0;
+        --beat: 0;
+      }
+      * {
+        margin: 0;
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        background: #0b0616;
+        color: #f4ecff;
+        font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+        overflow-x: hidden;
+      }
+
+      .hero {
+        position: relative;
+        padding: 96px 32px 72px;
+        text-align: center;
+        background:
+          radial-gradient(
+            120% 90% at 50% -10%,
+            color-mix(in srgb, var(--aura-0) calc(14% + 30% * var(--bass)), transparent),
+            transparent 60%
+          ),
+          radial-gradient(
+            80% 60% at 85% 110%,
+            color-mix(in srgb, var(--aura-1) calc(10% + 25% * var(--mid)), transparent),
+            transparent 65%
+          ),
+          radial-gradient(
+            70% 55% at 12% 100%,
+            color-mix(in srgb, var(--aura-2) calc(8% + 22% * var(--high)), transparent),
+            transparent 60%
+          );
+        border-bottom: 1px solid color-mix(in srgb, var(--aura-1) 25%, transparent);
+      }
+      .hero h1 {
+        font-size: clamp(2.4rem, 6vw, 4.4rem);
+        letter-spacing: 0.06em;
+        background: linear-gradient(100deg, var(--aura-0), var(--aura-1) 55%, var(--aura-2));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 0 calc(6px + 26px * var(--beat)) color-mix(in srgb, var(--aura-0) 55%, transparent));
+        transform: scale(calc(1 + 0.02 * var(--beat)));
+      }
+      .hero p {
+        margin-top: 14px;
+        color: #bda9d8;
+        font-size: 1.05rem;
+      }
+      .hero .cta-row {
+        margin-top: 34px;
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        font: inherit;
+        font-size: 0.95rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 13px 26px;
+        border-radius: 999px;
+        border: 1px solid var(--aura-1);
+        background: transparent;
+        color: #f4ecff;
+        cursor: pointer;
+        transition: background 0.2s;
+        box-shadow:
+          0 0 calc(6px + 30px * var(--beat)) color-mix(in srgb, var(--aura-1) 55%, transparent),
+          inset 0 0 calc(2px + 14px * var(--bass)) color-mix(in srgb, var(--aura-1) 35%, transparent);
+      }
+      .btn.primary {
+        border-color: var(--aura-0);
+        background: color-mix(in srgb, var(--aura-0) calc(18% + 30% * var(--bass)), transparent);
+        box-shadow:
+          0 0 calc(8px + 44px * var(--beat)) color-mix(in srgb, var(--aura-0) 65%, transparent),
+          inset 0 0 calc(2px + 16px * var(--bass)) color-mix(in srgb, var(--aura-0) 40%, transparent);
+      }
+      .btn:hover {
+        background: color-mix(in srgb, var(--aura-1) 24%, transparent);
+      }
+
+      .eq {
+        display: flex;
+        gap: 4px;
+        justify-content: center;
+        align-items: flex-end;
+        height: 56px;
+        margin-top: 40px;
+      }
+      .eq div {
+        width: 8px;
+        height: 100%;
+        border-radius: 3px;
+        background: linear-gradient(to top, var(--aura-1), var(--aura-0));
+        transform-origin: bottom;
+        transform: scaleY(0.06);
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        max-width: 960px;
+        margin: 48px auto;
+        padding: 0 32px 72px;
+      }
+      .card {
+        border-radius: 14px;
+        padding: 24px;
+        background: #140b26;
+        border: 1px solid color-mix(in srgb, var(--card-c, var(--aura-0)) 45%, transparent);
+        box-shadow: 0 0 calc(4px + 26px * var(--card-band, 0)) color-mix(in srgb, var(--card-c, var(--aura-0)) 40%, transparent);
+      }
+      .card:nth-child(1) { --card-c: var(--aura-0); --card-band: var(--bass); }
+      .card:nth-child(2) { --card-c: var(--aura-1); --card-band: var(--mid); }
+      .card:nth-child(3) { --card-c: var(--aura-2); --card-band: var(--high); }
+      .card h3 {
+        color: var(--card-c);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+      }
+      .card p {
+        margin-top: 10px;
+        color: #bda9d8;
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+      .card .meter {
+        margin-top: 16px;
+        height: 6px;
+        border-radius: 3px;
+        background: #241238;
+        overflow: hidden;
+      }
+      .card .meter::after {
+        content: "";
+        display: block;
+        height: 100%;
+        background: var(--card-c);
+        transform: scaleX(var(--card-band, 0));
+        transform-origin: left;
+      }
+
+      .statusbar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 24px;
+        padding: 10px;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #8f7bb0;
+        background: rgba(11, 6, 22, 0.85);
+        border-top: 1px solid color-mix(in srgb, var(--aura-1) 20%, transparent);
+        backdrop-filter: blur(8px);
+      }
+      .statusbar b {
+        color: var(--aura-2);
+      }
+
+      #start-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        align-items: center;
+        justify-content: center;
+        background: rgba(11, 6, 22, 0.92);
+        backdrop-filter: blur(6px);
+        z-index: 10;
+      }
+      #start-overlay p {
+        color: #bda9d8;
+        max-width: 420px;
+        text-align: center;
+        line-height: 1.5;
+      }
+      #start-overlay .error {
+        color: #ff8fa8;
+        font-size: 0.85rem;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <h1>AURA UI KIT</h1>
+      <p>Ordinary components — hero, buttons, cards — driven by @spectrum-aura/engine.</p>
+      <div class="cta-row">
+        <button class="btn primary" type="button">Get started</button>
+        <button class="btn" type="button" id="palette-btn">Palette: <span id="palette-name"></span></button>
+      </div>
+      <div class="eq" id="eq" aria-hidden="true"></div>
+    </header>
+
+    <main class="cards">
+      <div class="card">
+        <h3>Bass</h3>
+        <p>This card's border and meter track the low band. Wire any component to any band with one CSS variable.</p>
+        <div class="meter"></div>
+      </div>
+      <div class="card">
+        <h3>Mid</h3>
+        <p>Same engine, same SongClock, same palettes as the visualizer — a different frontend consuming the package.</p>
+        <div class="meter"></div>
+      </div>
+      <div class="card">
+        <h3>High</h3>
+        <p>Beat flashes, BPM readout, and band levels arrive as plain numbers. No Three.js is loaded on this page.</p>
+        <div class="meter"></div>
+      </div>
+    </main>
+
+    <div class="statusbar">
+      <span id="bpm">— BPM</span>
+      <span>beat <b id="beat-dot">○</b></span>
+      <span>engine <b>@spectrum-aura/engine</b></span>
+    </div>
+
+    <div id="start-overlay">
+      <p>
+        This demo listens to audio and lets the engine drive the UI. Pick a source — nothing is
+        recorded or sent anywhere.
+      </p>
+      <button class="btn primary" type="button" id="start-mic">Use microphone</button>
+      <button class="btn" type="button" id="start-tab">Share tab audio</button>
+      <p class="error hidden" id="start-error"></p>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

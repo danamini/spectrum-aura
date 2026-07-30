@@ -9,8 +9,8 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 import { sphereVertexShader, sphereFragmentShader } from "./shaders";
 import type { AudioBands } from "./audio";
 import type { SceneUpdateOpts } from "./scene-update-opts";
-import { settingsStore, type WikichromaActorPack } from "../store";
-import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS, type ViewMode } from "../visuals";
+import type { WikichromaActorPack } from "./settings";
+import { DEFAULT_VISUAL_ID, getVisualDefinition, VISUALS, type ViewMode } from "./visuals";
 import { bipolarBand, normalizedBand } from "./loudness";
 import { TextBuffer } from "./text-sources/text-buffer";
 import { bofhTextSource, BOFH_FALLBACK_EXCUSES } from "./text-sources/bofh-source";
@@ -3957,14 +3957,17 @@ export class Scene {
     this.xrHudNeedsRedraw = true;
   }
 
+  /** Injected by the frontend so XR "cycle view" requests go through the
+   * app's settings store — the engine never owns settings state. */
+  onRequestViewChange: ((view: ViewMode) => void) | null = null;
+
   private cycleXrView() {
     const views = VISUALS.map((visual) => visual.id).filter((view): view is ViewMode =>
       Boolean(this.getSceneObjectForView(view)),
     );
-    const current = settingsStore.get().view;
-    const index = views.indexOf(current);
+    const index = views.indexOf(this.view);
     const next = views[(index + 1) % views.length] ?? DEFAULT_VISUAL_ID;
-    settingsStore.set({ view: next });
+    this.onRequestViewChange?.(next);
   }
 
   private redrawXrHud() {

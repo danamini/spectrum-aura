@@ -1,5 +1,5 @@
 import { BarTimingHud, BpmLockIndicator, ExperimentalBadge } from "./BarTimingHud";
-import type { LiveTempoState } from "./engine/live-tempo";
+import type { LiveTempoState } from "@spectrum-aura/engine/live-tempo";
 import { bpmGlowStyle } from "./theme";
 
 /**

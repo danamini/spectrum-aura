@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 import { EMPTY_BAR_TIMING, type BarTiming } from "./bar-clock";
 
 export type LiveTempoState = {
@@ -36,21 +34,4 @@ export function getLiveTempoFrame(): LiveTempoState {
 export function dispatchLiveTempo(state: LiveTempoState) {
   setLiveTempoFrame(state);
   window.dispatchEvent(new CustomEvent(LIVE_TEMPO_EVENT, { detail: state }));
-}
-
-/** Subscribe to the per-frame tempo bus (60fps) for smooth grid animation. */
-export function useLiveTempoFrame(): LiveTempoState {
-  const [state, setState] = useState(getLiveTempoFrame);
-
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      setState(getLiveTempoFrame());
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  return state;
 }

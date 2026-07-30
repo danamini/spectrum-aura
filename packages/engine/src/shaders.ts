@@ -290,6 +290,70 @@ export const ProjectorFilmShader = {
   `,
 };
 
+export const AsciiShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(1920, 1080) },
+    cellSize: { value: 10.0 },
+    colored: { value: 1.0 }, // 0 = mono phosphor tint, 1 = source colour
+    gain: { value: 1.0 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float cellSize;
+    uniform float colored;
+    uniform float gain;
+    varying vec2 vUv;
+
+    // Each glyph is a 5x5 bitmap (bit = x + 5*y, y up) split across two floats
+    // (low 13 bits / high 12 bits) so lookups stay exact in ES 1.0 floats
+    // without bit ops. Constants generated from pixel art; the brightness ramp
+    // " . : - + = % # * @" is ordered by lit-pixel count (0..20).
+    float bitAt(float bits, float index) {
+      return mod(floor(bits / exp2(index)), 2.0);
+    }
+
+    float glyphPixel(vec2 glyph, vec2 p) {
+      if (p.x < 0.0 || p.x >= 1.0 || p.y < 0.0 || p.y >= 1.0) return 0.0;
+      vec2 g = floor(p * 5.0);
+      float index = g.x + 5.0 * g.y;
+      if (index < 13.0) return bitAt(glyph.x, index);
+      return bitAt(glyph.y, index - 13.0);
+    }
+
+    void main() {
+      vec2 grid = resolution / max(4.0, cellSize);
+      vec2 cell = floor(vUv * grid);
+      vec2 cellUv = (cell + 0.5) / grid;
+      vec3 src = texture2D(tDiffuse, cellUv).rgb;
+      float lum = clamp(dot(src, vec3(0.2126, 0.7152, 0.0722)) * gain, 0.0, 1.0);
+
+      float level = floor(min(lum, 0.999) * 10.0);
+      vec2 glyph = vec2(0.0, 0.0);
+      if (level > 0.5) glyph = vec2(128.0, 0.0);     // .
+      if (level > 1.5) glyph = vec2(128.0, 16.0);    // :
+      if (level > 2.5) glyph = vec2(6144.0, 1.0);    // -
+      if (level > 3.5) glyph = vec2(7300.0, 531.0);  // +
+      if (level > 4.5) glyph = vec2(992.0, 124.0);   // =
+      if (level > 5.5) glyph = vec2(4953.0, 2476.0); // %
+      if (level > 6.5) glyph = vec2(3050.0, 1405.0); // #
+      if (level > 7.5) glyph = vec2(7637.0, 2747.0); // *
+      if (level > 8.5) glyph = vec2(4078.0, 1919.0); // @
+
+      // Inset the glyph so neighbouring characters never touch.
+      vec2 p = (fract(vUv * grid) - 0.08) / 0.84;
+      float on = glyphPixel(glyph, p);
+
+      vec3 monoInk = vec3(0.58, 1.0, 0.76) * (0.35 + 0.65 * lum);
+      vec3 colorInk = clamp(src * 1.7, 0.0, 1.0);
+      vec3 ink = mix(monoInk, colorInk, colored);
+      gl_FragColor = vec4(ink * on, 1.0);
+    }
+  `,
+};
+
 export const GodRaysShader = {
   uniforms: {
     tDiffuse: { value: null },

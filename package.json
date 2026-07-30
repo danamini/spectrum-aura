@@ -20,7 +20,11 @@
     "postversion": "git push --follow-tags",
     "release:patch": "npm version patch -m \"Release v%s\"",
     "release:minor": "npm version minor -m \"Release v%s\"",
-    "release:major": "npm version major -m \"Release v%s\""
+    "release:major": "npm version major -m \"Release v%s\"",
+    "example:ui-kit": "vite dev examples/ui-kit --port 6790",
+    "example:ui-kit:build": "vite build examples/ui-kit",
+    "example:video-loop": "vite dev examples/video-loop --port 6791",
+    "example:video-loop:build": "vite build examples/video-loop"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -28,6 +32,7 @@
     "@radix-ui/react-slider": "^1.3.6",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@spectrum-aura/engine": "*",
     "@tailwindcss/vite": "^4.2.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -59,5 +64,9 @@
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1",
     "vitest": "^4.1.6"
-  }
+  },
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ]
 }

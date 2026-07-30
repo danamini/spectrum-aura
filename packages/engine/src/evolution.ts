@@ -1,6 +1,6 @@
 import type { BarTiming } from "./bar-clock";
 import type { SceneUpdateOpts } from "./scene-update-opts";
-import type { ViewMode } from "../visuals";
+import type { ViewMode } from "./visuals";
 
 export type EvolutionTarget = {
   /** SceneUpdateOpts key this target drifts — see scene-update-opts.ts. */

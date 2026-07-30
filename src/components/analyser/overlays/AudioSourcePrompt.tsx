@@ -1,5 +1,5 @@
 import { Mic, MonitorSpeaker } from "lucide-react";
-import type { AudioCaptureSupport } from "../engine/audio-support";
+import type { AudioCaptureSupport } from "@spectrum-aura/engine/audio-support";
 import { LOCAL_DEV_URL } from "../theme";
 
 export function AudioSourcePrompt({

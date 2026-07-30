@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 
 import { Label } from "@/components/ui/label";
-import { Bn, Disclosure, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
+import { Bn, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
 import { ViewSettings } from "./control-panel/ViewSettings";
 import {
   ChevronDown,
@@ -27,11 +27,16 @@ import {
   probeWebXrSupport,
   requestWebXrToggle,
   type WebXrState,
-} from "./engine/xr";
+} from "@spectrum-aura/engine/xr";
 import { TempoReadout } from "./TempoReadout";
 import { usePresetActions } from "./hooks/usePresetActions";
+import { useMidiControl } from "./hooks/useMidiControl";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { EMPTY_LIVE_TEMPO, LIVE_TEMPO_EVENT, type LiveTempoState } from "./engine/live-tempo";
+import {
+  EMPTY_LIVE_TEMPO,
+  LIVE_TEMPO_EVENT,
+  type LiveTempoState,
+} from "@spectrum-aura/engine/live-tempo";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
   PALETTES,
@@ -40,7 +45,7 @@ import {
   useSettings,
   type Settings,
 } from "./store";
-import { getVisualDefinition, VISUALS } from "./visuals";
+import { getVisualDefinition, VISUALS } from "@spectrum-aura/engine/visuals";
 
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 
@@ -62,6 +67,7 @@ export function ControlPanel() {
   const s = useSettings();
   const preset = usePresetActions();
   const isMobile = useIsMobile();
+  const midi = useMidiControl();
   const [open, setOpen] = useState(false);
   const [flyoutVisible, setFlyoutVisible] = useState(false);
   const [xrState, setXrState] = useState<WebXrState>({
@@ -514,6 +520,30 @@ export function ControlPanel() {
                     <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
                       Shortcut: <span className="text-emerald-300/80">L</span>
                     </p>
+                    <ToggleRow
+                      label="MIDI control"
+                      enabled={s.midiEnabled}
+                      onToggle={(v) => set({ midiEnabled: v })}
+                    >
+                      {midi.error && (
+                        <p className="px-1 font-mono text-[9px] leading-relaxed text-amber-200/70">
+                          {midi.error}
+                        </p>
+                      )}
+                      {midi.active && (
+                        <p className="px-1 font-mono text-[9px] leading-relaxed text-white/50">
+                          {midi.inputs.length > 0
+                            ? `Inputs: ${midi.inputs.join(", ")}`
+                            : "No MIDI inputs connected — plug in a controller"}
+                          {midi.lastAction ? ` · last: ${midi.lastAction}` : ""}
+                        </p>
+                      )}
+                      <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                        Notes C1/D1 tap beat/downbeat, E1 random visual, F1 randomize FX, C2+ load
+                        saves 1–10. Knobs: CC1 bloom, CC7 exposure, CC71 chroma, CC74 hue, CC91
+                        grain, CC93 vignette.
+                      </p>
+                    </ToggleRow>
                   </div>
                 )}
 
@@ -960,203 +990,230 @@ export function ControlPanel() {
                         onChange={(v) => set({ tiltAmount: v })}
                       />
                     </ToggleRow>
-                    <Disclosure label="Retro / novelty FX (kaleidoscope, mirror, CRT, projector film)">
-                      <ToggleRow
-                        label="Kaleidoscope"
-                        enabled={s.kaleidoscope}
-                        onToggle={(v) => set({ kaleidoscope: v })}
-                      >
-                        <S
-                          label="Sides"
-                          value={s.kaleidoscopeSides}
-                          min={2}
-                          max={24}
-                          step={1}
-                          onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
+                    <ToggleRow
+                      label="Kaleidoscope"
+                      enabled={s.kaleidoscope}
+                      onToggle={(v) => set({ kaleidoscope: v })}
+                    >
+                      <S
+                        label="Sides"
+                        value={s.kaleidoscopeSides}
+                        min={2}
+                        max={24}
+                        step={1}
+                        onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
+                      />
+                      <S
+                        label="Angle"
+                        value={s.kaleidoscopeAngle}
+                        min={-3.14}
+                        max={3.14}
+                        step={0.01}
+                        onChange={(v) => set({ kaleidoscopeAngle: v })}
+                      />
+                    </ToggleRow>
+                    <ToggleRow
+                      label="Mirror"
+                      enabled={s.mirrorFx}
+                      onToggle={(v) => set({ mirrorFx: v })}
+                    >
+                      <div className="grid grid-cols-3 gap-2">
+                        {(
+                          [
+                            ["horizontal", "Horizontal"],
+                            ["vertical", "Vertical"],
+                            ["quad", "Quad"],
+                          ] as const
+                        ).map(([mode, label]) => (
+                          <Bn
+                            key={mode}
+                            active={s.mirrorMode === mode}
+                            variant={s.mirrorMode === mode ? "default" : "outline"}
+                            onClick={() => set({ mirrorMode: mode })}
+                          >
+                            {label}
+                          </Bn>
+                        ))}
+                      </div>
+                      <S
+                        label="Offset"
+                        value={s.mirrorOffset}
+                        min={-0.45}
+                        max={0.45}
+                        step={0.01}
+                        onChange={(v) => set({ mirrorOffset: v })}
+                      />
+                    </ToggleRow>
+                    <ToggleRow label="CRT" enabled={s.crtFx} onToggle={(v) => set({ crtFx: v })}>
+                      <S
+                        label="Scanlines"
+                        value={s.crtScanlineIntensity}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(v) => set({ crtScanlineIntensity: v })}
+                      />
+                      <S
+                        label="Curvature"
+                        value={s.crtCurvature}
+                        min={0}
+                        max={0.1}
+                        step={0.01}
+                        onChange={(v) => set({ crtCurvature: v })}
+                      />
+                      <S
+                        label="Vignette"
+                        value={s.crtVignette}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(v) => set({ crtVignette: v })}
+                      />
+                    </ToggleRow>
+                    <ToggleRow
+                      label="Projector film"
+                      enabled={s.projectorFilmFx}
+                      onToggle={(v) => set({ projectorFilmFx: v })}
+                    >
+                      <S
+                        label="Artifact amount"
+                        value={s.projectorFilmAmount}
+                        min={0}
+                        max={1.5}
+                        step={0.01}
+                        onChange={(v) => set({ projectorFilmAmount: v })}
+                      />
+                      <S
+                        label="Frame jitter"
+                        value={s.projectorFilmJitter}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(v) => set({ projectorFilmJitter: v })}
+                      />
+                      <S
+                        label="Lamp flicker"
+                        value={s.projectorFilmFlicker}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        onChange={(v) => set({ projectorFilmFlicker: v })}
+                      />
+                    </ToggleRow>
+                    <ToggleRow
+                      label="ASCII"
+                      enabled={s.asciiFx}
+                      onToggle={(v) => set({ asciiFx: v })}
+                    >
+                      <S
+                        label="Cell size"
+                        value={s.asciiCellSize}
+                        min={4}
+                        max={32}
+                        step={1}
+                        onChange={(v) => set({ asciiCellSize: Math.round(v) })}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        {(
+                          [
+                            [true, "Colour"],
+                            [false, "Mono"],
+                          ] as const
+                        ).map(([colored, label]) => (
+                          <Bn
+                            key={label}
+                            active={s.asciiColored === colored}
+                            variant={s.asciiColored === colored ? "default" : "outline"}
+                            onClick={() => set({ asciiColored: colored })}
+                          >
+                            {label}
+                          </Bn>
+                        ))}
+                      </div>
+                    </ToggleRow>
+                    <ToggleRow
+                      label="Demo-scene text overlay"
+                      enabled={s.textOverlayEnabled}
+                      onToggle={(v) => set({ textOverlayEnabled: v })}
+                    >
+                      <div className="grid grid-cols-2 gap-2">
+                        {(
+                          [
+                            ["public-domain", "Public Domain"],
+                            ["bofh", "BOFH API"],
+                          ] as const
+                        ).map(([source, label]) => (
+                          <Bn
+                            key={source}
+                            active={s.textOverlaySource === source}
+                            variant={s.textOverlaySource === source ? "default" : "outline"}
+                            onClick={() => set({ textOverlaySource: source })}
+                          >
+                            {label}
+                          </Bn>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(
+                          [
+                            ["bounce", "Bounce"],
+                            ["scroller", "Scroller"],
+                            ["stack", "Stack"],
+                            ["orbit", "Orbit"],
+                          ] as const
+                        ).map(([style, label]) => (
+                          <Bn
+                            key={style}
+                            active={s.textOverlayStyle === style}
+                            variant={s.textOverlayStyle === style ? "default" : "outline"}
+                            onClick={() => set({ textOverlayStyle: style })}
+                          >
+                            {label}
+                          </Bn>
+                        ))}
+                      </div>
+                      <S
+                        label="Intensity"
+                        value={s.textOverlayIntensity}
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        onChange={(v) => set({ textOverlayIntensity: v })}
+                      />
+                      <S
+                        label="Phrase interval (sec)"
+                        value={s.textOverlayPhraseInterval}
+                        min={3}
+                        max={20}
+                        step={0.5}
+                        onChange={(v) => set({ textOverlayPhraseInterval: v })}
+                      />
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">All caps</Label>
+                        <Sw
+                          checked={s.textOverlayAllCaps}
+                          onCheckedChange={(v) => set({ textOverlayAllCaps: v })}
                         />
-                        <S
-                          label="Angle"
-                          value={s.kaleidoscopeAngle}
-                          min={-3.14}
-                          max={3.14}
-                          step={0.01}
-                          onChange={(v) => set({ kaleidoscopeAngle: v })}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px]">Scramble in/out</Label>
+                        <Sw
+                          checked={s.textOverlayScramble}
+                          onCheckedChange={(v) => set({ textOverlayScramble: v })}
                         />
-                      </ToggleRow>
-                      <ToggleRow
-                        label="Mirror"
-                        enabled={s.mirrorFx}
-                        onToggle={(v) => set({ mirrorFx: v })}
-                      >
-                        <div className="grid grid-cols-3 gap-2">
-                          {(
-                            [
-                              ["horizontal", "Horizontal"],
-                              ["vertical", "Vertical"],
-                              ["quad", "Quad"],
-                            ] as const
-                          ).map(([mode, label]) => (
-                            <Bn
-                              key={mode}
-                              active={s.mirrorMode === mode}
-                              variant={s.mirrorMode === mode ? "default" : "outline"}
-                              onClick={() => set({ mirrorMode: mode })}
-                            >
-                              {label}
-                            </Bn>
-                          ))}
-                        </div>
-                        <S
-                          label="Offset"
-                          value={s.mirrorOffset}
-                          min={-0.45}
-                          max={0.45}
-                          step={0.01}
-                          onChange={(v) => set({ mirrorOffset: v })}
-                        />
-                      </ToggleRow>
-                      <ToggleRow label="CRT" enabled={s.crtFx} onToggle={(v) => set({ crtFx: v })}>
-                        <S
-                          label="Scanlines"
-                          value={s.crtScanlineIntensity}
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          onChange={(v) => set({ crtScanlineIntensity: v })}
-                        />
-                        <S
-                          label="Curvature"
-                          value={s.crtCurvature}
-                          min={0}
-                          max={0.1}
-                          step={0.01}
-                          onChange={(v) => set({ crtCurvature: v })}
-                        />
-                        <S
-                          label="Vignette"
-                          value={s.crtVignette}
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          onChange={(v) => set({ crtVignette: v })}
-                        />
-                      </ToggleRow>
-                      <ToggleRow
-                        label="Projector film"
-                        enabled={s.projectorFilmFx}
-                        onToggle={(v) => set({ projectorFilmFx: v })}
-                      >
-                        <S
-                          label="Artifact amount"
-                          value={s.projectorFilmAmount}
-                          min={0}
-                          max={1.5}
-                          step={0.01}
-                          onChange={(v) => set({ projectorFilmAmount: v })}
-                        />
-                        <S
-                          label="Frame jitter"
-                          value={s.projectorFilmJitter}
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          onChange={(v) => set({ projectorFilmJitter: v })}
-                        />
-                        <S
-                          label="Lamp flicker"
-                          value={s.projectorFilmFlicker}
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          onChange={(v) => set({ projectorFilmFlicker: v })}
-                        />
-                      </ToggleRow>
-                    </Disclosure>
-                    <Disclosure label="Demo-scene text overlay">
-                      <ToggleRow
-                        label="Text overlay"
-                        enabled={s.textOverlayEnabled}
-                        onToggle={(v) => set({ textOverlayEnabled: v })}
-                      >
-                        <div className="grid grid-cols-2 gap-2">
-                          {(
-                            [
-                              ["public-domain", "Public Domain"],
-                              ["bofh", "BOFH API"],
-                            ] as const
-                          ).map(([source, label]) => (
-                            <Bn
-                              key={source}
-                              active={s.textOverlaySource === source}
-                              variant={s.textOverlaySource === source ? "default" : "outline"}
-                              onClick={() => set({ textOverlaySource: source })}
-                            >
-                              {label}
-                            </Bn>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {(
-                            [
-                              ["bounce", "Bounce"],
-                              ["scroller", "Scroller"],
-                              ["stack", "Stack"],
-                              ["orbit", "Orbit"],
-                            ] as const
-                          ).map(([style, label]) => (
-                            <Bn
-                              key={style}
-                              active={s.textOverlayStyle === style}
-                              variant={s.textOverlayStyle === style ? "default" : "outline"}
-                              onClick={() => set({ textOverlayStyle: style })}
-                            >
-                              {label}
-                            </Bn>
-                          ))}
-                        </div>
-                        <S
-                          label="Intensity"
-                          value={s.textOverlayIntensity}
-                          min={0}
-                          max={2}
-                          step={0.05}
-                          onChange={(v) => set({ textOverlayIntensity: v })}
-                        />
-                        <S
-                          label="Phrase interval (sec)"
-                          value={s.textOverlayPhraseInterval}
-                          min={3}
-                          max={20}
-                          step={0.5}
-                          onChange={(v) => set({ textOverlayPhraseInterval: v })}
-                        />
-                        <div className="flex items-center justify-between">
-                          <Label className="text-[11px]">All caps</Label>
-                          <Sw
-                            checked={s.textOverlayAllCaps}
-                            onCheckedChange={(v) => set({ textOverlayAllCaps: v })}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <Label className="text-[11px]">Scramble in/out</Label>
-                          <Sw
-                            checked={s.textOverlayScramble}
-                            onCheckedChange={(v) => set({ textOverlayScramble: v })}
-                          />
-                        </div>
-                        <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
-                          <Label className="text-[11px]">Phrase source</Label>
-                          <p className="mt-1 text-[10px] leading-relaxed text-white/60">
-                            {s.textOverlaySource === "public-domain"
-                              ? "Curated public-domain snippets are bundled locally with author, work, rights, and provenance metadata."
-                              : "BOFH phrases come from bofh.bombeck.io in small batches and may require network; the fallback list stays available offline."}
-                          </p>
-                          <p className="mt-1 text-[10px] leading-relaxed text-white/45">
-                            Current snippet attribution appears in Stats for nerds.
-                          </p>
-                        </div>
-                      </ToggleRow>
-                    </Disclosure>
+                      </div>
+                      <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+                        <Label className="text-[11px]">Phrase source</Label>
+                        <p className="mt-1 text-[10px] leading-relaxed text-white/60">
+                          {s.textOverlaySource === "public-domain"
+                            ? "Curated public-domain snippets are bundled locally with author, work, rights, and provenance metadata."
+                            : "BOFH phrases come from bofh.bombeck.io in small batches and may require network; the fallback list stays available offline."}
+                        </p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+                          Current snippet attribution appears in Stats for nerds.
+                        </p>
+                      </div>
+                    </ToggleRow>
                     <ToggleRow
                       label="Color grading"
                       enabled={s.grading}

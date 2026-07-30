@@ -14,9 +14,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { settingsStore, useSettings, type Settings } from "./store";
-import { dispatchBeatHint } from "./engine/beat-hint";
-import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "./engine/xr";
-import { getVisualDefinition, VISUALS } from "./visuals";
+import { dispatchBeatHint } from "@spectrum-aura/engine/beat-hint";
+import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "@spectrum-aura/engine/xr";
+import { getVisualDefinition, VISUALS } from "@spectrum-aura/engine/visuals";
 import { usePresetActions } from "./hooks/usePresetActions";
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";

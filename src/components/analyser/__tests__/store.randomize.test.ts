@@ -33,6 +33,35 @@ describe("settingsStore randomize", () => {
     expect(state.projectorFilmFx).toBe(false);
     expect(state.crtScanlineIntensity).toBe(0.35);
     expect(state.projectorFilmAmount).toBe(0.45);
+    expect(state.asciiFx).toBe(false);
+    expect(state.asciiCellSize).toBe(10);
+    expect(state.asciiColored).toBe(true);
+  });
+
+  it("rolls ASCII as an exclusive statement effect within its slice of the draw", async () => {
+    const { settingsStore } = await import("../store");
+
+    // statementDraw = 0.45 lands in the ASCII slice [0.43, 0.5) — every other
+    // statement effect must stay off, and the cell size stays in range.
+    const asciiSpy = vi.spyOn(Math, "random").mockReturnValue(0.45);
+    settingsStore.randomize();
+    let state = settingsStore.get();
+    expect(state.asciiFx).toBe(true);
+    expect(state.kaleidoscope).toBe(false);
+    expect(state.mirrorFx).toBe(false);
+    expect(state.pixelate).toBe(false);
+    expect(state.sobelMode).toBe(false);
+    expect(state.glitch).toBe(false);
+    expect(state.asciiCellSize).toBeGreaterThanOrEqual(4);
+    expect(state.asciiCellSize).toBeLessThanOrEqual(32);
+    asciiSpy.mockRestore();
+
+    // Outside the slice ASCII stays off.
+    const offSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    settingsStore.randomize();
+    state = settingsStore.get();
+    expect(state.asciiFx).toBe(false);
+    offSpy.mockRestore();
   });
 
   it("keeps randomize scoped to post FX when view settings are disabled", async () => {

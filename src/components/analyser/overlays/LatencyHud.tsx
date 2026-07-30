@@ -1,4 +1,4 @@
-import { isSignalLatencyVisible } from "../engine/latency-metrics";
+import { isSignalLatencyVisible } from "@spectrum-aura/engine/latency-metrics";
 import type { LatencyHudState } from "./stats-types";
 
 export function LatencyHud({ latency }: { latency: LatencyHudState }) {

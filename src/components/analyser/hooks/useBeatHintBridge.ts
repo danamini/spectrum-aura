@@ -1,8 +1,8 @@
 import { useEffect, type RefObject } from "react";
-import { AudioEngine } from "../engine/audio";
-import { SongClock } from "../engine/song-clock";
-import { BEAT_HINT_EVENT, type BeatHintDetail } from "../engine/beat-hint";
-import { dispatchLiveTempo, setLiveTempoFrame } from "../engine/live-tempo";
+import { AudioEngine } from "@spectrum-aura/engine/audio";
+import { SongClock } from "@spectrum-aura/engine/song-clock";
+import { BEAT_HINT_EVENT, type BeatHintDetail } from "@spectrum-aura/engine/beat-hint";
+import { dispatchLiveTempo, setLiveTempoFrame } from "@spectrum-aura/engine/live-tempo";
 import type { Settings } from "../store";
 
 /**

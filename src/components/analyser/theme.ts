@@ -35,7 +35,7 @@ export const CLASSIC_PEAK_SWATCHES = [
 export const ACCENT_RGB = "52, 211, 153";
 
 /** Local Chrome debug origin used by audio-capture guidance copy. */
-export const LOCAL_DEV_URL = "http://localhost:6789";
+export { LOCAL_DEV_URL } from "@spectrum-aura/engine/audio-support";
 
 /**
  * Inline style for the large BPM readout: an emerald glow whose intensity and

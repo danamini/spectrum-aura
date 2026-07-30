@@ -161,6 +161,11 @@ describe("analyser store utility functions", () => {
     expect(state.projectorFilmFx).toBe(false);
     expect(state.crtScanlineIntensity).toBe(0.35);
     expect(state.projectorFilmAmount).toBe(0.45);
+    expect(state.asciiFx).toBe(false);
+    expect(state.asciiCellSize).toBe(10);
+    expect(state.asciiColored).toBe(true);
+    expect(state.showBPM).toBe(false);
+    expect(state.showLatency).toBe(false);
   });
 
   it("keeps randomize scoped to post fx when view settings are disabled", async () => {
@@ -250,7 +255,7 @@ describe("analyser store utility functions", () => {
 
   it("cycleRandomView presents the destination view in 3D even when its 2D flag is set", async () => {
     const { settingsStore } = await import("../store");
-    const { VISUALS } = await import("../visuals");
+    const { VISUALS } = await import("@spectrum-aura/engine/visuals");
 
     // Simulate stale per-view 2D flags accumulated from browsing id -> id2d
     // with the arrow keys — without clearing them, the auto-cycle appears to

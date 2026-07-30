@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { WebGLRenderer } from "three";
-import type { Scene } from "./engine/scene";
-import type { Composer } from "./engine/composer";
-import type { AudioEngine } from "./engine/audio";
-import type { WebXrRuntime } from "./engine/xr";
-import { SongClock } from "./engine/song-clock";
+import type { Scene } from "@spectrum-aura/engine/scene";
+import type { Composer } from "@spectrum-aura/engine/composer";
+import type { AudioEngine } from "@spectrum-aura/engine/audio";
+import type { WebXrRuntime } from "@spectrum-aura/engine/xr";
+import { SongClock } from "@spectrum-aura/engine/song-clock";
 import {
   dispatchLiveTempo,
   EMPTY_LIVE_TEMPO,
   LIVE_TEMPO_EVENT,
   type LiveTempoState,
-} from "./engine/live-tempo";
-import { getAudioCaptureSupport } from "./engine/audio-support";
+} from "@spectrum-aura/engine/live-tempo";
+import { getAudioCaptureSupport } from "@spectrum-aura/engine/audio-support";
 import { settingsStore, useSettings, type Settings } from "./store";
 import { TempoReadout } from "./TempoReadout";
 import { AudioSourcePrompt } from "./overlays/AudioSourcePrompt";

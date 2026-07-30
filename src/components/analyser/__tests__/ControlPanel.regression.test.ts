@@ -86,9 +86,19 @@ describe("ControlPanel decomposition regression", () => {
     }
   });
 
-  it("demotes retro/novelty post-FX (kaleidoscope, mirror, CRT, projector film) under a Disclosure", () => {
+  it("keeps every post-FX toggle at the top level (no Disclosure groups hiding them)", () => {
     const panel = readFileSync(join(process.cwd(), CONTROL_PANEL), "utf8");
-    expect(panel).toMatch(/<Disclosure label="Retro \/ novelty FX/);
+    expect(panel).not.toMatch(/<Disclosure/);
+    for (const label of [
+      "Kaleidoscope",
+      "Mirror",
+      "CRT",
+      "Projector film",
+      "ASCII",
+      "Demo-scene text overlay",
+    ]) {
+      expect(panel).toContain(`label="${label}"`);
+    }
   });
 
   it("covers every visual mode in ViewSettings sliders or toggles", () => {

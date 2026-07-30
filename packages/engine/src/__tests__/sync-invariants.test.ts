@@ -9,10 +9,7 @@ import { BEAT_MS, startAuto, tickAt } from "./helpers/song-clock.harness";
 
 describe("sync invariants", () => {
   it("scene uses authoritative beatPhase not wall-clock session time", () => {
-    const source = readFileSync(
-      join(process.cwd(), "src/components/analyser/engine/scene.ts"),
-      "utf8",
-    );
+    const source = readFileSync(join(process.cwd(), "packages/engine/src/scene.ts"), "utf8");
     expect(source).toMatch(/const bpmPhase = bpmConfident \? audio\.beatPhase : 0/);
     expect(source).not.toMatch(/time \* \(audio\.bpm \/ 60\)/);
   });

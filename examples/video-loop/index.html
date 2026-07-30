@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aura Video Loop — vaporwave video FX</title>
+    <style>
+      :root {
+        --aura-0: #ff71ce;
+        --aura-1: #01cdfe;
+        --aura-2: #05ffa1;
+        --bass: 0;
+        --mid: 0;
+        --high: 0;
+        --beat: 0;
+      }
+      * {
+        margin: 0;
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        background: #0b0616;
+        color: #f4ecff;
+        font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+        overflow: hidden;
+      }
+
+      .stage {
+        position: fixed;
+        inset: 0;
+      }
+      #local-stage canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* YouTube mode: the iframe can't be piped through WebGL (cross-origin),
+         so the engine's OverlayFx renders scanlines/grain/vignette onto a
+         transparent canvas above it, and its grading settings become the
+         iframe's CSS filter — same Settings, same presets, engine-owned. */
+      #youtube-stage iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      #overlay-fx {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .hud {
+        position: fixed;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        z-index: 20;
+        padding: 12px;
+      }
+      .hud.top {
+        top: 0;
+        background: linear-gradient(rgba(11, 6, 22, 0.9), transparent);
+      }
+      .hud.bottom {
+        bottom: 0;
+        background: linear-gradient(transparent, rgba(11, 6, 22, 0.9));
+      }
+      .btn {
+        font: inherit;
+        font-size: 0.72rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--aura-1) 60%, transparent);
+        background: rgba(11, 6, 22, 0.6);
+        color: #f4ecff;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: color-mix(in srgb, var(--aura-1) 22%, transparent);
+      }
+      .btn.active {
+        border-color: var(--aura-0);
+        background: color-mix(in srgb, var(--aura-0) 26%, transparent);
+        box-shadow: 0 0 calc(4px + 18px * var(--beat)) color-mix(in srgb, var(--aura-0) 55%, transparent);
+      }
+      .hud input[type="text"] {
+        font: inherit;
+        font-size: 0.78rem;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--aura-2) 50%, transparent);
+        background: rgba(11, 6, 22, 0.7);
+        color: #f4ecff;
+        width: min(340px, 60vw);
+      }
+
+      .statusbar {
+        position: fixed;
+        bottom: 54px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 24px;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #8f7bb0;
+        pointer-events: none;
+        z-index: 20;
+      }
+      .statusbar b {
+        color: var(--aura-2);
+      }
+
+      #intro {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background: rgba(11, 6, 22, 0.94);
+        z-index: 10;
+        padding: 24px;
+      }
+      #intro h1 {
+        font-size: clamp(1.8rem, 5vw, 3rem);
+        letter-spacing: 0.08em;
+        background: linear-gradient(100deg, var(--aura-0), var(--aura-1) 55%, var(--aura-2));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      #intro p {
+        color: #bda9d8;
+        max-width: 520px;
+        line-height: 1.55;
+        font-size: 0.95rem;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage hidden" id="local-stage"></div>
+    <div class="stage hidden" id="youtube-stage">
+      <div id="youtube-frame-slot" style="position: absolute; inset: 0"></div>
+      <canvas id="overlay-fx"></canvas>
+    </div>
+
+    <div class="hud top">
+      <button class="btn" id="pick-video" type="button">Open video file</button>
+      <input type="text" id="yt-url" placeholder="…or paste a YouTube URL" />
+      <button class="btn" id="load-yt" type="button">Load</button>
+      <span style="flex-basis: 100%"></span>
+      <button class="btn" id="audio-video" type="button">React to video audio</button>
+      <button class="btn" id="audio-tab" type="button">Capture tab audio</button>
+      <button class="btn" id="audio-mic" type="button">Microphone</button>
+    </div>
+
+    <div class="statusbar">
+      <span id="bpm">— BPM</span>
+      <span>beat <b id="beat-dot">○</b></span>
+      <span id="mode-label">no source</span>
+    </div>
+
+    <div class="hud bottom" id="preset-row"></div>
+
+    <div id="intro">
+      <h1>AURA VIDEO LOOP</h1>
+      <p>
+        Open a local video file to run it through the engine's real post-FX pipeline — VHS Dream,
+        CRT Arcade, Broken Transmission and friends — reacting to the audio you choose.
+      </p>
+      <p>
+        Or paste a YouTube link: the embed plays with engine-driven CSS effects. YouTube audio
+        can't be tapped directly, so click <b>Capture tab audio</b> and share <i>this tab</i> (tick
+        "share tab audio") to make it react to the video's sound.
+      </p>
+      <p style="font-size: 0.8rem">Nothing is recorded or uploaded — analysis stays in your browser.</p>
+      <p style="font-size: 0.85rem; color: var(--aura-2)">
+        ↑ Use the bar at the top of the screen: paste the link in the text field, then hit Load.
+      </p>
+    </div>
+
+    <input type="file" id="file-input" accept="video/*" class="hidden" />
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

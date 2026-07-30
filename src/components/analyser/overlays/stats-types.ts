@@ -1,4 +1,4 @@
-import type { AssetOverlayDebugState } from "../engine/composer";
+import type { AssetOverlayDebugState } from "@spectrum-aura/engine/composer";
 
 export type NerdStats = {
   fps: number;

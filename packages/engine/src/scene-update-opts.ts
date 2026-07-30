@@ -1,5 +1,5 @@
-import type { Settings, WikichromaActorPack } from "../store";
-import type { ViewMode } from "../visuals";
+import type { Settings, WikichromaActorPack } from "./settings";
+import type { ViewMode } from "./visuals";
 
 /** Mutable settings bag passed into Scene.update each frame — reused to avoid per-frame allocation. */
 export type SceneUpdateOpts = {

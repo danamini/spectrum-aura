@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
-import { isSignalLatencyVisible } from "../engine/latency-metrics";
+import { isSignalLatencyVisible } from "@spectrum-aura/engine/latency-metrics";
 import type { NerdStats } from "./stats-types";
 
 export function StatsForNerdsPanel({
