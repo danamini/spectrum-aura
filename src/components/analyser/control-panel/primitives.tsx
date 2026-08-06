@@ -1,8 +1,9 @@
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Pin } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { settingsStore, useSettings, type FxLockId } from "../store";
 
 // Cooler, clearer toggle switch with explicit ON/OFF affordance
 export function Sw({
@@ -101,13 +102,25 @@ export function ToggleRow({
   label,
   enabled,
   onToggle,
+  lockId,
   children,
 }: {
   label: string;
   enabled: boolean;
   onToggle: (v: boolean) => void;
+  /** When set, shows a pin that excludes this effect group from Randomize. */
+  lockId?: FxLockId;
   children?: React.ReactNode;
 }) {
+  const settings = useSettings();
+  const locked = lockId ? settings.fxLocks.includes(lockId) : false;
+  const toggleLock = () => {
+    if (!lockId) return;
+    const locks = settings.fxLocks;
+    settingsStore.set({
+      fxLocks: locks.includes(lockId) ? locks.filter((id) => id !== lockId) : [...locks, lockId],
+    });
+  };
   return (
     <div
       className={`rounded-md border p-3 space-y-3 transition-colors ${enabled ? "border-emerald-400/30 bg-emerald-400/[0.04]" : "border-white/5 bg-white/[0.02]"}`}
@@ -124,9 +137,109 @@ export function ToggleRow({
             {enabled ? "ON" : "OFF"}
           </span>
         </Label>
-        <Sw checked={enabled} onCheckedChange={onToggle} />
+        <div className="flex items-center gap-1.5">
+          {lockId && (
+            <button
+              type="button"
+              onClick={toggleLock}
+              title={
+                locked
+                  ? "Pinned — Randomize leaves this effect untouched. Click to unpin."
+                  : "Pin to keep this effect unchanged by Randomize."
+              }
+              aria-pressed={locked}
+              className={`rounded p-1 transition-colors ${
+                locked
+                  ? "bg-amber-400/20 text-amber-300 hover:bg-amber-400/30"
+                  : "text-white/25 hover:bg-white/10 hover:text-white/70"
+              }`}
+            >
+              <Pin className={`h-3.5 w-3.5 ${locked ? "fill-current" : ""}`} />
+            </button>
+          )}
+          <Sw checked={enabled} onCheckedChange={onToggle} />
+        </div>
       </div>
       {enabled && children}
+    </div>
+  );
+}
+
+const FX_SECTIONS_KEY = "analyser-fx-sections-v1";
+
+function readFxSectionOpen(id: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(FX_SECTIONS_KEY);
+    if (raw) return Boolean((JSON.parse(raw) as Record<string, boolean>)[id]);
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Collapsible themed group for the Post FX tab. Collapsed by default so the
+ * tab reads as a short table of contents; each header shows how many effects
+ * inside are active. Open state persists per section across sessions.
+ */
+export function FxSection({
+  id,
+  label,
+  count,
+  pinned = 0,
+  children,
+}: {
+  id: string;
+  label: string;
+  count: number;
+  /** How many effects inside are pinned against Randomize. */
+  pinned?: number;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(() => readFxSectionOpen(id));
+  const toggle = () =>
+    setOpen((o) => {
+      const next = !o;
+      try {
+        const raw = localStorage.getItem(FX_SECTIONS_KEY);
+        const map = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+        map[id] = next;
+        localStorage.setItem(FX_SECTIONS_KEY, JSON.stringify(map));
+      } catch {
+        return next;
+      }
+      return next;
+    });
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.03]">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center justify-between px-3 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-white/60 hover:text-white"
+      >
+        <span className="flex items-center gap-2">
+          {label}
+          <span
+            className={`rounded px-1.5 py-0.5 text-[9px] tracking-wider ${
+              count > 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-white/5 text-white/30"
+            }`}
+          >
+            {count > 0 ? `${count} on` : "off"}
+          </span>
+          {pinned > 0 && (
+            <span
+              title={`${pinned} pinned — Randomize leaves ${pinned === 1 ? "it" : "them"} untouched`}
+              className="flex items-center gap-0.5 rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] tracking-wider text-amber-300"
+            >
+              <Pin className="h-2.5 w-2.5 fill-current" />
+              {pinned}
+            </span>
+          )}
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <div className="space-y-3 border-t border-white/10 p-3">{children}</div>}
     </div>
   );
 }

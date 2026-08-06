@@ -53,8 +53,10 @@ Depending on your hardware you may need to tune performance via the options in s
 - **Musical sync:** experimental BPM detection, a 4/4 bar grid, manual beat/downbeat taps, and phrase-aware view cycling.
 - Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, Asset-Flow, Wiki-Chroma, and Stage Lights.
 - Beat-aware motion and camera behavior that reacts to energy and musical phase, not just raw levels.
-- Works with microphone input or shared tab/system audio.
-- Retro post FX options including CRT scanline emulation and projector-film artifacts.
+- Works with microphone input or shared tab/system audio (whole-screen share with "Also share system audio" gives the best signal).
+- **Retro hardware emulation**: re-render any visual under a classic machine's real video limits — ZX Spectrum (genuine ROM font + attribute clash), Commodore 64, Game Boy, NES, CGA, Amstrad CPC, Amiga 500, MS-DOS EGA, VGA, Hercules, and Apple II — each with hi-res, system-font text, and low-res block-graphics modes, hardware borders, and matching scene palettes.
+- Classic CRT scanline and projector-film artifact passes, a **user-reorderable post-FX pipeline** (e.g. CRT scanlines over the emulated retro screen), and per-effect pins that protect a look from Randomize.
+- Movable overlay panels: drag the command bar, BPM grid, latency HUD, and stats panel anywhere; double-click to reset.
 
 ## Screenshots
 

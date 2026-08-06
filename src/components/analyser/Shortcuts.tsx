@@ -18,9 +18,11 @@ import { dispatchBeatHint } from "@spectrum-aura/engine/beat-hint";
 import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "@spectrum-aura/engine/xr";
 import { getVisualDefinition, VISUALS } from "@spectrum-aura/engine/visuals";
 import { usePresetActions } from "./hooks/usePresetActions";
+import { useDraggablePanel } from "./hooks/useDraggablePanel";
 
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
+const SETTINGS_PANEL_STATE_EVENT = "spectrum-aura:settings-panel-state";
 const TOGGLE_FULLSCREEN_EVENT = "spectrum-aura:toggle-fullscreen";
 const STOP_AUDIO_EVENT = "spectrum-aura:stop-audio";
 
@@ -68,11 +70,22 @@ function TooltipBlock({ title, hint, detail }: { title: string; hint?: string; d
 
 export function Shortcuts() {
   const preset = usePresetActions();
+  const barDrag = useDraggablePanel("shortcut-bar");
   const slots = preset.slots;
   const settings = useSettings();
   const [visible, setVisible] = useState(true);
   const [windowHovering, setWindowHovering] = useState(true);
   const [xrActive, setXrActive] = useState(false);
+  // The settings drawer covers most of the screen; the bar yields to it
+  // entirely instead of peeking out from underneath.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    const onPanelState = (event: Event) => {
+      setSettingsOpen(Boolean((event as CustomEvent<{ open?: boolean }>).detail?.open));
+    };
+    window.addEventListener(SETTINGS_PANEL_STATE_EVENT, onPanelState);
+    return () => window.removeEventListener(SETTINGS_PANEL_STATE_EVENT, onPanelState);
+  }, []);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
 
@@ -195,8 +208,12 @@ export function Shortcuts() {
     settingsStore.set({ showBPM: next });
     showFlash(next ? "BPM grid ON" : "BPM grid OFF");
   };
-  const doToggleSettings = () => {
-    window.dispatchEvent(new Event(TOGGLE_SETTINGS_PANEL_EVENT));
+  const doToggleSettings = (tab?: "audio" | "scene" | "post" | "saves") => {
+    window.dispatchEvent(
+      tab
+        ? new CustomEvent(TOGGLE_SETTINGS_PANEL_EVENT, { detail: { tab } })
+        : new Event(TOGGLE_SETTINGS_PANEL_EVENT),
+    );
     showFlash("Settings");
   };
   const doStopAudio = () => {
@@ -210,6 +227,30 @@ export function Shortcuts() {
       return next;
     });
   };
+
+  // Publish the bar's rendered height so the corner HUDs (BPM bottom-left,
+  // latency bottom-right) can sit above it instead of overlapping — the bar
+  // wraps to different heights per viewport, so this must be measured.
+  const barRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const clear = () => root.style.setProperty("--bottom-hud-clearance", "0px");
+    const el = barRef.current;
+    if (!visible || xrActive || settingsOpen || !el) {
+      clear();
+      return;
+    }
+    const update = () =>
+      root.style.setProperty("--bottom-hud-clearance", `${el.offsetHeight + 8}px`);
+    update();
+    if (typeof ResizeObserver === "undefined") return clear;
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      clear();
+    };
+  }, [visible, xrActive, settingsOpen]);
   const flashLoaded = (msg: string) => showFlash(msg);
   const doSlot = (i: number) => {
     const result = preset.loadAt(i);
@@ -560,11 +601,11 @@ export function Shortcuts() {
       <TooltipBlock
         title="Settings"
         hint="S"
-        detail="Opens the full control drawer for visual, save, and FX tuning."
+        detail="Opens the control drawer straight onto the Post FX panel. Group titles in this bar jump to the other panels."
       />
     ),
     onClick: () => {
-      doToggleSettings();
+      doToggleSettings("post");
     },
   };
   const cycleSavesHint: Hint = {
@@ -677,6 +718,9 @@ export function Shortcuts() {
     showKey: false,
   };
 
+  // Chunky two-line button: key + icon on top, label underneath. Reads as a
+  // real button (bordered card) instead of a run of inline text, while the
+  // kbd chip keeps the keyboard shortcut visible.
   const Btn = ({ h }: { h: Hint }) => (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -686,25 +730,71 @@ export function Shortcuts() {
           aria-label={h.ariaLabel ?? h.label ?? h.title ?? h.key}
           aria-pressed={h.active}
           data-settings-shortcut={h.key === "S" ? "true" : undefined}
-          className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-1.5 py-0.5 transition-colors [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0 ${
+          className={`pointer-events-auto flex min-w-[3.4rem] flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-1 transition-colors [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0 ${
             h.active
-              ? "border border-emerald-300/40 bg-emerald-300/12 text-emerald-100 shadow-[0_0_12px_rgba(52,211,153,0.18)]"
-              : "hover:bg-white/10 hover:text-white/90"
+              ? "border-emerald-300/40 bg-emerald-300/12 text-emerald-100 shadow-[0_0_12px_rgba(52,211,153,0.18)]"
+              : "border-white/10 bg-white/[0.04] hover:border-white/25 hover:bg-white/10 hover:text-white/90"
           }`}
         >
-          {!xrActive && h.showKey !== false && (
-            <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/70 group-hover:border-white/40">
-              {h.key}
-            </kbd>
-          )}
-          {h.icon ? <span className="text-white/75">{h.icon}</span> : null}
-          {h.label ? <span>{h.label}</span> : null}
+          <span className="flex items-center gap-1.5">
+            {!xrActive && h.showKey !== false && (
+              <kbd className="rounded border border-white/15 bg-white/5 px-1 py-0.5 font-mono text-[9px] leading-none text-white/70">
+                {h.key}
+              </kbd>
+            )}
+            {h.icon ? <span className="text-white/75">{h.icon}</span> : null}
+          </span>
+          {h.label ? (
+            <span className="text-[9px] leading-none tracking-[0.12em]">{h.label}</span>
+          ) : null}
         </button>
       </TooltipTrigger>
       <ShortcutTooltipContent>
         {h.tooltip ?? h.title ?? (xrActive || h.showKey === false ? h.label : `Press ${h.key}`)}
       </ShortcutTooltipContent>
     </Tooltip>
+  );
+
+  // Labeled cluster card: a vertical group title on the left edge, buttons in
+  // a row. Cards flex-wrap, so wide screens show one tidy strip and narrow
+  // screens stack the groups instead of horizontally scrolling. When
+  // onTitleClick is given, the title itself pops open the matching settings
+  // slide-out.
+  const Group = ({
+    title,
+    onTitleClick,
+    titleHint,
+    children,
+  }: {
+    title: string;
+    onTitleClick?: () => void;
+    titleHint?: string;
+    children: ReactNode;
+  }) => (
+    <div className="pointer-events-auto flex items-stretch gap-1.5 rounded-xl border border-white/8 bg-black/45 px-2 py-1.5 backdrop-blur">
+      {onTitleClick ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onTitleClick}
+              aria-label={titleHint ?? title}
+              className="flex rotate-180 items-center justify-center rounded-md bg-white/8 px-0.5 py-1 font-mono text-[8px] uppercase tracking-[0.18em] text-emerald-200/80 transition-colors select-none [writing-mode:vertical-rl] hover:bg-emerald-300/20 hover:text-emerald-100"
+            >
+              {title} ↗
+            </button>
+          </TooltipTrigger>
+          <ShortcutTooltipContent>
+            <TooltipBlock title={title.toUpperCase()} detail={titleHint ?? title} />
+          </ShortcutTooltipContent>
+        </Tooltip>
+      ) : (
+        <span className="flex rotate-180 items-center justify-center rounded-md bg-white/8 px-0.5 py-1 font-mono text-[8px] uppercase tracking-[0.18em] text-emerald-200/80 select-none [writing-mode:vertical-rl]">
+          {title}
+        </span>
+      )}
+      <div className="flex items-center gap-1">{children}</div>
+    </div>
   );
 
   const MiniToggle = ({
@@ -753,12 +843,17 @@ export function Shortcuts() {
           {flash}
         </div>
       )}
-      {visible ? (
+      {visible && !settingsOpen ? (
         <div
+          ref={barRef}
           className={`pointer-events-none fixed inset-x-0 z-[100] flex justify-center ${xrActive ? "top-3" : "bottom-3"}`}
         >
           <TooltipProvider delayDuration={120}>
-            <div className="flex w-fit max-w-[calc(100vw-1.5rem)] flex-col items-center gap-1">
+            <div
+              className="pointer-events-auto flex w-fit max-w-[calc(100vw-1.5rem)] flex-col items-center gap-1"
+              {...barDrag.handleProps}
+              style={barDrag.style}
+            >
               {/* High visual name, subtle */}
               <div className="mb-1 w-full text-center">
                 <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.22em] text-white/35 select-none">
@@ -775,71 +870,67 @@ export function Shortcuts() {
                   3D: drag mouse to move camera
                 </div>
               )}
-              <div className="flex w-full flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100 active:opacity-100">
-                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)] [&::-webkit-scrollbar]:hidden">
-                  <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
-                    {xrActive && <Btn h={xrHint} />}
-                    <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
-                      <span className="rounded bg-white/8 px-2 py-0.5 font-mono text-[10px] tracking-wider text-emerald-200/80 select-none">
-                        {visualCountLabel}
-                      </span>
-                      <Btn h={prevVisualHint} />
-                      <Btn h={hints[0]!} />
-                      <Btn h={viewCycleHint} />
-                      <MiniToggle
-                        label="inc"
-                        active={settings.randomizeViewSettings}
-                        onClick={doToggleRandomizeInclude}
-                        title={
-                          settings.randomizeViewSettings
-                            ? "Randomize includes view settings"
-                            : "Randomize post FX only"
-                        }
-                      />
-                      <MiniToggle
-                        label="fx"
-                        active={settings.postFxEnabled}
-                        onClick={doTogglePostFx}
-                        title={settings.postFxEnabled ? "Post FX enabled" : "Post FX disabled"}
-                      />
-                      <Btn h={nextVisualHint} />
-                    </div>
+              <div className="flex w-full max-w-[calc(100vw-1rem)] flex-wrap items-stretch justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 opacity-80 transition-opacity hover:opacity-100 focus-within:opacity-100 active:opacity-100">
+                {xrActive && <Btn h={xrHint} />}
+                <Group
+                  title={visualCountLabel}
+                  onTitleClick={() => doToggleSettings()}
+                  titleHint="Open the visual controls drawer"
+                >
+                  <Btn h={prevVisualHint} />
+                  <Btn h={hints[0]!} />
+                  <Btn h={viewCycleHint} />
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <MiniToggle
+                      label="inc"
+                      active={settings.randomizeViewSettings}
+                      onClick={doToggleRandomizeInclude}
+                      title={
+                        settings.randomizeViewSettings
+                          ? "Randomize includes view settings"
+                          : "Randomize post FX only"
+                      }
+                    />
+                    <MiniToggle
+                      label="fx"
+                      active={settings.postFxEnabled}
+                      onClick={doTogglePostFx}
+                      title={settings.postFxEnabled ? "Post FX enabled" : "Post FX disabled"}
+                    />
                   </div>
-                </div>
-                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)] [&::-webkit-scrollbar]:hidden">
-                  <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
-                    <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
-                      <span className="rounded bg-white/8 px-2 py-0.5 font-mono text-[10px] tracking-wider text-emerald-200/80 select-none">
-                        {saveCountLabel}
-                      </span>
-                      <Btn h={prevSaveHint} />
-                      <Btn h={cycleSavesHint} />
-                      <Btn h={nextSaveHint} />
-                      <Btn h={randomSaveHint} />
-                      <Btn h={saveCurrentHint} />
-                      <Btn h={deleteSaveHint} />
-                    </div>
-                  </div>
-                </div>
-                <div className="w-full overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)] [&::-webkit-scrollbar]:hidden">
-                  <div className="mx-auto flex w-fit min-w-max items-center justify-center rounded-full border border-white/5 bg-black/40 px-3 py-1 backdrop-blur">
-                    <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
-                      <Btn h={hints[1]!} />
-                      <Btn h={hints[2]!} />
-                      <Btn h={hints[3]!} />
-                      <Btn h={hints[4]!} />
-                      <Btn h={hints[5]!} />
-                      <Btn h={beatTapHint} />
-                      <Btn h={settingsHint} />
-                      <Btn h={hints[6]!} />
-                    </div>
-                  </div>
-                </div>
+                  <Btn h={nextVisualHint} />
+                </Group>
+                <Group
+                  title={saveCountLabel}
+                  onTitleClick={() => doToggleSettings("saves")}
+                  titleHint="Open the saves panel"
+                >
+                  <Btn h={prevSaveHint} />
+                  <Btn h={cycleSavesHint} />
+                  <Btn h={nextSaveHint} />
+                  <Btn h={randomSaveHint} />
+                  <Btn h={saveCurrentHint} />
+                  <Btn h={deleteSaveHint} />
+                </Group>
+                <Group
+                  title="tools"
+                  onTitleClick={() => doToggleSettings("audio")}
+                  titleHint="Open the audio settings panel"
+                >
+                  <Btn h={hints[1]!} />
+                  <Btn h={hints[2]!} />
+                  <Btn h={hints[3]!} />
+                  <Btn h={hints[4]!} />
+                  <Btn h={hints[5]!} />
+                  <Btn h={beatTapHint} />
+                  <Btn h={settingsHint} />
+                  <Btn h={hints[6]!} />
+                </Group>
               </div>
             </div>
           </TooltipProvider>
         </div>
-      ) : (
+      ) : settingsOpen ? null : (
         <button
           type="button"
           onClick={doToggleHints}

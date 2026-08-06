@@ -9,6 +9,7 @@ Deep reference for contributors, users tuning sync, and coding agents.
 | [song-clock-and-sync.md](./song-clock-and-sync.md)         | Authoritative SongClock, taps, bar grid, view cycle         |
 | [rendering-and-latency.md](./rendering-and-latency.md)     | rAF loop, GPU path, latency budgets, HUD bus                |
 | [fft-and-beat-detection.md](./fft-and-beat-detection.md)   | Short overview (links to detailed docs)                     |
+| [retro-systems-and-postfx.md](./retro-systems-and-postfx.md) | Retro hardware emulation pass, fonts, pipeline order, locks |
 | [THIRD_PARTY_ASSETS.md](./THIRD_PARTY_ASSETS.md)           | Runtime asset licensing                                     |
 
 ## Quick mental model

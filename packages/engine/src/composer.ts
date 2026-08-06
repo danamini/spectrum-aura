@@ -24,14 +24,23 @@ import {
   CRTCShader,
   ProjectorFilmShader,
   AsciiShader,
+  RetroSystemShader,
 } from "./shaders";
+import { buildRetroFontTexture } from "./retro-font";
 import {
   fetchWikimediaCommonsOverlayAssets,
   type CommonsOverlayAsset,
   type CommonsOverlayTopic,
 } from "./commons-overlay-source";
 import { getOverlayTextureManifest, pickDistinctOverlaySlots } from "./overlay-manifest";
-import { BLOOM_STRENGTH_MAX_NORMAL, type Settings } from "./settings";
+import {
+  BLOOM_STRENGTH_MAX_NORMAL,
+  RETRO_SYSTEMS,
+  normalizeFxPipelineOrder,
+  type FxPassId,
+  type Settings,
+} from "./settings";
+import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 import { MotionTrailPass } from "./MotionTrailPass";
 
 type OverlayTextureMeta = {
@@ -162,6 +171,7 @@ export class Composer {
   mirrorFx: ShaderPass;
   crtFx: ShaderPass;
   projectorFilmFx: ShaderPass;
+  retroFx: ShaderPass;
   asciiFx: ShaderPass;
   radialBlur: ShaderPass;
   grade: ShaderPass;
@@ -187,6 +197,7 @@ export class Composer {
   private assetOverlayCommonsRetryAt = 0;
   private retroFxTime = 0;
   private glitchDutyFrame = 0;
+  private appliedPipelineKey = "";
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -292,9 +303,16 @@ export class Composer {
     this.smaa.setSize(width, height);
     this.composer.addPass(this.smaa);
 
-    // ASCII re-renders the composited frame as glyph cells, so it must stay
-    // the final pass — any pass added after it would draw over the terminal
-    // look and break the effect.
+    // Retro-system and ASCII both re-render the composited frame from
+    // scratch, so the DEFAULT order puts them at the end of the chain
+    // (everything else feeds their virtual framebuffers). Construction order
+    // here is only the default: applyPipelineOrder() re-arranges every
+    // movable pass to the user's fxPipelineOrder at runtime.
+    this.retroFx = new ShaderPass(RetroSystemShader);
+    this.retroFx.uniforms.resolution.value.set(width, height);
+    this.retroFx.uniforms.tFont.value = buildRetroFontTexture();
+    this.composer.addPass(this.retroFx);
+
     this.asciiFx = new ShaderPass(AsciiShader);
     this.asciiFx.uniforms.resolution.value.set(width, height);
     this.composer.addPass(this.asciiFx);
@@ -550,8 +568,52 @@ export class Composer {
     this.assetOverlay.uniforms.tOverlayC2.value = c;
   }
 
+  private movablePassById(): Record<FxPassId, Pass> {
+    return {
+      bloom: this.bloom,
+      godRays: this.godRays,
+      lensFlare: this.lensFlare,
+      assetOverlay: this.assetOverlay,
+      dof: this.bokeh,
+      chroma: this.chroma,
+      tiltShift: this.tiltShift,
+      kaleidoscope: this.kaleidoscope,
+      mirror: this.mirrorFx,
+      crt: this.crtFx,
+      projectorFilm: this.projectorFilmFx,
+      radialBlur: this.radialBlur,
+      pixelate: this.pixelate,
+      grain: this.film,
+      glitch: this.glitch,
+      grading: this.grade,
+      sobel: this.sobel,
+      vignette: this.vignette,
+      smaa: this.smaa,
+      retro: this.retroFx,
+      ascii: this.asciiFx,
+    };
+  }
+
+  /** Rebuilds the composer's pass array to the user's pipeline order. The
+   * scene render, SSAO, and motion trails stay pinned at the head (they need
+   * scene/depth access); everything else follows the given order. Cheap to
+   * call every frame — only rebuilds when the order actually changes. */
+  private applyPipelineOrder(order: readonly FxPassId[]) {
+    const key = order.join(",");
+    if (key === this.appliedPipelineKey) return;
+    this.appliedPipelineKey = key;
+    const byId = this.movablePassById();
+    this.composer.passes = [
+      this.renderPass,
+      this.ssao,
+      this.motionTrails,
+      ...normalizeFxPipelineOrder([...order]).map((id) => byId[id]),
+    ];
+  }
+
   apply(s: Settings, reactive: PostFxReactiveState) {
     this.syncCommonsOverlayTextures(s);
+    this.applyPipelineOrder(s.fxPipelineOrder);
     const bass = reactive.bass ?? 0;
     const mid = reactive.mid ?? 0;
     const high = reactive.high ?? 0;
@@ -691,6 +753,7 @@ export class Composer {
           this.assetOverlayMeta.map((entry) => entry.family),
           [strideA, strideB, strideC],
           s.assetOverlayBias,
+          this.assetOverlayMeta.map((entry) => entry.kind === "commons"),
         );
         this.setAssetOverlaySlots(this.assetOverlayNextSlots, "next");
         this.assetOverlayTransition = 0;
@@ -779,6 +842,22 @@ export class Composer {
     // downgrade (below) doesn't leave it permanently off after recovery.
     this.smaa.enabled = true;
 
+    this.retroFx.enabled = s.retroFx;
+    const retroModeIndex = RETRO_SYSTEMS.findIndex((sys) => sys.id === s.retroSystem);
+    this.retroFx.uniforms.mode.value = retroModeIndex < 0 ? 0 : retroModeIndex;
+    this.retroFx.uniforms.displayMode.value =
+      s.retroMode === "text" ? 1 : s.retroMode === "blocks" ? 2 : 0;
+    this.retroFx.uniforms.dither.value = THREE.MathUtils.clamp(s.retroDither, 0, 1);
+    this.retroFx.uniforms.border.value = s.retroBorder ? 1 : 0;
+    // Gentle musical drive: kicks nudge cells over palette/attribute
+    // boundaries. Kept subtle — big gain swings re-flip quantization
+    // thresholds every beat and read as full-screen sparkle noise.
+    this.retroFx.uniforms.gain.value = THREE.MathUtils.clamp(
+      0.95 + pulse * 0.12 + bass * 0.06,
+      0.8,
+      1.2,
+    );
+
     this.asciiFx.enabled = s.asciiFx;
     this.asciiFx.uniforms.cellSize.value = THREE.MathUtils.clamp(s.asciiCellSize, 4, 32);
     this.asciiFx.uniforms.colored.value = s.asciiColored ? 1 : 0;
@@ -829,6 +908,7 @@ export class Composer {
     (this.pixelate.uniforms.resolution.value as [number, number]) = [w, h];
     this.crtFx.uniforms.resolution.value.set(w, h);
     this.sobel.uniforms.resolution.value.set(w, h);
+    this.retroFx.uniforms.resolution.value.set(w, h);
     this.asciiFx.uniforms.resolution.value.set(w, h);
     this.bloom.setSize(w, h);
     this.ssao.setSize(w, h);

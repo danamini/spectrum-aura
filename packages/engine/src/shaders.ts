@@ -354,6 +354,482 @@ export const AsciiShader = {
   `,
 };
 
+export const RetroSystemShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    tFont: { value: null as THREE.Texture | null },
+    resolution: { value: new THREE.Vector2(1920, 1080) },
+    mode: { value: 0.0 }, // 0 zx, 1 c64, 2 gameboy, 3 nes, 4 cga, 5 cpc
+    displayMode: { value: 0.0 }, // 0 = pixels, 1 = text (glyph cells), 2 = UDG quarter blocks
+    dither: { value: 0.55 },
+    border: { value: 1.0 },
+    gain: { value: 1.0 },
+  },
+  vertexShader: ChromaticAberrationShader.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tFont;
+    uniform vec2 resolution;
+    uniform float mode;
+    uniform float displayMode;
+    uniform float dither;
+    uniform float border;
+    uniform float gain;
+    varying vec2 vUv;
+
+    // Emulates classic micro/console video output: native resolution, fixed
+    // palette, and — for ZX Spectrum and C64 — genuine attribute limits, so
+    // colourful detail inside one character cell collapses to the cell's two
+    // (ZX) or four (C64 multicolor) colours: real attribute clash.
+
+    float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
+    float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+    float lumOf(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+    vec3 rgb2hsv(vec3 c){
+      vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+      vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+      vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+      float d = q.x - min(q.w, q.y);
+      float e = 1.0e-10;
+      return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+    }
+    vec3 hsv2rgb(vec3 c){
+      vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+      vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+      return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }
+
+    // Native pixel grid (C64/CPC use fat multicolor pixels; that's authentic).
+    // 0 zx · 1 c64 · 2 gameboy · 3 nes · 4 cga · 5 cpc · 6 amiga · 7 dos ·
+    // 8 vga · 9 hercules · 10 apple2
+    vec2 virtualRes() {
+      if (mode < 0.5) return vec2(256.0, 192.0);
+      if (mode < 1.5) return vec2(160.0, 200.0);
+      if (mode < 2.5) return vec2(160.0, 144.0);
+      if (mode < 3.5) return vec2(256.0, 240.0);
+      if (mode < 4.5) return vec2(320.0, 200.0);
+      if (mode < 5.5) return vec2(160.0, 200.0);
+      if (mode < 6.5) return vec2(320.0, 256.0);
+      if (mode < 8.5) return vec2(320.0, 200.0);
+      if (mode < 9.5) return vec2(720.0, 348.0);
+      return vec2(280.0, 192.0);
+    }
+    // Character/attribute cell grid — 8x8 native pixels per cell everywhere,
+    // which for C64 multicolor means 4x8 fat pixels per cell.
+    vec2 charGrid() {
+      if (mode < 0.5) return vec2(32.0, 24.0);
+      if (mode < 1.5) return vec2(40.0, 25.0);
+      if (mode < 2.5) return vec2(20.0, 18.0);
+      if (mode < 3.5) return vec2(32.0, 30.0);
+      if (mode < 4.5) return vec2(40.0, 25.0);
+      if (mode < 5.5) return vec2(20.0, 25.0);
+      if (mode < 6.5) return vec2(40.0, 32.0);
+      if (mode < 8.5) return vec2(40.0, 25.0);
+      if (mode < 9.5) return vec2(80.0, 25.0);
+      return vec2(40.0, 24.0);
+    }
+
+    // ZX palette is procedural: GRB bits + one BRIGHT bank (0..7 normal at
+    // 0.84, 8..14 bright — bright black duplicates black so it is skipped).
+    vec3 zxColor(float i) {
+      float bright = step(7.5, i);
+      float j = i - bright * 7.0;
+      float b = mod(j, 2.0);
+      float r = mod(floor(j / 2.0), 2.0);
+      float g = mod(floor(j / 4.0), 2.0);
+      return vec3(r, g, b) * mix(0.84, 1.0, bright);
+    }
+    float zxNearest(vec3 c) {
+      float best = 0.0; float bestD = 1e9;
+      for (int i = 0; i < 15; i++) {
+        vec3 p = zxColor(float(i));
+        float d = dot(c - p, c - p);
+        if (d < bestD) { bestD = d; best = float(i); }
+      }
+      return best;
+    }
+
+    // C64 palette (Pepto measurements).
+    vec3 c64Color(float i) {
+      if (i < 0.5) return vec3(0.0);
+      if (i < 1.5) return vec3(1.0);
+      if (i < 2.5) return vec3(0.408, 0.216, 0.169);
+      if (i < 3.5) return vec3(0.439, 0.643, 0.698);
+      if (i < 4.5) return vec3(0.435, 0.239, 0.525);
+      if (i < 5.5) return vec3(0.345, 0.553, 0.263);
+      if (i < 6.5) return vec3(0.208, 0.157, 0.475);
+      if (i < 7.5) return vec3(0.722, 0.780, 0.435);
+      if (i < 8.5) return vec3(0.435, 0.310, 0.145);
+      if (i < 9.5) return vec3(0.263, 0.224, 0.0);
+      if (i < 10.5) return vec3(0.604, 0.404, 0.349);
+      if (i < 11.5) return vec3(0.267, 0.267, 0.267);
+      if (i < 12.5) return vec3(0.424, 0.424, 0.424);
+      if (i < 13.5) return vec3(0.604, 0.824, 0.518);
+      if (i < 14.5) return vec3(0.424, 0.369, 0.710);
+      return vec3(0.584, 0.584, 0.584);
+    }
+    float c64Nearest(vec3 c) {
+      float best = 0.0; float bestD = 1e9;
+      for (int i = 0; i < 16; i++) {
+        vec3 p = c64Color(float(i));
+        float d = dot(c - p, c - p);
+        if (d < bestD) { bestD = d; best = float(i); }
+      }
+      return best;
+    }
+
+    // DMG Game Boy: four shades of LCD green.
+    vec3 gbColor(float i) {
+      if (i < 0.5) return vec3(0.059, 0.220, 0.059);
+      if (i < 1.5) return vec3(0.188, 0.384, 0.188);
+      if (i < 2.5) return vec3(0.545, 0.675, 0.059);
+      return vec3(0.608, 0.737, 0.059);
+    }
+
+    // Standard EGA 16-colour palette (the definitive MS-DOS game look) —
+    // 0xAA-level primaries, the brown exception, and bright variants.
+    vec3 egaColor(float i) {
+      if (i < 0.5) return vec3(0.0);
+      if (i < 1.5) return vec3(0.0, 0.0, 0.667);
+      if (i < 2.5) return vec3(0.0, 0.667, 0.0);
+      if (i < 3.5) return vec3(0.0, 0.667, 0.667);
+      if (i < 4.5) return vec3(0.667, 0.0, 0.0);
+      if (i < 5.5) return vec3(0.667, 0.0, 0.667);
+      if (i < 6.5) return vec3(0.667, 0.333, 0.0); // brown
+      if (i < 7.5) return vec3(0.667, 0.667, 0.667);
+      if (i < 8.5) return vec3(0.333, 0.333, 0.333);
+      if (i < 9.5) return vec3(0.333, 0.333, 1.0);
+      if (i < 10.5) return vec3(0.333, 1.0, 0.333);
+      if (i < 11.5) return vec3(0.333, 1.0, 1.0);
+      if (i < 12.5) return vec3(1.0, 0.333, 0.333);
+      if (i < 13.5) return vec3(1.0, 0.333, 1.0);
+      if (i < 14.5) return vec3(1.0, 1.0, 0.333);
+      return vec3(1.0);
+    }
+    float egaNearest(vec3 c) {
+      float best = 0.0; float bestD = 1e9;
+      for (int i = 0; i < 16; i++) {
+        vec3 p = egaColor(float(i));
+        float d = dot(c - p, c - p);
+        if (d < bestD) { bestD = d; best = float(i); }
+      }
+      return best;
+    }
+
+    // Fixed 32-entry Deluxe-Paint-style palette for the Amiga: grey ramp,
+    // warm browns/skin, and short ramps per hue — the OCS hardware allowed
+    // any 32 of 4096, and this spread is what period art tended to use.
+    vec3 amigaColor(float i) {
+      if (i < 0.5) return vec3(0.0);
+      if (i < 1.5) return vec3(0.333);
+      if (i < 2.5) return vec3(0.667);
+      if (i < 3.5) return vec3(1.0);
+      if (i < 4.5) return vec3(0.392, 0.196, 0.078);
+      if (i < 5.5) return vec3(0.588, 0.314, 0.157);
+      if (i < 6.5) return vec3(0.784, 0.471, 0.235);
+      if (i < 7.5) return vec3(0.941, 0.667, 0.431);
+      if (i < 8.5) return vec3(0.471, 0.078, 0.078);
+      if (i < 9.5) return vec3(0.784, 0.157, 0.157);
+      if (i < 10.5) return vec3(1.0, 0.314, 0.314);
+      if (i < 11.5) return vec3(1.0, 0.588, 0.118);
+      if (i < 12.5) return vec3(1.0, 0.863, 0.235);
+      if (i < 13.5) return vec3(0.078, 0.314, 0.118);
+      if (i < 14.5) return vec3(0.157, 0.549, 0.196);
+      if (i < 15.5) return vec3(0.353, 0.784, 0.314);
+      if (i < 16.5) return vec3(0.706, 0.941, 0.471);
+      if (i < 17.5) return vec3(0.078, 0.118, 0.353);
+      if (i < 18.5) return vec3(0.157, 0.275, 0.627);
+      if (i < 19.5) return vec3(0.275, 0.471, 0.863);
+      if (i < 20.5) return vec3(0.510, 0.706, 1.0);
+      if (i < 21.5) return vec3(0.157, 0.627, 0.627);
+      if (i < 22.5) return vec3(0.471, 0.863, 0.863);
+      if (i < 23.5) return vec3(0.353, 0.157, 0.510);
+      if (i < 24.5) return vec3(0.627, 0.275, 0.784);
+      if (i < 25.5) return vec3(0.902, 0.471, 0.902);
+      if (i < 26.5) return vec3(0.078, 0.275, 0.314);
+      if (i < 27.5) return vec3(1.0, 0.667, 0.745);
+      if (i < 28.5) return vec3(0.471, 0.471, 0.157);
+      if (i < 29.5) return vec3(0.588, 0.078, 0.353);
+      if (i < 30.5) return vec3(0.667, 0.863, 1.0);
+      return vec3(0.863, 0.784, 0.588);
+    }
+    float amigaNearest(vec3 c) {
+      float best = 0.0; float bestD = 1e9;
+      for (int i = 0; i < 32; i++) {
+        vec3 p = amigaColor(float(i));
+        float d = dot(c - p, c - p);
+        if (d < bestD) { bestD = d; best = float(i); }
+      }
+      return best;
+    }
+
+    // CGA palette 1, high intensity: black / cyan / magenta / white.
+    vec3 cgaColor(float i) {
+      if (i < 0.5) return vec3(0.0);
+      if (i < 1.5) return vec3(0.333, 1.0, 1.0);
+      if (i < 2.5) return vec3(1.0, 0.333, 1.0);
+      return vec3(1.0);
+    }
+    float cgaNearest(vec3 c) {
+      float best = 0.0; float bestD = 1e9;
+      for (int i = 0; i < 4; i++) {
+        vec3 p = cgaColor(float(i));
+        float d = dot(c - p, c - p);
+        if (d < bestD) { bestD = d; best = float(i); }
+      }
+      return best;
+    }
+
+    // NES approximation: 12 hue steps x 4 value tiers (grays below the
+    // saturation floor) — matches the PPU palette's structure without a
+    // 54-entry table lookup.
+    vec3 nesQuantize(vec3 c) {
+      vec3 hsv = rgb2hsv(c);
+      if (hsv.y < 0.18) {
+        float v = floor(clamp(hsv.z, 0.0, 0.999) * 4.0);
+        if (v < 0.5) return vec3(0.0);
+        if (v < 1.5) return vec3(0.31);
+        if (v < 2.5) return vec3(0.63);
+        return vec3(1.0);
+      }
+      float hue = (floor(hsv.x * 12.0) + 0.5) / 12.0;
+      float tier = floor(clamp(hsv.z, 0.0, 0.999) * 4.0);
+      if (tier < 0.5) return hsv2rgb(vec3(hue, 1.0, 0.34));
+      if (tier < 1.5) return hsv2rgb(vec3(hue, 1.0, 0.66));
+      if (tier < 2.5) return hsv2rgb(vec3(hue, 0.85, 0.94));
+      return hsv2rgb(vec3(hue, 0.45, 1.0));
+    }
+
+    // Default VGA mode 13h palette structure: 16-step grey ramp for
+    // desaturated colours, otherwise 24 hue steps at 3 saturation and 3
+    // value tiers — far smoother than EGA but still visibly banded.
+    vec3 vgaQuantize(vec3 c) {
+      vec3 hsv = rgb2hsv(c);
+      if (hsv.y < 0.15) {
+        return vec3(floor(min(hsv.z, 0.999) * 16.0) / 15.0);
+      }
+      float hue = (floor(hsv.x * 24.0) + 0.5) / 24.0;
+      float sat = hsv.y > 0.75 ? 1.0 : (hsv.y > 0.4 ? 0.66 : 0.35);
+      float val = (floor(min(hsv.z, 0.999) * 3.0) + 1.0) / 3.0;
+      return hsv2rgb(vec3(hue, sat, val));
+    }
+
+    // Apple II hi-res: black, white, and the four NTSC artifact colours.
+    vec3 apple2Color(float i) {
+      if (i < 0.5) return vec3(0.0);
+      if (i < 1.5) return vec3(1.0);
+      if (i < 2.5) return vec3(0.220, 0.796, 0.0);   // green
+      if (i < 3.5) return vec3(0.780, 0.204, 1.0);   // purple
+      if (i < 4.5) return vec3(0.949, 0.361, 0.098); // orange
+      return vec3(0.173, 0.612, 0.949);              // medium blue
+    }
+    float apple2Nearest(vec3 c) {
+      float best = 0.0; float bestD = 1e9;
+      for (int i = 0; i < 6; i++) {
+        vec3 p = apple2Color(float(i));
+        float d = dot(c - p, c - p);
+        if (d < bestD) { bestD = d; best = float(i); }
+      }
+      return best;
+    }
+
+    vec3 quantizeColor(vec3 c) {
+      c = clamp(c, 0.0, 1.0);
+      if (mode < 0.5) return zxColor(zxNearest(c));
+      if (mode < 1.5) return c64Color(c64Nearest(c));
+      if (mode < 2.5) return gbColor(floor(clamp(lumOf(c), 0.0, 0.999) * 4.0));
+      if (mode < 3.5) return nesQuantize(c);
+      if (mode < 4.5) return cgaColor(cgaNearest(c));
+      // Amstrad CPC: 27-colour master palette = 3 levels per channel.
+      if (mode < 5.5) return floor(min(c, vec3(0.999)) * 3.0) / 2.0;
+      if (mode < 6.5) return amigaColor(amigaNearest(c));
+      if (mode < 7.5) return egaColor(egaNearest(c));
+      if (mode < 8.5) return vgaQuantize(c);
+      // Hercules: 1-bit monochrome on a green phosphor; the Bayer offset the
+      // caller mixed in makes this an ordered-dithered halftone.
+      if (mode < 9.5) return step(0.5, lumOf(c)) * vec3(0.55, 1.0, 0.6);
+      return apple2Color(apple2Nearest(c));
+    }
+
+    vec3 cellSample(vec2 base, vec2 off) {
+      return clamp(texture2D(tDiffuse, base + off).rgb * gain, 0.0, 1.0);
+    }
+
+    // ZX attributes: one ink + one paper per 8x8 cell, sharing a single
+    // BRIGHT bit — the paper is folded into the ink's brightness bank just
+    // like the real attribute byte forces.
+    void zxInkPaper(vec2 cell, vec2 grid, out vec3 ink, out vec3 paper) {
+      vec2 base = (cell + 0.5) / grid;
+      vec2 off = 0.25 / grid;
+      float i0 = zxNearest(cellSample(base, -off));
+      float i1 = zxNearest(cellSample(base, vec2(off.x, -off.y)));
+      float i2 = zxNearest(cellSample(base, vec2(-off.x, off.y)));
+      float i3 = zxNearest(cellSample(base, off));
+      float inkIdx = i0; float paperIdx = i0;
+      float inkLum = lumOf(zxColor(i0)); float paperLum = inkLum;
+      float l1 = lumOf(zxColor(i1));
+      if (l1 > inkLum) { inkLum = l1; inkIdx = i1; }
+      if (l1 < paperLum) { paperLum = l1; paperIdx = i1; }
+      float l2 = lumOf(zxColor(i2));
+      if (l2 > inkLum) { inkLum = l2; inkIdx = i2; }
+      if (l2 < paperLum) { paperLum = l2; paperIdx = i2; }
+      float l3 = lumOf(zxColor(i3));
+      if (l3 > inkLum) { inkLum = l3; inkIdx = i3; }
+      if (l3 < paperLum) { paperLum = l3; paperIdx = i3; }
+      float bright = step(7.5, inkIdx);
+      if (paperIdx > 0.5) {
+        float j = paperIdx - step(7.5, paperIdx) * 7.0;
+        paperIdx = j + bright * 7.0;
+      }
+      // Dark scenes read as ink-on-black on real hardware: snap a dim paper
+      // colour to true black instead of leaving a murky tint.
+      if (paperLum < 0.16) paperIdx = 0.0;
+      ink = zxColor(inkIdx);
+      paper = zxColor(paperIdx);
+    }
+
+    // Ink-vs-paper choice for one pixel. Dither only kicks in near the
+    // decision boundary — solid regions must stay solid (that crispness IS
+    // the attribute-clash look); full-field dithering reads as noise.
+    float inkChoice(vec3 srcColor, vec3 ink, vec3 paper, float bay) {
+      float dInk = distance(srcColor, ink);
+      float dPaper = distance(srcColor, paper);
+      float tInk = dPaper / (dInk + dPaper + 1e-4);
+      float conf = abs(tInk - 0.5) * 2.0;
+      float jitter = (bay - 0.5) * dither * 0.6 * (1.0 - smoothstep(0.12, 0.45, conf));
+      return step(0.5 + jitter, tInk);
+    }
+
+    // Generic ink/paper for text mode on non-ZX systems: brightest and
+    // darkest quantized colour seen inside the cell.
+    void genericInkPaper(vec2 cell, vec2 grid, out vec3 ink, out vec3 paper) {
+      vec2 base = (cell + 0.5) / grid;
+      vec2 off = 0.25 / grid;
+      vec3 q0 = quantizeColor(cellSample(base, -off));
+      vec3 q1 = quantizeColor(cellSample(base, vec2(off.x, -off.y)));
+      vec3 q2 = quantizeColor(cellSample(base, vec2(-off.x, off.y)));
+      vec3 q3 = quantizeColor(cellSample(base, off));
+      ink = q0; paper = q0;
+      if (lumOf(q1) > lumOf(ink)) ink = q1;
+      if (lumOf(q1) < lumOf(paper)) paper = q1;
+      if (lumOf(q2) > lumOf(ink)) ink = q2;
+      if (lumOf(q2) < lumOf(paper)) paper = q2;
+      if (lumOf(q3) > lumOf(ink)) ink = q3;
+      if (lumOf(q3) < lumOf(paper)) paper = q3;
+    }
+
+    // C64 multicolor: each 4x8-fat-pixel cell draws from four colours; the
+    // cell's corner samples nominate the candidates.
+    vec3 c64CellColor(vec2 cell, vec2 grid, vec3 target) {
+      vec2 base = (cell + 0.5) / grid;
+      vec2 off = 0.25 / grid;
+      vec3 q0 = c64Color(c64Nearest(cellSample(base, -off)));
+      vec3 q1 = c64Color(c64Nearest(cellSample(base, vec2(off.x, -off.y))));
+      vec3 q2 = c64Color(c64Nearest(cellSample(base, vec2(-off.x, off.y))));
+      vec3 q3 = c64Color(c64Nearest(cellSample(base, off)));
+      vec3 best = q0; float bestD = dot(target - q0, target - q0);
+      float d = dot(target - q1, target - q1);
+      if (d < bestD) { bestD = d; best = q1; }
+      d = dot(target - q2, target - q2);
+      if (d < bestD) { bestD = d; best = q2; }
+      d = dot(target - q3, target - q3);
+      if (d < bestD) { best = q3; }
+      return best;
+    }
+
+    vec3 pixelMode(vec2 uv) {
+      vec2 virt = virtualRes();
+      vec2 pix = floor(uv * virt);
+      vec2 pixUv = (pix + 0.5) / virt;
+      vec3 src = clamp(texture2D(tDiffuse, pixUv).rgb * gain, 0.0, 1.0);
+      float bay = bayer4(pix);
+      vec3 dsrc = src + (bay - 0.5) * dither * 0.28;
+      vec2 grid = charGrid();
+      vec2 cell = floor(uv * grid);
+      if (mode < 0.5) {
+        vec3 ink; vec3 paper;
+        zxInkPaper(cell, grid, ink, paper);
+        // Judge against the clean source: pre-dithered input would flip
+        // borderline pixels everywhere and dissolve shapes into checker.
+        return mix(paper, ink, inkChoice(src, ink, paper, bay));
+      }
+      if (mode < 1.5) return c64CellColor(cell, grid, clamp(dsrc, 0.0, 1.0));
+      return quantizeColor(dsrc);
+    }
+
+    vec3 textMode(vec2 uv) {
+      vec2 grid = charGrid();
+      vec2 cell = floor(uv * grid);
+      vec2 cellUv = (cell + 0.5) / grid;
+      vec3 src = clamp(texture2D(tDiffuse, cellUv).rgb * gain, 0.0, 1.0);
+      vec3 ink; vec3 paper;
+      if (mode < 0.5) zxInkPaper(cell, grid, ink, paper);
+      else genericInkPaper(cell, grid, ink, paper);
+      float bay = bayer4(cell);
+      float level = floor(clamp(lumOf(src) + (bay - 0.5) * dither * 0.12, 0.0, 0.999) * 10.0);
+      // Atlas rows are stored bottom-up to match uv orientation (flipY off).
+      vec2 p = floor(fract(uv * grid) * 8.0);
+      float fontRow = mode < 0.5 ? 0.0 : (mode < 1.5 ? 1.0 : 2.0);
+      vec2 atlasUv = vec2(
+        (level * 8.0 + p.x + 0.5) / 80.0,
+        (fontRow * 8.0 + p.y + 0.5) / 24.0
+      );
+      float on = texture2D(tFont, atlasUv).r;
+      return mix(paper, ink, on);
+    }
+
+    // UDG/quarter-block graphics: each character cell is a 2x2 grid of fat
+    // quadrants (ZX block graphics chars 0x80-0x8F, PETSCII quarter blocks),
+    // still bound by the cell's ink/paper attribute — the classic
+    // user-defined-graphics look.
+    vec3 blocksMode(vec2 uv) {
+      vec2 grid = charGrid();
+      vec2 cell = floor(uv * grid);
+      vec3 ink; vec3 paper;
+      if (mode < 0.5) zxInkPaper(cell, grid, ink, paper);
+      else genericInkPaper(cell, grid, ink, paper);
+      vec2 quad = floor(fract(uv * grid) * 2.0);
+      vec2 quadUv = (cell + (quad + 0.5) / 2.0) / grid;
+      vec3 qsrc = clamp(texture2D(tDiffuse, quadUv).rgb * gain, 0.0, 1.0);
+      float bay = bayer4(cell * 2.0 + quad);
+      return mix(paper, ink, inkChoice(qsrc, ink, paper, bay));
+    }
+
+    vec3 borderColor() {
+      if (mode < 0.5) return vec3(0.84);
+      if (mode < 1.5) return vec3(0.424, 0.369, 0.710);
+      if (mode < 2.5) return vec3(0.608, 0.737, 0.059);
+      if (mode < 4.5) return vec3(0.0);
+      if (mode < 5.5) return vec3(0.0, 0.0, 0.5);
+      if (mode < 6.5) return vec3(0.0, 0.333, 0.667); // Workbench blue
+      return vec3(0.0);
+    }
+
+    void main() {
+      vec2 uv = vUv;
+      if (border > 0.5) {
+        // Letterbox to the machine's display aspect inside a hardware border.
+        float targetAspect = (mode >= 1.5 && mode < 2.5) ? 10.0 / 9.0 : 4.0 / 3.0;
+        float screenAspect = resolution.x / max(1.0, resolution.y);
+        vec2 size = vec2(0.86);
+        if (screenAspect > targetAspect) size.x *= targetAspect / screenAspect;
+        else size.y *= screenAspect / targetAspect;
+        uv = (vUv - 0.5) / size + 0.5;
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+          gl_FragColor = vec4(borderColor(), 1.0);
+          return;
+        }
+      }
+      vec3 col;
+      if (displayMode < 0.5) col = pixelMode(uv);
+      else if (displayMode < 1.5) col = textMode(uv);
+      else col = blocksMode(uv);
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+};
+
 export const GodRaysShader = {
   uniforms: {
     tDiffuse: { value: null },

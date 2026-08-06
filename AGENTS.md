@@ -23,6 +23,7 @@ App code imports the engine as `@spectrum-aura/engine/<module>`; the app-side `s
 | 2        | [docs/audio-analysis-pipeline.md](docs/audio-analysis-pipeline.md) — BeatMatcher, BPMDetector |
 | 3        | [docs/rendering-and-latency.md](docs/rendering-and-latency.md) — rAF loop, latency HUD        |
 | 4        | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — structure, tests, conventions                    |
+| 5        | [docs/retro-systems-and-postfx.md](docs/retro-systems-and-postfx.md) — retro pass, FX pipeline |
 
 ## Architecture (do not break)
 
@@ -60,6 +61,9 @@ Analyser.tsx (orchestrator)
 | Tests beside modules                          | Vitest won't find them         | Put under `__tests__/`                                 |
 | Duplicating preset cursor logic               | Shortcuts/panel drift          | Use `hooks/usePresetActions`                           |
 | Duplicating BPM HUD markup                    | Overlay/panel mismatch         | Use `TempoReadout` + `theme.bpmGlowStyle`              |
+| Reordering `RETRO_SYSTEMS`                    | Wrong machine emulated         | Order = shader mode index; append only                 |
+| Raw writes to `fxPipelineOrder`               | Broken pass chain from saves   | Route through `normalizeFxPipelineOrder`               |
+| New FX row without lock/pipeline entries      | Randomize pin / order gaps     | Extend `FX_RANDOMIZE_GROUPS` + `FX_PIPELINE`           |
 
 ## Key files
 
@@ -82,6 +86,9 @@ Analyser.tsx (orchestrator)
 | Audio read             | `packages/engine/src/audio.ts`                        |
 | Scene / views          | `packages/engine/src/scene.ts`                        |
 | Post-FX / quality tiers| `packages/engine/src/composer.ts`                     |
+| Post-FX shaders        | `packages/engine/src/shaders.ts`                      |
+| Retro font atlas       | `packages/engine/src/retro-font.ts`                   |
+| Draggable overlays     | `src/components/analyser/hooks/useDraggablePanel.ts`             |
 | Loudness curve         | `packages/engine/src/loudness.ts`                     |
 | Dynamic Mode drift     | `packages/engine/src/evolution.ts`                    |
 | View cycle             | `packages/engine/src/view-cycle-controller.ts`        |
@@ -121,6 +128,8 @@ npm run check       # typecheck + lint + test
 - `loudness.test.ts` — shared amplitude curve all views route through
 - `evolution.test.ts` — Dynamic Mode drift stays bounded, phrase/wall-clock waypoints, wobble
 - `composer.test.ts` — auto quality-tier thresholds and hysteresis
+- `settings.test.ts` — schema integrity: FX groups/pipeline reference real keys, retro system order pinned, presets valid
+- `retro-font.test.ts` — glyph ramp monotonicity + atlas orientation (ZX ROM bitmaps)
 - `BarTimingHud.test.tsx` — BPM lock indicator states
 
 Shared harness: `packages/engine/src/__tests__/helpers/song-clock.harness.ts`
@@ -165,6 +174,13 @@ Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcu
 1. Keyboard handler in `Shortcuts.tsx` `onKey` (via `actionsRef`)
 2. Button in the appropriate rail cluster (utility row for HUD/sync tools)
 3. `Shortcuts.test.tsx` — key binding + bar button if user-facing
+
+### New post-FX pass
+
+1. Shader in `shaders.ts`; pass wired in `composer.ts` (constructor, `movablePassById`, `apply`)
+2. Settings keys + entries in `FX_PIPELINE` and `FX_RANDOMIZE_GROUPS` (`settings.ts`)
+3. Panel: `ToggleRow` with `lockId` inside the right `FxSection`, plus `FX_PASS_ENABLED_FLAGS` in `ControlPanel.tsx`
+4. `packages/engine/src/__tests__/settings.test.ts` guards will fail on missing/typo'd keys
 
 ### New visual
 

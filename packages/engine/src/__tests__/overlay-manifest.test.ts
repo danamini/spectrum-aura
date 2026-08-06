@@ -55,6 +55,23 @@ describe("pickDistinctOverlaySlots", () => {
     expect(families).toContain("scanlines");
   });
 
+  it("keeps always-eligible entries (Commons) in rotation under a mismatched bias", () => {
+    // Commons textures at the pool tail have families outside the "technical"
+    // bias set; the eligibility flags must keep them pickable so an opted-in
+    // Commons load isn't starved out by the bias filter.
+    const families = ["grid", "circuit", "scanlines", "hud", "grid", "wave", "flare", "radial"];
+    const eligible = [false, false, false, false, false, true, true, true];
+
+    const seen = new Set<number>();
+    let slots: [number, number, number] = [0, 1, 2];
+    for (let round = 0; round < 8; round += 1) {
+      slots = pickDistinctOverlaySlots(slots, families, [1, 2, 3], "technical", eligible);
+      slots.forEach((index) => seen.add(index));
+    }
+
+    expect([5, 6, 7].some((commonsIndex) => seen.has(commonsIndex))).toBe(true);
+  });
+
   it("avoids reusing the same slot when alternatives exist", () => {
     const next = pickDistinctOverlaySlots(
       [0, 1, 2],

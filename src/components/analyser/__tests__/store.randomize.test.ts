@@ -36,17 +36,23 @@ describe("settingsStore randomize", () => {
     expect(state.asciiFx).toBe(false);
     expect(state.asciiCellSize).toBe(10);
     expect(state.asciiColored).toBe(true);
+    expect(state.retroFx).toBe(false);
+    expect(state.retroSystem).toBe("zx");
+    expect(state.retroMode).toBe("pixels");
+    expect(state.retroDither).toBe(0.55);
+    expect(state.retroBorder).toBe(true);
   });
 
   it("rolls ASCII as an exclusive statement effect within its slice of the draw", async () => {
     const { settingsStore } = await import("../store");
 
-    // statementDraw = 0.45 lands in the ASCII slice [0.43, 0.5) — every other
+    // statementDraw = 0.45 lands in the ASCII slice [0.43, 0.47) — every other
     // statement effect must stay off, and the cell size stays in range.
     const asciiSpy = vi.spyOn(Math, "random").mockReturnValue(0.45);
     settingsStore.randomize();
     let state = settingsStore.get();
     expect(state.asciiFx).toBe(true);
+    expect(state.retroFx).toBe(false);
     expect(state.kaleidoscope).toBe(false);
     expect(state.mirrorFx).toBe(false);
     expect(state.pixelate).toBe(false);
@@ -62,6 +68,84 @@ describe("settingsStore randomize", () => {
     state = settingsStore.get();
     expect(state.asciiFx).toBe(false);
     offSpy.mockRestore();
+  });
+
+  it("rolls the retro system as an exclusive statement effect within its slice", async () => {
+    const { settingsStore } = await import("../store");
+    const { RETRO_SYSTEMS, RETRO_DISPLAY_MODES } = await import("@spectrum-aura/engine/settings");
+
+    // statementDraw = 0.48 lands in the retro slice [0.47, 0.5).
+    const retroSpy = vi.spyOn(Math, "random").mockReturnValue(0.48);
+    settingsStore.randomize();
+    let state = settingsStore.get();
+    expect(state.retroFx).toBe(true);
+    expect(state.asciiFx).toBe(false);
+    expect(state.kaleidoscope).toBe(false);
+    expect(state.mirrorFx).toBe(false);
+    expect(state.pixelate).toBe(false);
+    expect(state.sobelMode).toBe(false);
+    expect(state.glitch).toBe(false);
+    expect(RETRO_SYSTEMS.some((sys) => sys.id === state.retroSystem)).toBe(true);
+    expect(RETRO_DISPLAY_MODES).toContain(state.retroMode);
+    expect(state.retroDither).toBeGreaterThanOrEqual(0);
+    expect(state.retroDither).toBeLessThanOrEqual(1);
+    retroSpy.mockRestore();
+
+    // Outside the slice retro stays off.
+    const offSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    settingsStore.randomize();
+    state = settingsStore.get();
+    expect(state.retroFx).toBe(false);
+    offSpy.mockRestore();
+  });
+
+  it("keeps pinned FX groups untouched and suppresses new statement effects", async () => {
+    const { settingsStore } = await import("../store");
+
+    settingsStore.set({
+      fxLocks: ["retro"],
+      retroFx: true,
+      retroSystem: "c64",
+      retroMode: "text",
+      retroDither: 0.42,
+      retroBorder: false,
+    });
+
+    // 0.45 lands in the ASCII statement slice — but with a pinned statement
+    // effect already on, randomize must not stack a second one.
+    const spy = vi.spyOn(Math, "random").mockReturnValue(0.45);
+    settingsStore.randomize();
+    const state = settingsStore.get();
+    expect(state.retroFx).toBe(true);
+    expect(state.retroSystem).toBe("c64");
+    expect(state.retroMode).toBe("text");
+    expect(state.retroDither).toBe(0.42);
+    expect(state.retroBorder).toBe(false);
+    expect(state.asciiFx).toBe(false);
+    expect(state.fxLocks).toEqual(["retro"]);
+    spy.mockRestore();
+  });
+
+  it("drops unknown fx lock ids on load-time normalization", async () => {
+    const { settingsStore } = await import("../store");
+
+    settingsStore.set({ fxLocks: ["retro", "nope", "retro"] as never });
+    expect(settingsStore.get().fxLocks).toEqual(["retro"]);
+  });
+
+  it("canonicalizes the fx pipeline order and randomize preserves it", async () => {
+    const { settingsStore, DEFAULT_FX_PIPELINE_ORDER } = await import("../store");
+
+    // Custom prefix survives; junk is dropped; missing passes are appended.
+    settingsStore.set({ fxPipelineOrder: ["retro", "crt", "bogus", "retro"] as never });
+    const order = settingsStore.get().fxPipelineOrder;
+    expect(order.slice(0, 2)).toEqual(["retro", "crt"]);
+    expect([...order].sort()).toEqual([...DEFAULT_FX_PIPELINE_ORDER].sort());
+
+    const spy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    settingsStore.randomize();
+    expect(settingsStore.get().fxPipelineOrder).toEqual(order);
+    spy.mockRestore();
   });
 
   it("keeps randomize scoped to post FX when view settings are disabled", async () => {

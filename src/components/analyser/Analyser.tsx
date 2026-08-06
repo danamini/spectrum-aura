@@ -20,6 +20,7 @@ import { StatsForNerdsPanel } from "./overlays/StatsPanel";
 import { FreqLabels } from "./overlays/FreqLabels";
 import { EMPTY_LATENCY_HUD, EMPTY_STATS, type NerdStats } from "./overlays/stats-types";
 import { useAnalyserEngine } from "./hooks/useAnalyserEngine";
+import { useDraggablePanel } from "./hooks/useDraggablePanel";
 import { useBeatHintBridge } from "./hooks/useBeatHintBridge";
 import { useAnalyserCommandEvents } from "./hooks/useAnalyserCommandEvents";
 
@@ -30,6 +31,10 @@ export function Analyser() {
   const settings = useSettings();
   const [audioStatus, setAudioStatus] = useState<"idle" | "running" | "error">("idle");
   const [audioError, setAudioError] = useState<string | null>(null);
+  // Dismissed-without-choosing state: visuals idle without audio, and the
+  // "Audio Source" shortcut (X) re-opens the prompt via handleStop below.
+  const [audioPromptDismissed, setAudioPromptDismissed] = useState(false);
+  const bpmDrag = useDraggablePanel("bpm-hud");
   const audioCaptureSupport = getAudioCaptureSupport();
   const [statsOpen, setStatsOpen] = useState(false);
   const [statsFullscreen, setStatsFullscreen] = useState(false);
@@ -192,6 +197,7 @@ export function Analyser() {
     beatHintFlashRef.current = null;
     dispatchLiveTempo(EMPTY_LIVE_TEMPO);
     setAudioStatus("idle");
+    setAudioPromptDismissed(false);
   };
 
   useAnalyserCommandEvents({
@@ -212,19 +218,27 @@ export function Analyser() {
       className="absolute inset-0 overflow-hidden"
       style={{ backgroundColor: settings.bgColor }}
     >
-      {audioStatus !== "running" && (
+      {audioStatus !== "running" && !audioPromptDismissed && (
         <AudioSourcePrompt
           support={audioCaptureSupport}
           error={audioError}
           onMic={handleMic}
           onSystem={handleSystem}
+          onDismiss={() => setAudioPromptDismissed(true)}
         />
       )}
 
       {audioStatus === "running" && settings.showLatency && <LatencyHud latency={latencyHud} />}
 
       {settings.showBPM && (
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10">
+        <div
+          className="pointer-events-auto absolute left-3 z-10"
+          {...bpmDrag.handleProps}
+          style={{
+            bottom: "calc(0.75rem + var(--bottom-hud-clearance, 0px))",
+            ...bpmDrag.style,
+          }}
+        >
           <TempoReadout variant="overlay" tempo={liveTempo} />
         </div>
       )}

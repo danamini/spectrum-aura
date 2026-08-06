@@ -68,6 +68,7 @@ export function pickDistinctOverlaySlots(
   families: readonly string[],
   strides: readonly [number, number, number],
   bias: OverlayBias = "mixed",
+  alwaysEligible?: readonly boolean[],
 ): [number, number, number] {
   const len = families.length;
   if (len <= 0) return [0, 0, 0];
@@ -89,7 +90,12 @@ export function pickDistinctOverlaySlots(
   };
 
   const biasFamilies = BIAS_FAMILY_SETS[bias];
-  const matchesBias = (family: string) => !biasFamilies || biasFamilies.has(family);
+  // Entries flagged always-eligible (e.g. user-opted-in Wikimedia Commons
+  // textures) bypass the bias family filter: the bias sets only cover local
+  // families, so without this a non-"mixed" bias starves Commons assets out
+  // of the rotation entirely whenever their family isn't in the bias set.
+  const matchesBias = (index: number, family: string) =>
+    alwaysEligible?.[index] === true || !biasFamilies || biasFamilies.has(family);
 
   for (let slot = 0; slot < 3; slot += 1) {
     const current = currentSlots[slot] ?? 0;
@@ -103,7 +109,7 @@ export function pickDistinctOverlaySlots(
           !usedIndices.has(index) &&
           index !== current &&
           !usedFamilies.has(family) &&
-          matchesBias(family),
+          matchesBias(index, family),
       ) ??
       scan(
         start,
@@ -112,7 +118,8 @@ export function pickDistinctOverlaySlots(
       ) ??
       scan(
         start,
-        (index, family) => !usedIndices.has(index) && index !== current && matchesBias(family),
+        (index, family) =>
+          !usedIndices.has(index) && index !== current && matchesBias(index, family),
       ) ??
       scan(start, (index, _family) => !usedIndices.has(index) && index !== current) ??
       scan(start, (index) => !usedIndices.has(index)) ??

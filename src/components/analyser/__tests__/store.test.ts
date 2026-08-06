@@ -164,6 +164,12 @@ describe("analyser store utility functions", () => {
     expect(state.asciiFx).toBe(false);
     expect(state.asciiCellSize).toBe(10);
     expect(state.asciiColored).toBe(true);
+    expect(state.retroFx).toBe(false);
+    expect(state.retroSystem).toBe("zx");
+    expect(state.retroMode).toBe("pixels");
+    expect(state.retroDither).toBe(0.55);
+    expect(state.retroBorder).toBe(true);
+    expect(state.fxLocks).toEqual([]);
     expect(state.showBPM).toBe(false);
     expect(state.showLatency).toBe(false);
   });

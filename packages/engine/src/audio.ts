@@ -90,20 +90,33 @@ export class AudioEngine {
 
   async startSystem(options?: { latencyOptimized?: boolean }) {
     try {
+      // Steer Chrome's picker toward "Entire screen" with the system-audio
+      // checkbox visible and preselected where supported — whole-system audio
+      // gives the analyser every app's output, not just one tab. These are
+      // hints, not commands: browsers that don't know them ignore them, and
+      // the user can still pick a tab or window.
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      });
+        video: { displaySurface: "monitor" },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+        // Chromium-only picker hints; harmless elsewhere.
+        systemAudio: "include",
+        monitorTypeSurfaces: "include",
+        selfBrowserSurface: "exclude",
+      } as MediaStreamConstraints);
       stream.getVideoTracks().forEach((t) => t.stop());
       if (stream.getAudioTracks().length === 0) {
         stream.getTracks().forEach((t) => t.stop());
         throw new Error(
-          'No audio track was shared. In the Chrome dialog, choose a Tab and tick "Share tab audio".',
+          'No audio was shared. In the picker choose "Entire screen" and tick "Also share system audio" (or a Tab with "Share tab audio").',
         );
       }
       this.attach(stream, options);
     } catch (error) {
-      if (error instanceof Error && error.message.includes("No audio track was shared")) {
+      if (error instanceof Error && error.message.includes("No audio was shared")) {
         throw error;
       }
       throw new Error(formatMediaError(error));

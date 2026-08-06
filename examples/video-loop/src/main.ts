@@ -19,6 +19,8 @@ const LOOKS = [
   "Mallsoft Haze",
   "Broken Transmission",
   "CRT Arcade",
+  "Spectrum Clash",
+  "PETSCII Terminal",
   "16mm Projector",
 ] as const;
 

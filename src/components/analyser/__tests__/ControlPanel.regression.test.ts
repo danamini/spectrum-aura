@@ -86,19 +86,38 @@ describe("ControlPanel decomposition regression", () => {
     }
   });
 
-  it("keeps every post-FX toggle at the top level (no Disclosure groups hiding them)", () => {
+  it("groups every post-FX toggle into themed FxSections without dropping rows", () => {
+    // The flat FX list stopped scaling, so the tab is organized into
+    // collapsible FxSection groups with active-effect counts. Every effect
+    // row must still exist, and every row carries a randomize lock pin.
     const panel = readFileSync(join(process.cwd(), CONTROL_PANEL), "utf8");
-    expect(panel).not.toMatch(/<Disclosure/);
+    expect(panel.match(/<FxSection/g)?.length).toBe(6);
     for (const label of [
+      "Bloom",
+      "Color grading",
       "Kaleidoscope",
       "Mirror",
       "CRT",
       "Projector film",
+      "Retro system",
       "ASCII",
       "Demo-scene text overlay",
+      "Asset overlay",
     ]) {
       expect(panel).toContain(`label="${label}"`);
     }
+    for (const lock of ["bloom", "grading", "retro", "ascii", "glitch", "assetOverlay"]) {
+      expect(panel).toContain(`lockId="${lock}"`);
+    }
+    // Every section surfaces its pinned count alongside the active count.
+    expect(panel.match(/pinned=\{pinnedIn\(/g)?.length).toBe(6);
+  });
+
+  it("keeps the pipeline-order editor wired to the engine order", () => {
+    const panel = readFileSync(join(process.cwd(), CONTROL_PANEL), "utf8");
+    expect(panel).toContain('label="Pipeline order"');
+    expect(panel).toContain("s.fxPipelineOrder.map(");
+    expect(panel).toContain("DEFAULT_FX_PIPELINE_ORDER");
   });
 
   it("covers every visual mode in ViewSettings sliders or toggles", () => {

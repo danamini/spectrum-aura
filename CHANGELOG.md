@@ -9,7 +9,58 @@ presets) may change between minor versions.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Retro system post-FX pass**: emulates eleven classic machines — ZX
+  Spectrum (256×192 with genuine per-cell attribute clash and the real
+  Sinclair ROM font), Commodore 64 (multicolor cells, Pepto palette,
+  PETSCII-style font), Game Boy, NES, CGA, Amstrad CPC, Amiga 500 (32-colour
+  DPaint-style palette), MS-DOS EGA, VGA 256, Hercules (1-bit green-phosphor
+  dither), and Apple II. Three display modes per system (hi-res pixels /
+  system-font text / low-res quarter-block graphics), optional letterboxed
+  hardware borders, boundary-only ordered dithering, and a gentle beat-driven
+  gain. New presets: **Spectrum Clash** and **PETSCII Terminal** (also added
+  to the video-loop example's rotation), plus ZX Spectrum / C64 / Game Boy /
+  NES / CGA scene palettes.
+- **Reorderable post-FX pipeline**: a "Pipeline order" editor lists every
+  movable pass with up/down controls; the engine Composer rebuilds its chain
+  live. Scene render, SSAO, and motion trails stay pinned first; orders are
+  canonicalized so stale saves can never break the chain.
+- **Randomize pins**: every effect row has a pin that excludes its whole
+  settings group from Randomize; pinned whole-frame "statement" effects also
+  suppress rolling a second statement effect on top. Section headers show
+  active and pinned counts.
+- **Movable overlay panels**: the shortcut bar, BPM grid, and latency HUD are
+  drag-movable with persisted positions and double-click reset.
+- Direct panel access: shortcut-bar group titles open their matching settings
+  slide-out (Saves, Audio, controls drawer); the Settings button opens the
+  Post FX panel.
+
+### Changed
+
+- Post FX tab redesigned into six collapsible themed sections with live
+  active-effect badges; presets moved into a disclosure with palette-swatch
+  chips; the settings flyout is wider with container-query column layouts.
+- Shortcut bar rebuilt as grouped card clusters (Visuals / Saves / Tools)
+  with two-line kbd+icon buttons; it hides while the settings drawer is open
+  and publishes its height so corner HUDs never overlap it.
+- Audio-source dialog leads with "Share system audio — Best results"
+  (entire-screen + system-audio guidance), can now be dismissed without
+  choosing a source, and the capture request steers Chromium's picker toward
+  whole-screen system audio with processing (echo cancellation, noise
+  suppression, auto gain) disabled for a clean analysis signal. Start screen
+  renamed to Spectrum Aura.
+
+### Fixed
+
+- Wikimedia Commons overlay textures were starved out of the rotation
+  whenever the local-pack bias didn't happen to include their family; opted-in
+  Commons entries now bypass the bias filter.
+- ZX Spectrum text-mode glyphs corrected to the exact Sinclair ROM charset
+  bitmaps; attribute-clash rendering keeps solid areas solid (dither only at
+  decision boundaries) instead of dissolving into full-field checkerboard.
+- The BPM HUD no longer shows the camera-drag grab cursor it couldn't honour
+  (and is now actually draggable).
 
 ## [0.3.0] - 2026-07-17
 

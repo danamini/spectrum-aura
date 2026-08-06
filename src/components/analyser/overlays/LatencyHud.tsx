@@ -1,7 +1,9 @@
 import { isSignalLatencyVisible } from "@spectrum-aura/engine/latency-metrics";
+import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import type { LatencyHudState } from "./stats-types";
 
 export function LatencyHud({ latency }: { latency: LatencyHudState }) {
+  const drag = useDraggablePanel("latency-hud");
   const fmt = (v: number) => v.toFixed(1);
   const primary = latency.audioToRenderMs;
   const tone =
@@ -9,7 +11,11 @@ export function LatencyHud({ latency }: { latency: LatencyHudState }) {
   const showSignal = isSignalLatencyVisible(latency.signalToRenderMs);
 
   return (
-    <div className="pointer-events-none absolute bottom-3 right-3 z-10">
+    <div
+      className="pointer-events-auto absolute right-3 z-10"
+      {...drag.handleProps}
+      style={{ bottom: "calc(0.75rem + var(--bottom-hud-clearance, 0px))", ...drag.style }}
+    >
       <div
         className={`rounded-md border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] backdrop-blur-md ${
           latency.performanceMode

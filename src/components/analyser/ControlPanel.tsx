@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 
 import { Label } from "@/components/ui/label";
-import { Bn, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
+import { Bn, Disclosure, FxSection, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
 import { ViewSettings } from "./control-panel/ViewSettings";
 import {
   ChevronDown,
@@ -39,15 +39,46 @@ import {
 } from "@spectrum-aura/engine/live-tempo";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
+  DEFAULT_FX_PIPELINE_ORDER,
+  FX_PIPELINE,
   PALETTES,
   PRESETS,
+  RETRO_SYSTEMS,
   settingsStore,
   useSettings,
+  type FxLockId,
+  type FxPassId,
   type Settings,
 } from "./store";
 import { getVisualDefinition, VISUALS } from "@spectrum-aura/engine/visuals";
 
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
+const SETTINGS_PANEL_STATE_EVENT = "spectrum-aura:settings-panel-state";
+
+/** Which settings flag lights each pipeline row's "enabled" dot (SMAA has no
+ * user flag — it is always on, so it has no entry here). */
+const FX_PASS_ENABLED_FLAGS: Partial<Record<FxPassId, keyof Settings>> = {
+  bloom: "bloom",
+  godRays: "godRays",
+  lensFlare: "lensFlare",
+  assetOverlay: "assetOverlayFx",
+  dof: "dof",
+  chroma: "chroma",
+  tiltShift: "tiltShift",
+  kaleidoscope: "kaleidoscope",
+  mirror: "mirrorFx",
+  crt: "crtFx",
+  projectorFilm: "projectorFilmFx",
+  radialBlur: "radialBlur",
+  pixelate: "pixelate",
+  grain: "grain",
+  glitch: "glitch",
+  grading: "grading",
+  sobel: "sobelMode",
+  vignette: "vignette",
+  retro: "retroFx",
+  ascii: "asciiFx",
+};
 
 const UI_KEY = "analyser-ui-v1";
 type UIState = { viewSettingsOpen: boolean; activeTab: string };
@@ -78,6 +109,8 @@ export function ControlPanel() {
     backgroundHidden: false,
   });
   const [ui, setUi] = useState<UIState>(loadUI);
+  const uiRef = React.useRef(ui);
+  uiRef.current = ui;
   const [liveTempo, setLiveTempo] = useState<LiveTempoState>(EMPTY_LIVE_TEMPO);
   const flyoutPanelRef = React.useRef<HTMLDivElement | null>(null);
   const updateUi = (patch: Partial<UIState>) => {
@@ -118,7 +151,14 @@ export function ControlPanel() {
     const id = window.setTimeout(() => setFlyoutVisible(true), 220);
     return () => window.clearTimeout(id);
   }, [open]);
+  // Broadcast open state so the shortcut bar can get out of the way — the
+  // drawer + flyout cover most of the screen and overlapping windows read
+  // as clutter.
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent(SETTINGS_PANEL_STATE_EVENT, { detail: { open } }));
+  }, [open]);
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
+  const pinnedIn = (ids: FxLockId[]) => ids.filter((id) => s.fxLocks.includes(id)).length;
 
   const hasViewSettings = true;
   const currentVisual = getVisualDefinition(s.view);
@@ -171,8 +211,20 @@ export function ControlPanel() {
   }, []);
 
   React.useEffect(() => {
-    const onToggleSettingsPanel = () => {
-      setOpen((v) => !v);
+    // Plain event = toggle the drawer. With a `tab` detail (shortcut-bar
+    // group titles / Settings button) = jump straight to that flyout tab,
+    // or close if it's already showing.
+    const onToggleSettingsPanel = (event: Event) => {
+      const tab = (event as CustomEvent<{ tab?: UIState["activeTab"] } | undefined>).detail?.tab;
+      if (!tab || !["audio", "scene", "post", "saves"].includes(tab)) {
+        setOpen((v) => !v);
+        return;
+      }
+      setOpen((wasOpen) => {
+        if (wasOpen && uiRef.current.activeTab === tab) return false;
+        updateUi({ activeTab: tab });
+        return true;
+      });
     };
     window.addEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
     return () => window.removeEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
@@ -421,15 +473,15 @@ export function ControlPanel() {
                 "analyser-scroll fixed overflow-y-auto bg-black/85 backdrop-blur-xl text-white text-[12px] " +
                 (isMobile
                   ? "inset-0 z-[105] h-screen w-full border-white/10 "
-                  : "right-[416px] top-0 z-[55] h-screen w-[360px] border-l border-r border-white/10 ") +
+                  : "right-[416px] top-0 z-[55] h-screen w-[min(720px,calc(100vw-460px))] border-l border-r border-white/10 ") +
                 "transition-all duration-300 ease-out " +
                 (ui.activeTab && flyoutVisible
                   ? "translate-x-0 translate-y-0 opacity-100"
-                  : (isMobile ? "translate-y-6" : "translate-x-[420px]") +
+                  : (isMobile ? "translate-y-6" : "translate-x-[calc(100%+80px)]") +
                     " opacity-0 pointer-events-none")
               }
             >
-              <div className={`p-4 space-y-4 ${isMobile ? "pb-24" : "pb-12"}`}>
+              <div className={`@container p-4 space-y-4 ${isMobile ? "pb-24" : "pb-12"}`}>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/70">
                     {ui.activeTab === "audio"
@@ -665,703 +717,942 @@ export function ControlPanel() {
                       enabled={s.postFxEnabled}
                       onToggle={(v) => set({ postFxEnabled: v })}
                     />
-                    <Row label="Presets">
-                      <div className="flex flex-wrap gap-1.5">
-                        {Object.keys(PRESETS).map((name) => (
-                          <Bn
-                            key={name}
-                            active={s.activePreset === name}
-                            variant="default"
-                            onClick={() => settingsStore.applyPreset(name as keyof typeof PRESETS)}
-                          >
-                            {name}
-                          </Bn>
-                        ))}
-                        <Bn variant="primary" onClick={() => settingsStore.randomize()}>
-                          <Shuffle className="mr-1 h-3 w-3" /> Randomize
-                        </Bn>
-                        <Bn variant="ghost" onClick={() => settingsStore.reset()}>
-                          Reset
-                        </Bn>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-2.5">
-                        <div>
-                          <Label className="text-[11px]">Randomize view settings</Label>
-                          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
-                            off = post FX only
-                          </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Bn variant="primary" onClick={() => settingsStore.randomize()}>
+                        <Shuffle className="mr-1 h-3 w-3" /> Randomize
+                      </Bn>
+                      <Bn variant="ghost" onClick={() => settingsStore.reset()}>
+                        Reset
+                      </Bn>
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-2.5">
+                      <div>
+                        <Label className="text-[11px]">Randomize view settings</Label>
+                        <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 mt-0.5">
+                          off = post FX only
                         </div>
-                        <Sw
-                          checked={s.randomizeViewSettings}
-                          onCheckedChange={(v) => set({ randomizeViewSettings: v })}
-                        />
                       </div>
-                    </Row>
-
-                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
-                      Looking for your saved looks? They moved to the Saves tab so they're easier to
-                      find.
-                    </p>
-
-                    <ToggleRow label="Bloom" enabled={s.bloom} onToggle={(v) => set({ bloom: v })}>
-                      <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-2 py-2">
-                        <Label className="text-[11px] leading-snug">
-                          Extreme bloom
-                          <span className="mt-0.5 block font-mono text-[9px] uppercase tracking-wider text-white/35">
-                            Strength above {BLOOM_STRENGTH_MAX_NORMAL.toFixed(1)} (very bright)
-                          </span>
-                        </Label>
-                        <Sw
-                          checked={s.bloomExtreme}
-                          onCheckedChange={(on) => {
-                            if (on) set({ bloomExtreme: true });
-                            else {
-                              set({
-                                bloomExtreme: false,
-                                bloomStrength: Math.min(s.bloomStrength, BLOOM_STRENGTH_MAX_NORMAL),
-                              });
-                            }
-                          }}
-                        />
-                      </div>
-                      <S
-                        label="Strength"
-                        value={s.bloomStrength}
-                        min={0}
-                        max={s.bloomExtreme ? 3 : BLOOM_STRENGTH_MAX_NORMAL}
-                        step={0.02}
-                        onChange={(v) =>
-                          set({
-                            bloomStrength: s.bloomExtreme
-                              ? v
-                              : Math.min(BLOOM_STRENGTH_MAX_NORMAL, v),
-                          })
-                        }
+                      <Sw
+                        checked={s.randomizeViewSettings}
+                        onCheckedChange={(v) => set({ randomizeViewSettings: v })}
                       />
-                      <S
-                        label="Radius"
-                        value={s.bloomRadius}
-                        min={0}
-                        max={1.5}
-                        step={0.05}
-                        onChange={(v) => set({ bloomRadius: v })}
-                      />
-                      <S
-                        label="Threshold"
-                        value={s.bloomThreshold}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ bloomThreshold: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Chromatic aberration"
-                      enabled={s.chroma}
-                      onToggle={(v) => set({ chroma: v })}
-                    >
-                      <S
-                        label="Amount"
-                        value={s.chromaAmount}
-                        min={0}
-                        max={0.02}
-                        step={0.0005}
-                        onChange={(v) => set({ chromaAmount: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Film grain"
-                      enabled={s.grain}
-                      onToggle={(v) => set({ grain: v })}
-                    >
-                      <S
-                        label="Amount"
-                        value={s.grainAmount}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(v) => set({ grainAmount: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Vignette"
-                      enabled={s.vignette}
-                      onToggle={(v) => set({ vignette: v })}
-                    >
-                      <S
-                        label="Amount"
-                        value={s.vignetteAmount}
-                        min={0.5}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ vignetteAmount: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Depth of field"
-                      enabled={s.dof}
-                      onToggle={(v) => set({ dof: v })}
-                    >
-                      <S
-                        label="Focus"
-                        value={s.dofFocus}
-                        min={1}
-                        max={20}
-                        step={0.1}
-                        onChange={(v) => set({ dofFocus: v })}
-                      />
-                      <S
-                        label="Aperture"
-                        value={s.dofAperture}
-                        min={0}
-                        max={0.005}
-                        step={0.0001}
-                        onChange={(v) => set({ dofAperture: v })}
-                      />
-                      <S
-                        label="Max blur"
-                        value={s.dofMaxBlur}
-                        min={0}
-                        max={0.05}
-                        step={0.001}
-                        onChange={(v) => set({ dofMaxBlur: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Glitch"
-                      enabled={s.glitch}
-                      onToggle={(v) => set({ glitch: v })}
-                    >
-                      <S
-                        label="Intensity"
-                        value={s.glitchIntensity}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(v) => set({ glitchIntensity: v })}
-                      />
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs">Wild mode</Label>
-                        <Sw
-                          checked={s.glitchWild}
-                          onCheckedChange={(v) => set({ glitchWild: v })}
-                        />
-                      </div>
-                    </ToggleRow>
-                    <ToggleRow
-                      label="God rays"
-                      enabled={s.godRays}
-                      onToggle={(v) => set({ godRays: v })}
-                    >
-                      <S
-                        label="Amount"
-                        value={s.godRaysAmount}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ godRaysAmount: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Lens flare"
-                      enabled={s.lensFlare}
-                      onToggle={(v) => set({ lensFlare: v })}
-                    >
-                      <S
-                        label="Amount"
-                        value={s.lensFlareAmount}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ lensFlareAmount: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Motion trails"
-                      enabled={s.motionTrails}
-                      onToggle={(v) => set({ motionTrails: v })}
-                    >
-                      <S
-                        label="Decay"
-                        value={s.trailDecay}
-                        min={0.75}
-                        max={0.99}
-                        step={0.005}
-                        onChange={(v) => set({ trailDecay: v })}
-                      />
-                      <S
-                        label="Inject"
-                        value={s.trailInject}
-                        min={0.5}
-                        max={2.25}
-                        step={0.05}
-                        onChange={(v) => set({ trailInject: v })}
-                      />
-                      <S
-                        label="Threshold"
-                        value={s.trailThreshold}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ trailThreshold: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow label="SSAO" enabled={s.ssao} onToggle={(v) => set({ ssao: v })}>
-                      <S
-                        label="Radius"
-                        value={s.ssaoRadius}
-                        min={2}
-                        max={14}
-                        step={0.5}
-                        onChange={(v) => set({ ssaoRadius: v })}
-                      />
-                      <S
-                        label="Distance"
-                        value={s.ssaoDistance}
-                        min={0.01}
-                        max={0.2}
-                        step={0.005}
-                        onChange={(v) => set({ ssaoDistance: v })}
-                      />
-                      <S
-                        label="Intensity"
-                        value={s.ssaoIntensity}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(v) => set({ ssaoIntensity: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Radial blur"
-                      enabled={s.radialBlur}
-                      onToggle={(v) => set({ radialBlur: v })}
-                    >
-                      <S
-                        label="Base"
-                        value={s.radialBase}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ radialBase: v })}
-                      />
-                      <S
-                        label="Kick amount"
-                        value={s.radialKickAmount}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ radialKickAmount: v })}
-                      />
-                      <S
-                        label="Zoom"
-                        value={s.radialZoom}
-                        min={0.05}
-                        max={1.2}
-                        step={0.05}
-                        onChange={(v) => set({ radialZoom: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Pixelate"
-                      enabled={s.pixelate}
-                      onToggle={(v) => set({ pixelate: v })}
-                    >
-                      <S
-                        label="Pixel size"
-                        value={s.pixelSize}
-                        min={1}
-                        max={32}
-                        step={1}
-                        onChange={(v) => set({ pixelSize: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Tilt-shift"
-                      enabled={s.tiltShift}
-                      onToggle={(v) => set({ tiltShift: v })}
-                    >
-                      <S
-                        label="Amount"
-                        value={s.tiltAmount}
-                        min={0}
-                        max={4}
-                        step={0.1}
-                        onChange={(v) => set({ tiltAmount: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Kaleidoscope"
-                      enabled={s.kaleidoscope}
-                      onToggle={(v) => set({ kaleidoscope: v })}
-                    >
-                      <S
-                        label="Sides"
-                        value={s.kaleidoscopeSides}
-                        min={2}
-                        max={24}
-                        step={1}
-                        onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
-                      />
-                      <S
-                        label="Angle"
-                        value={s.kaleidoscopeAngle}
-                        min={-3.14}
-                        max={3.14}
-                        step={0.01}
-                        onChange={(v) => set({ kaleidoscopeAngle: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Mirror"
-                      enabled={s.mirrorFx}
-                      onToggle={(v) => set({ mirrorFx: v })}
-                    >
-                      <div className="grid grid-cols-3 gap-2">
-                        {(
-                          [
-                            ["horizontal", "Horizontal"],
-                            ["vertical", "Vertical"],
-                            ["quad", "Quad"],
-                          ] as const
-                        ).map(([mode, label]) => (
-                          <Bn
-                            key={mode}
-                            active={s.mirrorMode === mode}
-                            variant={s.mirrorMode === mode ? "default" : "outline"}
-                            onClick={() => set({ mirrorMode: mode })}
-                          >
-                            {label}
-                          </Bn>
-                        ))}
-                      </div>
-                      <S
-                        label="Offset"
-                        value={s.mirrorOffset}
-                        min={-0.45}
-                        max={0.45}
-                        step={0.01}
-                        onChange={(v) => set({ mirrorOffset: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow label="CRT" enabled={s.crtFx} onToggle={(v) => set({ crtFx: v })}>
-                      <S
-                        label="Scanlines"
-                        value={s.crtScanlineIntensity}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ crtScanlineIntensity: v })}
-                      />
-                      <S
-                        label="Curvature"
-                        value={s.crtCurvature}
-                        min={0}
-                        max={0.1}
-                        step={0.01}
-                        onChange={(v) => set({ crtCurvature: v })}
-                      />
-                      <S
-                        label="Vignette"
-                        value={s.crtVignette}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ crtVignette: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Projector film"
-                      enabled={s.projectorFilmFx}
-                      onToggle={(v) => set({ projectorFilmFx: v })}
-                    >
-                      <S
-                        label="Artifact amount"
-                        value={s.projectorFilmAmount}
-                        min={0}
-                        max={1.5}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmAmount: v })}
-                      />
-                      <S
-                        label="Frame jitter"
-                        value={s.projectorFilmJitter}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmJitter: v })}
-                      />
-                      <S
-                        label="Lamp flicker"
-                        value={s.projectorFilmFlicker}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ projectorFilmFlicker: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="ASCII"
-                      enabled={s.asciiFx}
-                      onToggle={(v) => set({ asciiFx: v })}
-                    >
-                      <S
-                        label="Cell size"
-                        value={s.asciiCellSize}
-                        min={4}
-                        max={32}
-                        step={1}
-                        onChange={(v) => set({ asciiCellSize: Math.round(v) })}
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        {(
-                          [
-                            [true, "Colour"],
-                            [false, "Mono"],
-                          ] as const
-                        ).map(([colored, label]) => (
-                          <Bn
-                            key={label}
-                            active={s.asciiColored === colored}
-                            variant={s.asciiColored === colored ? "default" : "outline"}
-                            onClick={() => set({ asciiColored: colored })}
-                          >
-                            {label}
-                          </Bn>
-                        ))}
-                      </div>
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Demo-scene text overlay"
-                      enabled={s.textOverlayEnabled}
-                      onToggle={(v) => set({ textOverlayEnabled: v })}
-                    >
-                      <div className="grid grid-cols-2 gap-2">
-                        {(
-                          [
-                            ["public-domain", "Public Domain"],
-                            ["bofh", "BOFH API"],
-                          ] as const
-                        ).map(([source, label]) => (
-                          <Bn
-                            key={source}
-                            active={s.textOverlaySource === source}
-                            variant={s.textOverlaySource === source ? "default" : "outline"}
-                            onClick={() => set({ textOverlaySource: source })}
-                          >
-                            {label}
-                          </Bn>
-                        ))}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {(
-                          [
-                            ["bounce", "Bounce"],
-                            ["scroller", "Scroller"],
-                            ["stack", "Stack"],
-                            ["orbit", "Orbit"],
-                          ] as const
-                        ).map(([style, label]) => (
-                          <Bn
-                            key={style}
-                            active={s.textOverlayStyle === style}
-                            variant={s.textOverlayStyle === style ? "default" : "outline"}
-                            onClick={() => set({ textOverlayStyle: style })}
-                          >
-                            {label}
-                          </Bn>
-                        ))}
-                      </div>
-                      <S
-                        label="Intensity"
-                        value={s.textOverlayIntensity}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ textOverlayIntensity: v })}
-                      />
-                      <S
-                        label="Phrase interval (sec)"
-                        value={s.textOverlayPhraseInterval}
-                        min={3}
-                        max={20}
-                        step={0.5}
-                        onChange={(v) => set({ textOverlayPhraseInterval: v })}
-                      />
-                      <div className="flex items-center justify-between">
-                        <Label className="text-[11px]">All caps</Label>
-                        <Sw
-                          checked={s.textOverlayAllCaps}
-                          onCheckedChange={(v) => set({ textOverlayAllCaps: v })}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label className="text-[11px]">Scramble in/out</Label>
-                        <Sw
-                          checked={s.textOverlayScramble}
-                          onCheckedChange={(v) => set({ textOverlayScramble: v })}
-                        />
-                      </div>
-                      <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
-                        <Label className="text-[11px]">Phrase source</Label>
-                        <p className="mt-1 text-[10px] leading-relaxed text-white/60">
-                          {s.textOverlaySource === "public-domain"
-                            ? "Curated public-domain snippets are bundled locally with author, work, rights, and provenance metadata."
-                            : "BOFH phrases come from bofh.bombeck.io in small batches and may require network; the fallback list stays available offline."}
-                        </p>
-                        <p className="mt-1 text-[10px] leading-relaxed text-white/45">
-                          Current snippet attribution appears in Stats for nerds.
-                        </p>
-                      </div>
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Color grading"
-                      enabled={s.grading}
-                      onToggle={(v) => set({ grading: v })}
-                    >
-                      <S
-                        label="Exposure"
-                        value={s.exposure}
-                        min={0.3}
-                        max={2.5}
-                        step={0.05}
-                        onChange={(v) => set({ exposure: v })}
-                      />
-                      <S
-                        label="Contrast"
-                        value={s.contrast}
-                        min={0.5}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ contrast: v })}
-                      />
-                      <S
-                        label="Saturation"
-                        value={s.saturation}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ saturation: v })}
-                      />
-                      <S
-                        label="Hue"
-                        value={s.hue}
-                        min={-0.5}
-                        max={0.5}
-                        step={0.01}
-                        onChange={(v) => set({ hue: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Blueprint sobel"
-                      enabled={s.sobelMode}
-                      onToggle={(v) => set({ sobelMode: v })}
-                    >
-                      <S
-                        label="Edge strength"
-                        value={s.sobelStrength}
-                        min={0.25}
-                        max={4}
-                        step={0.05}
-                        onChange={(v) => set({ sobelStrength: v })}
-                      />
-                      <S
-                        label="Threshold"
-                        value={s.sobelThreshold}
-                        min={0.01}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ sobelThreshold: v })}
-                      />
-                      <S
-                        label="Fill mix"
-                        value={s.sobelFillMix}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        onChange={(v) => set({ sobelFillMix: v })}
-                      />
-                    </ToggleRow>
-                    <ToggleRow
-                      label="Asset overlay"
-                      enabled={s.assetOverlayFx}
-                      onToggle={(v) => set({ assetOverlayFx: v })}
-                    >
-                      <S
-                        label="Amount"
-                        value={s.assetOverlayAmount}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        onChange={(v) => set({ assetOverlayAmount: v })}
-                      />
-                      <S
-                        label="Scroll speed"
-                        value={s.assetOverlaySpeed}
-                        min={0.1}
-                        max={3}
-                        step={0.05}
-                        onChange={(v) => set({ assetOverlaySpeed: v })}
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        {(
-                          [
-                            ["mixed", "Mixed"],
-                            ["technical", "Technical"],
-                            ["organic", "Organic"],
-                            ["chaotic", "Chaotic"],
-                          ] as const
-                        ).map(([bias, label]) => (
-                          <Bn
-                            key={bias}
-                            active={s.assetOverlayBias === bias}
-                            variant={s.assetOverlayBias === bias ? "default" : "outline"}
-                            onClick={() => set({ assetOverlayBias: bias })}
-                          >
-                            {label}
-                          </Bn>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label className="text-[11px]">Add Wikimedia Commons</Label>
-                        <Sw
-                          checked={s.assetOverlayCommonsEnabled}
-                          onCheckedChange={(v) => set({ assetOverlayCommonsEnabled: v })}
-                        />
-                      </div>
-                      {s.assetOverlayCommonsEnabled && (
-                        <div className="grid grid-cols-3 gap-2">
-                          {(
-                            [
-                              ["abstract", "Abstract"],
-                              ["technical", "Technical"],
-                              ["organic", "Organic"],
-                            ] as const
-                          ).map(([topic, label]) => (
+                    </div>
+                    <Disclosure label={`Presets${s.activePreset ? ` · ${s.activePreset}` : ""}`}>
+                      <div className="grid grid-cols-1 gap-1.5 @[420px]:grid-cols-2 @[640px]:grid-cols-3">
+                        {Object.keys(PRESETS).map((name) => {
+                          const palette =
+                            PALETTES[PRESETS[name as keyof typeof PRESETS]?.paletteIndex ?? 0]
+                              ?.colors ?? [];
+                          return (
                             <Bn
-                              key={topic}
-                              active={s.assetOverlayCommonsTopic === topic}
-                              variant={s.assetOverlayCommonsTopic === topic ? "default" : "outline"}
-                              onClick={() => set({ assetOverlayCommonsTopic: topic })}
+                              key={name}
+                              active={s.activePreset === name}
+                              variant="default"
+                              className="justify-start"
+                              onClick={() =>
+                                settingsStore.applyPreset(name as keyof typeof PRESETS)
+                              }
                             >
-                              {label}
+                              <span className="mr-1.5 flex h-3 w-8 shrink-0 overflow-hidden rounded-sm border border-white/25">
+                                {palette.slice(0, 4).map((color, index) => (
+                                  <span
+                                    key={index}
+                                    className="h-full flex-1"
+                                    style={{ background: color }}
+                                  />
+                                ))}
+                              </span>
+                              <span className="truncate">{name}</span>
                             </Bn>
-                          ))}
-                        </div>
-                      )}
-                      <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
-                        <p className="text-[10px] leading-relaxed text-white/60">
-                          Pulls from a larger local SVG overlay pack and shuffles across distinct
-                          families: grids, scanlines, circuit, halftone, chevrons, rings, starburst,
-                          and more. Bias steers the picker toward cleaner technical, softer organic,
-                          or rougher chaotic combinations.
-                        </p>
-                        <p className="mt-1 text-[10px] leading-relaxed text-white/45">
-                          Wikimedia Commons is optional and only loads when enabled. Current asset
-                          attribution is shown in Stats for nerds.
-                        </p>
+                          );
+                        })}
                       </div>
-                    </ToggleRow>
+                    </Disclosure>
+                    <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                      Effects are grouped below — headers show how many are active. Pin an effect
+                      (📌 on its row) and Randomize will leave it exactly as you set it. Saved looks
+                      live in the Saves tab.
+                    </p>
+                    <div className="grid grid-cols-1 items-start gap-3 @[540px]:grid-cols-2">
+                      <FxSection
+                        id="glow"
+                        label="Glow · Colour · Tone"
+                        pinned={pinnedIn(["bloom", "chroma", "grain", "vignette", "grading"])}
+                        count={
+                          [s.bloom, s.chroma, s.grain, s.vignette, s.grading].filter(Boolean).length
+                        }
+                      >
+                        <ToggleRow
+                          lockId="bloom"
+                          label="Bloom"
+                          enabled={s.bloom}
+                          onToggle={(v) => set({ bloom: v })}
+                        >
+                          <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-2 py-2">
+                            <Label className="text-[11px] leading-snug">
+                              Extreme bloom
+                              <span className="mt-0.5 block font-mono text-[9px] uppercase tracking-wider text-white/35">
+                                Strength above {BLOOM_STRENGTH_MAX_NORMAL.toFixed(1)} (very bright)
+                              </span>
+                            </Label>
+                            <Sw
+                              checked={s.bloomExtreme}
+                              onCheckedChange={(on) => {
+                                if (on) set({ bloomExtreme: true });
+                                else {
+                                  set({
+                                    bloomExtreme: false,
+                                    bloomStrength: Math.min(
+                                      s.bloomStrength,
+                                      BLOOM_STRENGTH_MAX_NORMAL,
+                                    ),
+                                  });
+                                }
+                              }}
+                            />
+                          </div>
+                          <S
+                            label="Strength"
+                            value={s.bloomStrength}
+                            min={0}
+                            max={s.bloomExtreme ? 3 : BLOOM_STRENGTH_MAX_NORMAL}
+                            step={0.02}
+                            onChange={(v) =>
+                              set({
+                                bloomStrength: s.bloomExtreme
+                                  ? v
+                                  : Math.min(BLOOM_STRENGTH_MAX_NORMAL, v),
+                              })
+                            }
+                          />
+                          <S
+                            label="Radius"
+                            value={s.bloomRadius}
+                            min={0}
+                            max={1.5}
+                            step={0.05}
+                            onChange={(v) => set({ bloomRadius: v })}
+                          />
+                          <S
+                            label="Threshold"
+                            value={s.bloomThreshold}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ bloomThreshold: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="chroma"
+                          label="Chromatic aberration"
+                          enabled={s.chroma}
+                          onToggle={(v) => set({ chroma: v })}
+                        >
+                          <S
+                            label="Amount"
+                            value={s.chromaAmount}
+                            min={0}
+                            max={0.02}
+                            step={0.0005}
+                            onChange={(v) => set({ chromaAmount: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="grain"
+                          label="Film grain"
+                          enabled={s.grain}
+                          onToggle={(v) => set({ grain: v })}
+                        >
+                          <S
+                            label="Amount"
+                            value={s.grainAmount}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            onChange={(v) => set({ grainAmount: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="vignette"
+                          label="Vignette"
+                          enabled={s.vignette}
+                          onToggle={(v) => set({ vignette: v })}
+                        >
+                          <S
+                            label="Amount"
+                            value={s.vignetteAmount}
+                            min={0.5}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ vignetteAmount: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="grading"
+                          label="Color grading"
+                          enabled={s.grading}
+                          onToggle={(v) => set({ grading: v })}
+                        >
+                          <S
+                            label="Exposure"
+                            value={s.exposure}
+                            min={0.3}
+                            max={2.5}
+                            step={0.05}
+                            onChange={(v) => set({ exposure: v })}
+                          />
+                          <S
+                            label="Contrast"
+                            value={s.contrast}
+                            min={0.5}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ contrast: v })}
+                          />
+                          <S
+                            label="Saturation"
+                            value={s.saturation}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ saturation: v })}
+                          />
+                          <S
+                            label="Hue"
+                            value={s.hue}
+                            min={-0.5}
+                            max={0.5}
+                            step={0.01}
+                            onChange={(v) => set({ hue: v })}
+                          />
+                        </ToggleRow>
+                      </FxSection>
+                      <FxSection
+                        id="camera"
+                        label="Camera & Motion"
+                        pinned={pinnedIn([
+                          "dof",
+                          "motionTrails",
+                          "radialBlur",
+                          "tiltShift",
+                          "ssao",
+                        ])}
+                        count={
+                          [s.dof, s.motionTrails, s.radialBlur, s.tiltShift, s.ssao].filter(Boolean)
+                            .length
+                        }
+                      >
+                        <ToggleRow
+                          lockId="dof"
+                          label="Depth of field"
+                          enabled={s.dof}
+                          onToggle={(v) => set({ dof: v })}
+                        >
+                          <S
+                            label="Focus"
+                            value={s.dofFocus}
+                            min={1}
+                            max={20}
+                            step={0.1}
+                            onChange={(v) => set({ dofFocus: v })}
+                          />
+                          <S
+                            label="Aperture"
+                            value={s.dofAperture}
+                            min={0}
+                            max={0.005}
+                            step={0.0001}
+                            onChange={(v) => set({ dofAperture: v })}
+                          />
+                          <S
+                            label="Max blur"
+                            value={s.dofMaxBlur}
+                            min={0}
+                            max={0.05}
+                            step={0.001}
+                            onChange={(v) => set({ dofMaxBlur: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="motionTrails"
+                          label="Motion trails"
+                          enabled={s.motionTrails}
+                          onToggle={(v) => set({ motionTrails: v })}
+                        >
+                          <S
+                            label="Decay"
+                            value={s.trailDecay}
+                            min={0.75}
+                            max={0.99}
+                            step={0.005}
+                            onChange={(v) => set({ trailDecay: v })}
+                          />
+                          <S
+                            label="Inject"
+                            value={s.trailInject}
+                            min={0.5}
+                            max={2.25}
+                            step={0.05}
+                            onChange={(v) => set({ trailInject: v })}
+                          />
+                          <S
+                            label="Threshold"
+                            value={s.trailThreshold}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ trailThreshold: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="radialBlur"
+                          label="Radial blur"
+                          enabled={s.radialBlur}
+                          onToggle={(v) => set({ radialBlur: v })}
+                        >
+                          <S
+                            label="Base"
+                            value={s.radialBase}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ radialBase: v })}
+                          />
+                          <S
+                            label="Kick amount"
+                            value={s.radialKickAmount}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ radialKickAmount: v })}
+                          />
+                          <S
+                            label="Zoom"
+                            value={s.radialZoom}
+                            min={0.05}
+                            max={1.2}
+                            step={0.05}
+                            onChange={(v) => set({ radialZoom: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="tiltShift"
+                          label="Tilt-shift"
+                          enabled={s.tiltShift}
+                          onToggle={(v) => set({ tiltShift: v })}
+                        >
+                          <S
+                            label="Amount"
+                            value={s.tiltAmount}
+                            min={0}
+                            max={4}
+                            step={0.1}
+                            onChange={(v) => set({ tiltAmount: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="ssao"
+                          label="SSAO"
+                          enabled={s.ssao}
+                          onToggle={(v) => set({ ssao: v })}
+                        >
+                          <S
+                            label="Radius"
+                            value={s.ssaoRadius}
+                            min={2}
+                            max={14}
+                            step={0.5}
+                            onChange={(v) => set({ ssaoRadius: v })}
+                          />
+                          <S
+                            label="Distance"
+                            value={s.ssaoDistance}
+                            min={0.01}
+                            max={0.2}
+                            step={0.005}
+                            onChange={(v) => set({ ssaoDistance: v })}
+                          />
+                          <S
+                            label="Intensity"
+                            value={s.ssaoIntensity}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            onChange={(v) => set({ ssaoIntensity: v })}
+                          />
+                        </ToggleRow>
+                      </FxSection>
+                      <FxSection
+                        id="light"
+                        label="Light Rays & Flares"
+                        pinned={pinnedIn(["godRays", "lensFlare"])}
+                        count={[s.godRays, s.lensFlare].filter(Boolean).length}
+                      >
+                        <ToggleRow
+                          lockId="godRays"
+                          label="God rays"
+                          enabled={s.godRays}
+                          onToggle={(v) => set({ godRays: v })}
+                        >
+                          <S
+                            label="Amount"
+                            value={s.godRaysAmount}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ godRaysAmount: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="lensFlare"
+                          label="Lens flare"
+                          enabled={s.lensFlare}
+                          onToggle={(v) => set({ lensFlare: v })}
+                        >
+                          <S
+                            label="Amount"
+                            value={s.lensFlareAmount}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ lensFlareAmount: v })}
+                          />
+                        </ToggleRow>
+                      </FxSection>
+                      <FxSection
+                        id="geometry"
+                        label="Geometry & Stylize"
+                        pinned={pinnedIn(["kaleidoscope", "mirror", "pixelate", "sobel"])}
+                        count={
+                          [s.kaleidoscope, s.mirrorFx, s.pixelate, s.sobelMode].filter(Boolean)
+                            .length
+                        }
+                      >
+                        <ToggleRow
+                          lockId="kaleidoscope"
+                          label="Kaleidoscope"
+                          enabled={s.kaleidoscope}
+                          onToggle={(v) => set({ kaleidoscope: v })}
+                        >
+                          <S
+                            label="Sides"
+                            value={s.kaleidoscopeSides}
+                            min={2}
+                            max={24}
+                            step={1}
+                            onChange={(v) => set({ kaleidoscopeSides: Math.round(v) })}
+                          />
+                          <S
+                            label="Angle"
+                            value={s.kaleidoscopeAngle}
+                            min={-3.14}
+                            max={3.14}
+                            step={0.01}
+                            onChange={(v) => set({ kaleidoscopeAngle: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="mirror"
+                          label="Mirror"
+                          enabled={s.mirrorFx}
+                          onToggle={(v) => set({ mirrorFx: v })}
+                        >
+                          <div className="grid grid-cols-3 gap-2">
+                            {(
+                              [
+                                ["horizontal", "Horizontal"],
+                                ["vertical", "Vertical"],
+                                ["quad", "Quad"],
+                              ] as const
+                            ).map(([mode, label]) => (
+                              <Bn
+                                key={mode}
+                                active={s.mirrorMode === mode}
+                                variant={s.mirrorMode === mode ? "default" : "outline"}
+                                onClick={() => set({ mirrorMode: mode })}
+                              >
+                                {label}
+                              </Bn>
+                            ))}
+                          </div>
+                          <S
+                            label="Offset"
+                            value={s.mirrorOffset}
+                            min={-0.45}
+                            max={0.45}
+                            step={0.01}
+                            onChange={(v) => set({ mirrorOffset: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="pixelate"
+                          label="Pixelate"
+                          enabled={s.pixelate}
+                          onToggle={(v) => set({ pixelate: v })}
+                        >
+                          <S
+                            label="Pixel size"
+                            value={s.pixelSize}
+                            min={1}
+                            max={32}
+                            step={1}
+                            onChange={(v) => set({ pixelSize: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="sobel"
+                          label="Blueprint sobel"
+                          enabled={s.sobelMode}
+                          onToggle={(v) => set({ sobelMode: v })}
+                        >
+                          <S
+                            label="Edge strength"
+                            value={s.sobelStrength}
+                            min={0.25}
+                            max={4}
+                            step={0.05}
+                            onChange={(v) => set({ sobelStrength: v })}
+                          />
+                          <S
+                            label="Threshold"
+                            value={s.sobelThreshold}
+                            min={0.01}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ sobelThreshold: v })}
+                          />
+                          <S
+                            label="Fill mix"
+                            value={s.sobelFillMix}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ sobelFillMix: v })}
+                          />
+                        </ToggleRow>
+                      </FxSection>
+                      <FxSection
+                        id="retro"
+                        label="Retro Displays"
+                        pinned={pinnedIn(["retro", "ascii", "crt", "projectorFilm", "glitch"])}
+                        count={
+                          [s.retroFx, s.asciiFx, s.crtFx, s.projectorFilmFx, s.glitch].filter(
+                            Boolean,
+                          ).length
+                        }
+                      >
+                        <ToggleRow
+                          lockId="retro"
+                          label="Retro system"
+                          enabled={s.retroFx}
+                          onToggle={(v) => set({ retroFx: v })}
+                        >
+                          <div className="grid grid-cols-2 gap-2">
+                            {RETRO_SYSTEMS.map(({ id, label }) => (
+                              <Bn
+                                key={id}
+                                active={s.retroSystem === id}
+                                variant={s.retroSystem === id ? "default" : "outline"}
+                                onClick={() => set({ retroSystem: id })}
+                              >
+                                {label}
+                              </Bn>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {(
+                              [
+                                ["pixels", "Hi-res"],
+                                ["text", "Text font"],
+                                ["blocks", "Low-res blocks"],
+                              ] as const
+                            ).map(([mode, label]) => (
+                              <Bn
+                                key={mode}
+                                active={s.retroMode === mode}
+                                variant={s.retroMode === mode ? "default" : "outline"}
+                                onClick={() => set({ retroMode: mode })}
+                              >
+                                {label}
+                              </Bn>
+                            ))}
+                          </div>
+                          <S
+                            label="Dither"
+                            value={s.retroDither}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ retroDither: v })}
+                          />
+                          <Row label="Hardware border">
+                            <Sw
+                              checked={s.retroBorder}
+                              onCheckedChange={(v) => set({ retroBorder: v })}
+                            />
+                          </Row>
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="ascii"
+                          label="ASCII"
+                          enabled={s.asciiFx}
+                          onToggle={(v) => set({ asciiFx: v })}
+                        >
+                          <S
+                            label="Cell size"
+                            value={s.asciiCellSize}
+                            min={4}
+                            max={32}
+                            step={1}
+                            onChange={(v) => set({ asciiCellSize: Math.round(v) })}
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            {(
+                              [
+                                [true, "Colour"],
+                                [false, "Mono"],
+                              ] as const
+                            ).map(([colored, label]) => (
+                              <Bn
+                                key={label}
+                                active={s.asciiColored === colored}
+                                variant={s.asciiColored === colored ? "default" : "outline"}
+                                onClick={() => set({ asciiColored: colored })}
+                              >
+                                {label}
+                              </Bn>
+                            ))}
+                          </div>
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="crt"
+                          label="CRT"
+                          enabled={s.crtFx}
+                          onToggle={(v) => set({ crtFx: v })}
+                        >
+                          <S
+                            label="Scanlines"
+                            value={s.crtScanlineIntensity}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ crtScanlineIntensity: v })}
+                          />
+                          <S
+                            label="Curvature"
+                            value={s.crtCurvature}
+                            min={0}
+                            max={0.1}
+                            step={0.01}
+                            onChange={(v) => set({ crtCurvature: v })}
+                          />
+                          <S
+                            label="Vignette"
+                            value={s.crtVignette}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ crtVignette: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="projectorFilm"
+                          label="Projector film"
+                          enabled={s.projectorFilmFx}
+                          onToggle={(v) => set({ projectorFilmFx: v })}
+                        >
+                          <S
+                            label="Artifact amount"
+                            value={s.projectorFilmAmount}
+                            min={0}
+                            max={1.5}
+                            step={0.01}
+                            onChange={(v) => set({ projectorFilmAmount: v })}
+                          />
+                          <S
+                            label="Frame jitter"
+                            value={s.projectorFilmJitter}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ projectorFilmJitter: v })}
+                          />
+                          <S
+                            label="Lamp flicker"
+                            value={s.projectorFilmFlicker}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={(v) => set({ projectorFilmFlicker: v })}
+                          />
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="glitch"
+                          label="Glitch"
+                          enabled={s.glitch}
+                          onToggle={(v) => set({ glitch: v })}
+                        >
+                          <S
+                            label="Intensity"
+                            value={s.glitchIntensity}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            onChange={(v) => set({ glitchIntensity: v })}
+                          />
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">Wild mode</Label>
+                            <Sw
+                              checked={s.glitchWild}
+                              onCheckedChange={(v) => set({ glitchWild: v })}
+                            />
+                          </div>
+                        </ToggleRow>
+                      </FxSection>
+                      <FxSection
+                        id="overlays"
+                        label="Overlays"
+                        pinned={pinnedIn(["assetOverlay", "textOverlay"])}
+                        count={[s.assetOverlayFx, s.textOverlayEnabled].filter(Boolean).length}
+                      >
+                        <ToggleRow
+                          lockId="assetOverlay"
+                          label="Asset overlay"
+                          enabled={s.assetOverlayFx}
+                          onToggle={(v) => set({ assetOverlayFx: v })}
+                        >
+                          <S
+                            label="Amount"
+                            value={s.assetOverlayAmount}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ assetOverlayAmount: v })}
+                          />
+                          <S
+                            label="Scroll speed"
+                            value={s.assetOverlaySpeed}
+                            min={0.1}
+                            max={3}
+                            step={0.05}
+                            onChange={(v) => set({ assetOverlaySpeed: v })}
+                          />
+                          <Label className="text-[11px] text-white/60">Local pack bias</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(
+                              [
+                                ["mixed", "Mixed"],
+                                ["technical", "Technical"],
+                                ["organic", "Organic"],
+                                ["chaotic", "Chaotic"],
+                              ] as const
+                            ).map(([bias, label]) => (
+                              <Bn
+                                key={bias}
+                                active={s.assetOverlayBias === bias}
+                                variant={s.assetOverlayBias === bias ? "default" : "outline"}
+                                onClick={() => set({ assetOverlayBias: bias })}
+                              >
+                                {label}
+                              </Bn>
+                            ))}
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px]">Add Wikimedia Commons</Label>
+                            <Sw
+                              checked={s.assetOverlayCommonsEnabled}
+                              onCheckedChange={(v) => set({ assetOverlayCommonsEnabled: v })}
+                            />
+                          </div>
+                          {s.assetOverlayCommonsEnabled && (
+                            <Label className="text-[11px] text-white/60">
+                              Commons search topic
+                            </Label>
+                          )}
+                          {s.assetOverlayCommonsEnabled && (
+                            <div className="grid grid-cols-3 gap-2">
+                              {(
+                                [
+                                  ["abstract", "Abstract"],
+                                  ["technical", "Technical"],
+                                  ["organic", "Organic"],
+                                ] as const
+                              ).map(([topic, label]) => (
+                                <Bn
+                                  key={topic}
+                                  active={s.assetOverlayCommonsTopic === topic}
+                                  variant={
+                                    s.assetOverlayCommonsTopic === topic ? "default" : "outline"
+                                  }
+                                  onClick={() => set({ assetOverlayCommonsTopic: topic })}
+                                >
+                                  {label}
+                                </Bn>
+                              ))}
+                            </div>
+                          )}
+                          <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+                            <p className="text-[10px] leading-relaxed text-white/60">
+                              Pulls from a larger local SVG overlay pack and shuffles across
+                              distinct families: grids, scanlines, circuit, halftone, chevrons,
+                              rings, starburst, and more. Bias steers the picker toward cleaner
+                              technical, softer organic, or rougher chaotic combinations.
+                            </p>
+                            <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+                              Wikimedia Commons is optional and only loads when enabled. Current
+                              asset attribution is shown in Stats for nerds.
+                            </p>
+                          </div>
+                        </ToggleRow>
+                        <ToggleRow
+                          lockId="textOverlay"
+                          label="Demo-scene text overlay"
+                          enabled={s.textOverlayEnabled}
+                          onToggle={(v) => set({ textOverlayEnabled: v })}
+                        >
+                          <div className="grid grid-cols-2 gap-2">
+                            {(
+                              [
+                                ["public-domain", "Public Domain"],
+                                ["bofh", "BOFH API"],
+                              ] as const
+                            ).map(([source, label]) => (
+                              <Bn
+                                key={source}
+                                active={s.textOverlaySource === source}
+                                variant={s.textOverlaySource === source ? "default" : "outline"}
+                                onClick={() => set({ textOverlaySource: source })}
+                              >
+                                {label}
+                              </Bn>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(
+                              [
+                                ["bounce", "Bounce"],
+                                ["scroller", "Scroller"],
+                                ["stack", "Stack"],
+                                ["orbit", "Orbit"],
+                              ] as const
+                            ).map(([style, label]) => (
+                              <Bn
+                                key={style}
+                                active={s.textOverlayStyle === style}
+                                variant={s.textOverlayStyle === style ? "default" : "outline"}
+                                onClick={() => set({ textOverlayStyle: style })}
+                              >
+                                {label}
+                              </Bn>
+                            ))}
+                          </div>
+                          <S
+                            label="Intensity"
+                            value={s.textOverlayIntensity}
+                            min={0}
+                            max={2}
+                            step={0.05}
+                            onChange={(v) => set({ textOverlayIntensity: v })}
+                          />
+                          <S
+                            label="Phrase interval (sec)"
+                            value={s.textOverlayPhraseInterval}
+                            min={3}
+                            max={20}
+                            step={0.5}
+                            onChange={(v) => set({ textOverlayPhraseInterval: v })}
+                          />
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px]">All caps</Label>
+                            <Sw
+                              checked={s.textOverlayAllCaps}
+                              onCheckedChange={(v) => set({ textOverlayAllCaps: v })}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px]">Scramble in/out</Label>
+                            <Sw
+                              checked={s.textOverlayScramble}
+                              onCheckedChange={(v) => set({ textOverlayScramble: v })}
+                            />
+                          </div>
+                          <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+                            <Label className="text-[11px]">Phrase source</Label>
+                            <p className="mt-1 text-[10px] leading-relaxed text-white/60">
+                              {s.textOverlaySource === "public-domain"
+                                ? "Curated public-domain snippets are bundled locally with author, work, rights, and provenance metadata."
+                                : "BOFH phrases come from bofh.bombeck.io in small batches and may require network; the fallback list stays available offline."}
+                            </p>
+                            <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+                              Current snippet attribution appears in Stats for nerds.
+                            </p>
+                          </div>
+                        </ToggleRow>
+                      </FxSection>
+                    </div>
+                    <Disclosure label="Pipeline order">
+                      <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+                        Passes run top to bottom; the scene render, SSAO, and motion trails always
+                        run first. Order changes the look — try CRT after Retro system for scanlines
+                        over the emulated screen, or Bloom after Pixelate for a glow per fat pixel.
+                      </p>
+                      <div className="space-y-1">
+                        {s.fxPipelineOrder.map((id, index) => {
+                          const label = FX_PIPELINE.find((pass) => pass.id === id)?.label ?? id;
+                          const enabled = FX_PASS_ENABLED_FLAGS[id]
+                            ? Boolean(s[FX_PASS_ENABLED_FLAGS[id] as keyof Settings])
+                            : true;
+                          const move = (delta: -1 | 1) => {
+                            const next = [...s.fxPipelineOrder];
+                            const target = index + delta;
+                            if (target < 0 || target >= next.length) return;
+                            [next[index], next[target]] = [next[target]!, next[index]!];
+                            set({ fxPipelineOrder: next });
+                          };
+                          return (
+                            <div
+                              key={id}
+                              className="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-white/[0.02] px-2 py-1"
+                            >
+                              <span className="flex items-center gap-2 text-[11px]">
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${
+                                    enabled
+                                      ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                                      : "bg-white/20"
+                                  }`}
+                                />
+                                {label}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Bn
+                                  variant="ghost"
+                                  aria-label={`Move ${label} earlier`}
+                                  disabled={index === 0}
+                                  onClick={() => move(-1)}
+                                >
+                                  ↑
+                                </Bn>
+                                <Bn
+                                  variant="ghost"
+                                  aria-label={`Move ${label} later`}
+                                  disabled={index === s.fxPipelineOrder.length - 1}
+                                  onClick={() => move(1)}
+                                >
+                                  ↓
+                                </Bn>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <Bn
+                        variant="outline"
+                        onClick={() => set({ fxPipelineOrder: [...DEFAULT_FX_PIPELINE_ORDER] })}
+                      >
+                        Reset order
+                      </Bn>
+                    </Disclosure>
                   </div>
                 )}
 

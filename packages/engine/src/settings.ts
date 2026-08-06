@@ -13,6 +13,133 @@ export const WIKICHROMA_ACTOR_PACKS = ["soldier", "robot", "fox"] as const;
 export type WikichromaActorPack = (typeof WIKICHROMA_ACTOR_PACKS)[number];
 export const DEFAULT_WIKICHROMA_ACTOR_PACKS: WikichromaActorPack[] = ["soldier"];
 
+/** Machines the retro-system post-FX can emulate. Order drives the shader's
+ * numeric mode uniform — see RetroSystemShader in shaders.ts. */
+export const RETRO_SYSTEMS = [
+  { id: "zx", label: "ZX Spectrum" },
+  { id: "c64", label: "Commodore 64" },
+  { id: "gameboy", label: "Game Boy" },
+  { id: "nes", label: "NES" },
+  { id: "cga", label: "CGA PC" },
+  { id: "cpc", label: "Amstrad CPC" },
+  { id: "amiga", label: "Amiga 500" },
+  { id: "dos", label: "MS-DOS EGA" },
+  { id: "vga", label: "VGA 256" },
+  { id: "hercules", label: "Hercules Mono" },
+  { id: "apple2", label: "Apple II" },
+] as const;
+export type RetroSystem = (typeof RETRO_SYSTEMS)[number]["id"];
+export const RETRO_DISPLAY_MODES = ["pixels", "text", "blocks"] as const;
+export type RetroDisplayMode = (typeof RETRO_DISPLAY_MODES)[number];
+
+/** Post-FX effect groups the user can lock against Randomize: a locked
+ * group's keys are stripped from the randomize patch so the effect keeps its
+ * exact current state. Ids double as the lock buttons' identity in the panel. */
+export const FX_RANDOMIZE_GROUPS = [
+  {
+    id: "bloom",
+    keys: ["bloom", "bloomExtreme", "bloomStrength", "bloomRadius", "bloomThreshold"],
+  },
+  { id: "godRays", keys: ["godRays", "godRaysAmount"] },
+  { id: "lensFlare", keys: ["lensFlare", "lensFlareAmount"] },
+  { id: "chroma", keys: ["chroma", "chromaAmount"] },
+  { id: "grading", keys: ["grading", "exposure", "contrast", "saturation", "hue"] },
+  { id: "vignette", keys: ["vignette", "vignetteAmount"] },
+  { id: "grain", keys: ["grain", "grainAmount"] },
+  { id: "dof", keys: ["dof", "dofFocus", "dofAperture", "dofMaxBlur"] },
+  { id: "motionTrails", keys: ["motionTrails", "trailDecay", "trailInject", "trailThreshold"] },
+  { id: "radialBlur", keys: ["radialBlur", "radialBase", "radialKickAmount", "radialZoom"] },
+  { id: "tiltShift", keys: ["tiltShift", "tiltAmount"] },
+  { id: "ssao", keys: ["ssao", "ssaoRadius", "ssaoDistance", "ssaoIntensity"] },
+  { id: "kaleidoscope", keys: ["kaleidoscope", "kaleidoscopeSides", "kaleidoscopeAngle"] },
+  { id: "mirror", keys: ["mirrorFx", "mirrorMode", "mirrorOffset"] },
+  { id: "pixelate", keys: ["pixelate", "pixelSize"] },
+  { id: "sobel", keys: ["sobelMode", "sobelStrength", "sobelThreshold", "sobelFillMix"] },
+  { id: "glitch", keys: ["glitch", "glitchWild", "glitchIntensity"] },
+  { id: "crt", keys: ["crtFx", "crtScanlineIntensity", "crtCurvature", "crtVignette"] },
+  {
+    id: "projectorFilm",
+    keys: ["projectorFilmFx", "projectorFilmAmount", "projectorFilmJitter", "projectorFilmFlicker"],
+  },
+  { id: "retro", keys: ["retroFx", "retroSystem", "retroMode", "retroDither", "retroBorder"] },
+  { id: "ascii", keys: ["asciiFx", "asciiCellSize", "asciiColored"] },
+  {
+    id: "assetOverlay",
+    keys: ["assetOverlayFx", "assetOverlayAmount", "assetOverlaySpeed", "assetOverlayBias"],
+  },
+  {
+    id: "textOverlay",
+    keys: [
+      "textOverlayStyle",
+      "textOverlayIntensity",
+      "textOverlayPhraseInterval",
+      "textOverlayAllCaps",
+      "textOverlayScramble",
+    ],
+  },
+] as const;
+export type FxLockId = (typeof FX_RANDOMIZE_GROUPS)[number]["id"];
+
+/** User-reorderable post-FX pipeline. Order matters creatively (CRT after
+ * Retro puts scanlines over the emulated screen; bloom after pixelate glows
+ * per fat pixel). The scene render, SSAO, and motion trails stay pinned at
+ * the head — they need scene/depth data — everything here can move. The
+ * default order matches the Composer's classic construction order. */
+export const FX_PIPELINE = [
+  { id: "bloom", label: "Bloom" },
+  { id: "godRays", label: "God rays" },
+  { id: "lensFlare", label: "Lens flare" },
+  { id: "assetOverlay", label: "Asset overlay" },
+  { id: "dof", label: "Depth of field" },
+  { id: "chroma", label: "Chromatic aberration" },
+  { id: "tiltShift", label: "Tilt-shift" },
+  { id: "kaleidoscope", label: "Kaleidoscope" },
+  { id: "mirror", label: "Mirror" },
+  { id: "crt", label: "CRT" },
+  { id: "projectorFilm", label: "Projector film" },
+  { id: "radialBlur", label: "Radial blur" },
+  { id: "pixelate", label: "Pixelate" },
+  { id: "grain", label: "Film grain" },
+  { id: "glitch", label: "Glitch" },
+  { id: "grading", label: "Colour grading" },
+  { id: "sobel", label: "Blueprint sobel" },
+  { id: "vignette", label: "Vignette" },
+  { id: "smaa", label: "Anti-aliasing (SMAA)" },
+  { id: "retro", label: "Retro system" },
+  { id: "ascii", label: "ASCII" },
+] as const;
+export type FxPassId = (typeof FX_PIPELINE)[number]["id"];
+export const DEFAULT_FX_PIPELINE_ORDER: FxPassId[] = FX_PIPELINE.map((pass) => pass.id);
+
+/** Canonicalizes a stored order: unknown ids dropped, duplicates removed,
+ * missing passes appended in default order. Shared by the app store's
+ * normalization and the Composer's defensive re-check. */
+export function normalizeFxPipelineOrder(order: unknown): FxPassId[] {
+  const input = Array.isArray(order) ? order : [];
+  const valid: FxPassId[] = [];
+  for (const id of input) {
+    if (DEFAULT_FX_PIPELINE_ORDER.includes(id as FxPassId) && !valid.includes(id as FxPassId)) {
+      valid.push(id as FxPassId);
+    }
+  }
+  for (const id of DEFAULT_FX_PIPELINE_ORDER) {
+    if (!valid.includes(id)) valid.push(id);
+  }
+  return valid;
+}
+
+/** The whole-frame "statement" effects randomize keeps mutually exclusive.
+ * Maps lock-group id → the group's enable flag. */
+export const FX_STATEMENT_FLAGS = {
+  kaleidoscope: "kaleidoscope",
+  mirror: "mirrorFx",
+  pixelate: "pixelate",
+  sobel: "sobelMode",
+  glitch: "glitch",
+  ascii: "asciiFx",
+  retro: "retroFx",
+} as const satisfies Partial<Record<FxLockId, keyof Settings>>;
+
 export type Settings = {
   // view
   view: ViewMode;
@@ -250,6 +377,20 @@ export type Settings = {
   asciiFx: boolean;
   asciiCellSize: number; // glyph cell size in pixels
   asciiColored: boolean; // true = glyphs keep source colour, false = mono phosphor tint
+  /** Retro system filter — re-renders the composited frame under a classic
+   * machine's video limits: native resolution, fixed palette, and (ZX/C64)
+   * per-cell attribute limits so colours genuinely clash. Runs right before
+   * the ASCII pass, after every other effect. */
+  retroFx: boolean;
+  retroSystem: RetroSystem;
+  retroMode: RetroDisplayMode; // "pixels" = hi-res framebuffer, "text" = system-font glyphs, "blocks" = low-res block graphics
+  retroDither: number; // 0..1 ordered-dither strength
+  retroBorder: boolean; // letterbox into the machine's display aspect with a hardware border
+
+  /** Post-FX groups pinned against Randomize (see FX_RANDOMIZE_GROUPS). */
+  fxLocks: FxLockId[];
+  /** User-chosen pass order for the movable post-FX pipeline (FX_PIPELINE). */
+  fxPipelineOrder: FxPassId[];
   grading: boolean;
   exposure: number;
   contrast: number;
@@ -333,6 +474,14 @@ export const PALETTES: Array<{ name: string; colors: [string, string, string] }>
   // persisted in saves, so existing indices must stay stable.
   { name: "Vaporwave", colors: ["#ff71ce", "#01cdfe", "#05ffa1"] },
   { name: "Outrun Sunset", colors: ["#f62e97", "#ffb845", "#712275"] },
+  // Retro machine palettes — drawn from each system's real colour set so the
+  // scene itself can run in hardware colours (pairs nicely with the retro
+  // post-FX, which then quantizes losslessly). Append-only, as above.
+  { name: "ZX Spectrum", colors: ["#00ffff", "#ff00ff", "#ffff00"] },
+  { name: "Commodore 64", colors: ["#6c5eb5", "#9ad284", "#b8c76f"] },
+  { name: "Game Boy", colors: ["#9bbc0f", "#8bac0f", "#306230"] },
+  { name: "NES", colors: ["#3cbcfc", "#f83800", "#b8f818"] },
+  { name: "CGA", colors: ["#55ffff", "#ff55ff", "#ffffff"] },
 ];
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -530,6 +679,13 @@ export const DEFAULT_SETTINGS: Settings = {
   asciiFx: false,
   asciiCellSize: 10,
   asciiColored: true,
+  retroFx: false,
+  retroSystem: "zx",
+  retroMode: "pixels",
+  retroDither: 0.55,
+  retroBorder: true,
+  fxLocks: [],
+  fxPipelineOrder: DEFAULT_FX_PIPELINE_ORDER,
   grading: true,
   exposure: 1.05,
   contrast: 1.1,
@@ -704,6 +860,66 @@ export const PRESETS: Record<string, Partial<Settings>> = {
     exposure: 0.98,
     contrast: 1.13,
     saturation: 0.92,
+    hue: 0,
+    pixelate: false,
+    dof: false,
+  },
+  "Spectrum Clash": {
+    paletteIndex: 0,
+    bloom: true,
+    bloomStrength: 0.12,
+    bloomRadius: 0.4,
+    bloomThreshold: 0.3,
+    chroma: false,
+    grain: false,
+    vignette: false,
+    crtFx: true,
+    crtScanlineIntensity: 0.3,
+    crtCurvature: 0.06,
+    crtVignette: 0.3,
+    projectorFilmFx: false,
+    retroFx: true,
+    retroSystem: "zx",
+    retroMode: "pixels",
+    retroDither: 0.6,
+    retroBorder: true,
+    asciiFx: false,
+    mirrorFx: false,
+    kaleidoscope: false,
+    grading: true,
+    exposure: 1.05,
+    contrast: 1.18,
+    saturation: 1.35,
+    hue: 0,
+    pixelate: false,
+    dof: false,
+  },
+  "PETSCII Terminal": {
+    paletteIndex: 1,
+    bloom: true,
+    bloomStrength: 0.1,
+    bloomRadius: 0.35,
+    bloomThreshold: 0.35,
+    chroma: false,
+    grain: false,
+    vignette: false,
+    crtFx: true,
+    crtScanlineIntensity: 0.42,
+    crtCurvature: 0.08,
+    crtVignette: 0.4,
+    projectorFilmFx: false,
+    retroFx: true,
+    retroSystem: "c64",
+    retroMode: "text",
+    retroDither: 0.5,
+    retroBorder: true,
+    asciiFx: false,
+    mirrorFx: false,
+    kaleidoscope: false,
+    grading: true,
+    exposure: 1.02,
+    contrast: 1.15,
+    saturation: 1.2,
     hue: 0,
     pixelate: false,
     dof: false,

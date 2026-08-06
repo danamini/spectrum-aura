@@ -9,6 +9,12 @@ import {
   WIKICHROMA_ACTOR_PACKS,
   DEFAULT_SETTINGS,
   PRESETS,
+  RETRO_SYSTEMS,
+  RETRO_DISPLAY_MODES,
+  FX_RANDOMIZE_GROUPS,
+  FX_STATEMENT_FLAGS,
+  normalizeFxPipelineOrder,
+  type FxLockId,
   type Settings,
   type WikichromaActorPack,
 } from "@spectrum-aura/engine/settings";
@@ -27,8 +33,18 @@ export {
   WIKICHROMA_ACTOR_PACKS,
   DEFAULT_SETTINGS,
   PRESETS,
+  RETRO_SYSTEMS,
+  RETRO_DISPLAY_MODES,
+  FX_RANDOMIZE_GROUPS,
+  FX_PIPELINE,
+  DEFAULT_FX_PIPELINE_ORDER,
 } from "@spectrum-aura/engine/settings";
-export type { Settings, WikichromaActorPack } from "@spectrum-aura/engine/settings";
+export type {
+  FxLockId,
+  FxPassId,
+  Settings,
+  WikichromaActorPack,
+} from "@spectrum-aura/engine/settings";
 
 const RANDOM_BG_COLORS = [
   "#05060a",
@@ -182,6 +198,19 @@ function normalizePostFxRanges(settings: Settings): Settings {
     projectorFilmJitter: Math.max(0, Math.min(1, settings.projectorFilmJitter)),
     projectorFilmFlicker: Math.max(0, Math.min(1, settings.projectorFilmFlicker)),
     asciiCellSize: Math.max(4, Math.min(32, Math.round(settings.asciiCellSize))),
+    retroSystem: RETRO_SYSTEMS.some((sys) => sys.id === settings.retroSystem)
+      ? settings.retroSystem
+      : "zx",
+    retroMode: RETRO_DISPLAY_MODES.includes(settings.retroMode) ? settings.retroMode : "pixels",
+    retroDither: Math.max(0, Math.min(1, settings.retroDither)),
+    fxLocks: Array.isArray(settings.fxLocks)
+      ? [
+          ...new Set(
+            settings.fxLocks.filter((id) => FX_RANDOMIZE_GROUPS.some((group) => group.id === id)),
+          ),
+        ]
+      : [],
+    fxPipelineOrder: normalizeFxPipelineOrder(settings.fxPipelineOrder),
     sobelStrength: Math.max(0.25, Math.min(4, settings.sobelStrength)),
     sobelThreshold: Math.max(0.01, Math.min(1, settings.sobelThreshold)),
     sobelFillMix: Math.max(0, Math.min(1, settings.sobelFillMix)),
@@ -412,7 +441,8 @@ export const settingsStore = {
       pixelate: statementDraw >= 0.17 && statementDraw < 0.24,
       sobelMode: statementDraw >= 0.24 && statementDraw < 0.31,
       glitch: statementDraw >= 0.31 && statementDraw < 0.43,
-      ascii: statementDraw >= 0.43 && statementDraw < 0.5,
+      ascii: statementDraw >= 0.43 && statementDraw < 0.47,
+      retro: statementDraw >= 0.47 && statementDraw < 0.5,
     };
     const postFxPatch: Partial<Settings> = {
       bloom: true,
@@ -470,6 +500,11 @@ export const settingsStore = {
       asciiFx: statementFx.ascii,
       asciiCellSize: Math.round(r(7, 16)),
       asciiColored: b(0.6),
+      retroFx: statementFx.retro,
+      retroSystem: pick(RETRO_SYSTEMS).id,
+      retroMode: pick(RETRO_DISPLAY_MODES),
+      retroDither: rb(0.3, 0.9),
+      retroBorder: b(0.6),
       grading: true,
       exposure,
       contrast: rb(0.95, 1.35),
@@ -655,6 +690,26 @@ export const settingsStore = {
           stagelightsLasers: b(0.35),
         }
       : {};
+
+    // Locked FX groups keep their exact current state: strip their keys from
+    // the roll. If a locked statement effect is currently on, suppress the
+    // whole statement roll too — otherwise randomize could stack a second
+    // whole-frame effect on top of the pinned one.
+    const lockedKeys = new Set<string>();
+    for (const group of FX_RANDOMIZE_GROUPS) {
+      if (state.fxLocks.includes(group.id)) group.keys.forEach((key) => lockedKeys.add(key));
+    }
+    const lockedStatementOn = (
+      Object.entries(FX_STATEMENT_FLAGS) as [FxLockId, keyof Settings][]
+    ).some(([groupId, flag]) => state.fxLocks.includes(groupId) && Boolean(state[flag]));
+    if (lockedStatementOn) {
+      for (const flag of Object.values(FX_STATEMENT_FLAGS)) {
+        (postFxPatch as Record<string, unknown>)[flag] = false;
+      }
+    }
+    for (const key of lockedKeys) {
+      delete (postFxPatch as Record<string, unknown>)[key];
+    }
 
     state = normalizeSettings({
       ...state,
