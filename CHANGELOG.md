@@ -58,6 +58,11 @@ presets) may change between minor versions.
   glow.
 - Escape closes panels progressively: pop-out or flyout first, then the
   controls drawer.
+- **2D drawing pack switch** on the Asset overlay: the bundled drawn assets
+  (grids, circuit, halftone…) can sit out of the rotation — independent of
+  the bias and Commons controls — leaving subtle generated line-art (and any
+  Commons imagery) when the bold 2D art would overwhelm a scene. Randomize
+  preserves the choice.
 
 ### Changed
 

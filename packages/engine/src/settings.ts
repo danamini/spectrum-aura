@@ -65,7 +65,13 @@ export const FX_RANDOMIZE_GROUPS = [
   { id: "ascii", keys: ["asciiFx", "asciiCellSize", "asciiColored"] },
   {
     id: "assetOverlay",
-    keys: ["assetOverlayFx", "assetOverlayAmount", "assetOverlaySpeed", "assetOverlayBias"],
+    keys: [
+      "assetOverlayFx",
+      "assetOverlayAmount",
+      "assetOverlaySpeed",
+      "assetOverlayBias",
+      "assetOverlayLocalPack",
+    ],
   },
   {
     id: "textOverlay",
@@ -404,6 +410,11 @@ export type Settings = {
   assetOverlayAmount: number;
   assetOverlaySpeed: number;
   assetOverlayBias: "mixed" | "technical" | "organic" | "chaotic";
+  /** Whether the bundled 2D drawing pack (grids, scanlines, circuit,
+   * halftone…) joins the overlay rotation. Off leaves the subtle generated
+   * line-art (and any opted-in Commons imagery) — the drawn assets look
+   * great but can overwhelm a scene. */
+  assetOverlayLocalPack: boolean;
   assetOverlayCommonsEnabled: boolean;
   assetOverlayCommonsTopic: OverlayCommonsTopic;
 
@@ -705,6 +716,7 @@ export const DEFAULT_SETTINGS: Settings = {
   assetOverlayAmount: 0.6,
   assetOverlaySpeed: 1,
   assetOverlayBias: "mixed",
+  assetOverlayLocalPack: true,
   assetOverlayCommonsEnabled: false,
   assetOverlayCommonsTopic: "abstract",
 

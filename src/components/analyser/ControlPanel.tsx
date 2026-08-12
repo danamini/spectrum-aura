@@ -1518,6 +1518,18 @@ export function ControlPanel() {
                             step={0.05}
                             onChange={(v) => set({ assetOverlaySpeed: v })}
                           />
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px] leading-snug">
+                              2D drawing pack
+                              <span className="mt-0.5 block font-mono text-[9px] uppercase tracking-wider text-white/35">
+                                bold drawn assets — off = subtle line-art only
+                              </span>
+                            </Label>
+                            <Sw
+                              checked={s.assetOverlayLocalPack}
+                              onCheckedChange={(v) => set({ assetOverlayLocalPack: v })}
+                            />
+                          </div>
                           <Label className="text-[11px] text-white/60">Local pack bias</Label>
                           <div className="grid grid-cols-2 gap-2">
                             {(

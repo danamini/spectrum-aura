@@ -198,6 +198,7 @@ export class Composer {
   private retroFxTime = 0;
   private glitchDutyFrame = 0;
   private appliedPipelineKey = "";
+  private assetOverlayLocalPackEnabled = true;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -699,6 +700,13 @@ export class Composer {
     this.lensFlare.uniforms.amount.value = s.lensFlareAmount;
 
     this.assetOverlay.enabled = s.assetOverlayFx;
+    if (s.assetOverlayLocalPack !== this.assetOverlayLocalPackEnabled) {
+      // Flip takes effect immediately: reset to the generated trio instead
+      // of letting an excluded (or newly re-allowed) texture linger on
+      // screen until the next timed switch.
+      this.assetOverlayLocalPackEnabled = s.assetOverlayLocalPack;
+      this.resetAssetOverlaySlots();
+    }
     this.assetOverlayTime += 0.016 * s.assetOverlaySpeed * (0.7 + centroid * 1.2);
     this.assetOverlay.uniforms.time.value = this.assetOverlayTime;
     if (this.assetOverlayPool.length >= 3) {
@@ -754,6 +762,9 @@ export class Composer {
           [strideA, strideB, strideC],
           s.assetOverlayBias,
           this.assetOverlayMeta.map((entry) => entry.kind === "commons"),
+          // The drawn 2D pack sits out while its toggle is off; generated
+          // line-art and Commons imagery keep rotating.
+          this.assetOverlayMeta.map((entry) => entry.kind === "local" && !s.assetOverlayLocalPack),
         );
         this.setAssetOverlaySlots(this.assetOverlayNextSlots, "next");
         this.assetOverlayTransition = 0;

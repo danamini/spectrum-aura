@@ -236,6 +236,7 @@ function normalizePostFxRanges(settings: Settings): Settings {
     )
       ? settings.assetOverlayBias
       : "mixed",
+    assetOverlayLocalPack: Boolean(settings.assetOverlayLocalPack),
     assetOverlayCommonsEnabled: Boolean(settings.assetOverlayCommonsEnabled),
     assetOverlayCommonsTopic: (["abstract", "technical", "organic"] as const).includes(
       settings.assetOverlayCommonsTopic,
@@ -545,6 +546,9 @@ export const settingsStore = {
       assetOverlayAmount: rb(0.12, 1.2),
       assetOverlaySpeed: r(0.3, 2.4),
       assetOverlayBias: pick(["mixed", "technical", "organic", "chaotic"] as const),
+      // Which overlay sources participate is a structural choice, not a
+      // flavour to shuffle — randomize keeps the user's source mix.
+      assetOverlayLocalPack: state.assetOverlayLocalPack,
       // Network opt-ins are preserved, never toggled, by randomize: a stray R
       // keypress must neither enable a network feature nor revoke an explicit
       // opt-in (same rule as textOverlayEnabled below).

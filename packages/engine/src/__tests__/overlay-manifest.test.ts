@@ -72,6 +72,33 @@ describe("pickDistinctOverlaySlots", () => {
     expect([5, 6, 7].some((commonsIndex) => seen.has(commonsIndex))).toBe(true);
   });
 
+  it("never rotates blocked entries in while unblocked alternatives exist", () => {
+    // Local 2D pack entries (indices 3..6) are blocked — e.g. the "2D
+    // drawing pack" toggle is off — so many rounds of switching must only
+    // ever pick the generated trio (0..2) and Commons tail (7).
+    const families = [
+      "generated-grid",
+      "generated-radial",
+      "generated-diagonal",
+      "grid",
+      "halftone",
+      "circuit",
+      "rings",
+      "wave",
+    ];
+    const blocked = [false, false, false, true, true, true, true, false];
+    const eligible = [false, false, false, false, false, false, false, true];
+
+    const seen = new Set<number>();
+    let slots: [number, number, number] = [0, 1, 2];
+    for (let round = 0; round < 10; round += 1) {
+      slots = pickDistinctOverlaySlots(slots, families, [1, 2, 3], "mixed", eligible, blocked);
+      slots.forEach((index) => seen.add(index));
+    }
+
+    expect([3, 4, 5, 6].every((blockedIndex) => !seen.has(blockedIndex))).toBe(true);
+  });
+
   it("avoids reusing the same slot when alternatives exist", () => {
     const next = pickDistinctOverlaySlots(
       [0, 1, 2],

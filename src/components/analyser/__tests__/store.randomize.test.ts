@@ -161,6 +161,18 @@ describe("settingsStore randomize", () => {
     spy.mockRestore();
   });
 
+  it("keeps the 2D drawing pack source choice across randomize", async () => {
+    const { settingsStore } = await import("../store");
+
+    expect(settingsStore.get().assetOverlayLocalPack).toBe(true);
+    settingsStore.set({ assetOverlayLocalPack: false });
+
+    const spy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    settingsStore.randomize();
+    expect(settingsStore.get().assetOverlayLocalPack).toBe(false);
+    spy.mockRestore();
+  });
+
   it("drops unknown fx lock ids on load-time normalization", async () => {
     const { settingsStore } = await import("../store");
 

@@ -69,6 +69,7 @@ export function pickDistinctOverlaySlots(
   strides: readonly [number, number, number],
   bias: OverlayBias = "mixed",
   alwaysEligible?: readonly boolean[],
+  blocked?: readonly boolean[],
 ): [number, number, number] {
   const len = families.length;
   if (len <= 0) return [0, 0, 0];
@@ -96,6 +97,9 @@ export function pickDistinctOverlaySlots(
   // of the rotation entirely whenever their family isn't in the bias set.
   const matchesBias = (index: number, family: string) =>
     alwaysEligible?.[index] === true || !biasFamilies || biasFamilies.has(family);
+  // Blocked entries (e.g. the local 2D drawing pack while its toggle is off)
+  // never rotate in while any unblocked alternative exists.
+  const allowed = (index: number) => blocked?.[index] !== true;
 
   for (let slot = 0; slot < 3; slot += 1) {
     const current = currentSlots[slot] ?? 0;
@@ -106,6 +110,7 @@ export function pickDistinctOverlaySlots(
       scan(
         start,
         (index, family) =>
+          allowed(index) &&
           !usedIndices.has(index) &&
           index !== current &&
           !usedFamilies.has(family) &&
@@ -114,14 +119,23 @@ export function pickDistinctOverlaySlots(
       scan(
         start,
         (index, family) =>
-          !usedIndices.has(index) && index !== current && !usedFamilies.has(family),
+          allowed(index) &&
+          !usedIndices.has(index) &&
+          index !== current &&
+          !usedFamilies.has(family),
       ) ??
       scan(
         start,
         (index, family) =>
-          !usedIndices.has(index) && index !== current && matchesBias(index, family),
+          allowed(index) &&
+          !usedIndices.has(index) &&
+          index !== current &&
+          matchesBias(index, family),
       ) ??
-      scan(start, (index, _family) => !usedIndices.has(index) && index !== current) ??
+      scan(
+        start,
+        (index, _family) => allowed(index) && !usedIndices.has(index) && index !== current,
+      ) ??
       scan(start, (index) => !usedIndices.has(index)) ??
       current;
 
