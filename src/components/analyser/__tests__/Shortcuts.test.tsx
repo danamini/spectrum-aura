@@ -220,12 +220,14 @@ describe("Shortcuts", () => {
     container
       .querySelector("button[aria-label='Open the visual controls drawer']")
       ?.dispatchEvent(click());
+    container.querySelector("button[aria-label='Post FX']")?.dispatchEvent(click());
+    container.querySelector("button[aria-label='Scene']")?.dispatchEvent(click());
     container.querySelector("button[aria-label='Settings']")?.dispatchEvent(click());
 
     window.removeEventListener("spectrum-aura:toggle-settings-panel", listener);
-    // Saves → saves tab, Tools → audio tab, Visuals title → generic drawer
-    // toggle (no tab), Settings button → Post FX tab.
-    expect(tabs).toEqual(["saves", "audio", null, "post"]);
+    // Saves → saves pop-out, Tools → audio pop-out, Visuals title → drawer
+    // (no tab), Post FX / Scene buttons → their pop-outs, Settings → drawer.
+    expect(tabs).toEqual(["saves", "audio", null, "post", "scene", null]);
   });
 
   it("dispatches settings toggle event when clicking Settings shortcut", () => {

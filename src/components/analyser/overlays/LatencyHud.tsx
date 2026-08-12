@@ -2,13 +2,42 @@ import { isSignalLatencyVisible } from "@spectrum-aura/engine/latency-metrics";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import type { LatencyHudState } from "./stats-types";
 
-export function LatencyHud({ latency }: { latency: LatencyHudState }) {
+export function LatencyHud({
+  latency,
+  active = true,
+}: {
+  latency: LatencyHudState;
+  /** False when neither real audio nor ambient mode is producing a signal —
+   * the HUD then explains itself instead of showing stale zeros. */
+  active?: boolean;
+}) {
   const drag = useDraggablePanel("latency-hud");
   const fmt = (v: number) => v.toFixed(1);
   const primary = latency.audioToRenderMs;
   const tone =
     primary <= 20 ? "text-emerald-300" : primary <= 40 ? "text-amber-300" : "text-orange-300";
   const showSignal = isSignalLatencyVisible(latency.signalToRenderMs);
+
+  if (!active) {
+    return (
+      <div
+        className="pointer-events-auto absolute right-3 z-10"
+        {...drag.handleProps}
+        style={{ bottom: "calc(0.75rem + var(--bottom-hud-clearance, 0px))", ...drag.style }}
+      >
+        <div className="max-w-[220px] rounded-md border border-white/15 bg-black/60 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] backdrop-blur-md">
+          <div className="mb-1 flex items-center gap-2 text-white/40">
+            <span className="h-1.5 w-1.5 rounded-full bg-white/25" />
+            Latency
+          </div>
+          <p className="text-[9px] normal-case leading-relaxed tracking-normal text-white/45">
+            Waiting for a signal — pick an audio source (or ambient mode) to measure audio → UI
+            latency.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

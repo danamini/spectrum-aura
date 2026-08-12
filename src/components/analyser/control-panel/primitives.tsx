@@ -144,8 +144,8 @@ export function ToggleRow({
               onClick={toggleLock}
               title={
                 locked
-                  ? "Pinned — Randomize leaves this effect untouched. Click to unpin."
-                  : "Pin to keep this effect unchanged by Randomize."
+                  ? "Pinned — Randomize, presets, saves, and view cycling all leave this effect untouched. Click to unpin."
+                  : "Pin to lock this effect in place — Randomize, presets, saves, and view cycling won't change it."
               }
               aria-pressed={locked}
               className={`rounded p-1 transition-colors ${
@@ -229,7 +229,7 @@ export function FxSection({
           </span>
           {pinned > 0 && (
             <span
-              title={`${pinned} pinned — Randomize leaves ${pinned === 1 ? "it" : "them"} untouched`}
+              title={`${pinned} pinned — locked against Randomize, presets, saves, and view cycling`}
               className="flex items-center gap-0.5 rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] tracking-wider text-amber-300"
             >
               <Pin className="h-2.5 w-2.5 fill-current" />

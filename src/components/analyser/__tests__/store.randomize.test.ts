@@ -126,6 +126,41 @@ describe("settingsStore randomize", () => {
     spy.mockRestore();
   });
 
+  it("pins hold through presets, save loading, and view cycling — not just randomize", async () => {
+    const { settingsStore } = await import("../store");
+
+    settingsStore.set({
+      fxLocks: ["retro"],
+      retroFx: true,
+      retroSystem: "gameboy",
+      retroMode: "blocks",
+      retroDither: 0.33,
+    });
+    const pinnedState = () => {
+      const s = settingsStore.get();
+      return [s.retroFx, s.retroSystem, s.retroMode, s.retroDither, s.fxLocks];
+    };
+    const expected = [true, "gameboy", "blocks", 0.33, ["retro"]];
+
+    // "Spectrum Clash" explicitly sets every retro key — the pin must win.
+    settingsStore.applyPreset("Spectrum Clash");
+    expect(pinnedState()).toEqual(expected);
+    expect(settingsStore.get().activePreset).toBe("Spectrum Clash");
+
+    // Loading a save (Play Saves rotation path) must not stomp the pin.
+    settingsStore.saveSlot(settingsStore.getSlots().length, "pin-test");
+    settingsStore.set({ retroSystem: "gameboy" }); // keep pinned values
+    settingsStore.loadSlot(0);
+    expect(pinnedState()).toEqual(expected);
+
+    // View cycling (with its per-view overlay-bias default) must not either.
+    const spy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    settingsStore.set({ viewCycleRandomize: true });
+    settingsStore.cycleRandomView();
+    expect(pinnedState()).toEqual(expected);
+    spy.mockRestore();
+  });
+
   it("drops unknown fx lock ids on load-time normalization", async () => {
     const { settingsStore } = await import("../store");
 

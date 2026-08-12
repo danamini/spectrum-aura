@@ -33,7 +33,10 @@ export function Analyser() {
   const [audioError, setAudioError] = useState<string | null>(null);
   // Dismissed-without-choosing state: visuals idle without audio, and the
   // "Audio Source" shortcut (X) re-opens the prompt via handleStop below.
-  const [audioPromptDismissed, setAudioPromptDismissed] = useState(false);
+  // Sessions that chose ambient mode boot straight into it, prompt hidden.
+  const [audioPromptDismissed, setAudioPromptDismissed] = useState(
+    () => settingsStore.get().ambientMode,
+  );
   const bpmDrag = useDraggablePanel("bpm-hud");
   const audioCaptureSupport = getAudioCaptureSupport();
   const [statsOpen, setStatsOpen] = useState(false);
@@ -163,6 +166,11 @@ export function Analyser() {
     sceneRef.current?.buildParticles(settings.particleCount);
   }, [settings.particleCount]);
 
+  const broadcastSource = (source: "mic" | "system" | "none") => {
+    window.dispatchEvent(
+      new CustomEvent("spectrum-aura:audio-source-state", { detail: { source } }),
+    );
+  };
   const handleMic = async () => {
     try {
       setAudioError(null);
@@ -172,6 +180,7 @@ export function Analyser() {
       audioRef.current?.setFftSize(current.fftSize);
       audioRef.current?.setGain(current.gain);
       setAudioStatus("running");
+      broadcastSource("mic");
     } catch (e) {
       setAudioError((e as Error).message);
       setAudioStatus("error");
@@ -186,6 +195,7 @@ export function Analyser() {
       audioRef.current?.setFftSize(current.fftSize);
       audioRef.current?.setGain(current.gain);
       setAudioStatus("running");
+      broadcastSource("system");
     } catch (e) {
       setAudioError((e as Error).message);
       setAudioStatus("error");
@@ -198,6 +208,7 @@ export function Analyser() {
     dispatchLiveTempo(EMPTY_LIVE_TEMPO);
     setAudioStatus("idle");
     setAudioPromptDismissed(false);
+    broadcastSource("none");
   };
 
   useAnalyserCommandEvents({
@@ -222,13 +233,24 @@ export function Analyser() {
         <AudioSourcePrompt
           support={audioCaptureSupport}
           error={audioError}
+          ambientActive={settings.ambientMode}
           onMic={handleMic}
           onSystem={handleSystem}
+          onAmbient={() => {
+            const next = !settingsStore.get().ambientMode;
+            settingsStore.set({ ambientMode: next });
+            if (next) setAudioPromptDismissed(true);
+          }}
           onDismiss={() => setAudioPromptDismissed(true)}
         />
       )}
 
-      {audioStatus === "running" && settings.showLatency && <LatencyHud latency={latencyHud} />}
+      {settings.showLatency && (
+        <LatencyHud
+          latency={latencyHud}
+          active={audioStatus === "running" || settings.ambientMode}
+        />
+      )}
 
       {settings.showBPM && (
         <div

@@ -48,6 +48,7 @@ import {
   useSettings,
   type FxLockId,
   type FxPassId,
+  type SavedSlot,
   type Settings,
 } from "./store";
 import { getVisualDefinition, VISUALS } from "@spectrum-aura/engine/visuals";
@@ -80,6 +81,27 @@ const FX_PASS_ENABLED_FLAGS: Partial<Record<FxPassId, keyof Settings>> = {
   ascii: "asciiFx",
 };
 
+/** One-line save-slot summary: view · palette · standout FX. */
+function describeSlot(slot: SavedSlot): string {
+  const st = slot.settings;
+  const view = getVisualDefinition(st.view)?.settingsLabel?.replace(/\s*settings$/i, "") ?? st.view;
+  const palette = PALETTES[st.paletteIndex]?.name;
+  const fx: string[] = [];
+  if (st.retroFx) {
+    fx.push(RETRO_SYSTEMS.find((sys) => sys.id === st.retroSystem)?.label ?? "Retro");
+  }
+  if (st.asciiFx) fx.push("ASCII");
+  if (st.crtFx) fx.push("CRT");
+  if (st.projectorFilmFx) fx.push("Film");
+  if (st.kaleidoscope) fx.push("Kaleido");
+  if (st.mirrorFx) fx.push("Mirror");
+  if (st.pixelate) fx.push("Pixelate");
+  if (st.sobelMode) fx.push("Sobel");
+  if (st.glitch) fx.push("Glitch");
+  if (st.bloomExtreme) fx.push("Bloom+");
+  return [view, palette, ...fx.slice(0, 3)].filter(Boolean).join(" · ");
+}
+
 const UI_KEY = "analyser-ui-v1";
 type UIState = { viewSettingsOpen: boolean; activeTab: string };
 const loadUI = (): UIState => {
@@ -100,6 +122,10 @@ export function ControlPanel() {
   const isMobile = useIsMobile();
   const midi = useMidiControl();
   const [open, setOpen] = useState(false);
+  // Standalone pop-out: a flyout tab opened straight from the shortcut bar
+  // without the full controls drawer — Post FX / Scene / Saves / Audio dock
+  // to the screen edge on their own.
+  const [standalone, setStandalone] = useState(false);
   const [flyoutVisible, setFlyoutVisible] = useState(false);
   const [xrState, setXrState] = useState<WebXrState>({
     available: false,
@@ -111,6 +137,10 @@ export function ControlPanel() {
   const [ui, setUi] = useState<UIState>(loadUI);
   const uiRef = React.useRef(ui);
   uiRef.current = ui;
+  const openRef = React.useRef(open);
+  openRef.current = open;
+  const standaloneRef = React.useRef(standalone);
+  standaloneRef.current = standalone;
   const [liveTempo, setLiveTempo] = useState<LiveTempoState>(EMPTY_LIVE_TEMPO);
   const flyoutPanelRef = React.useRef<HTMLDivElement | null>(null);
   const updateUi = (patch: Partial<UIState>) => {
@@ -136,6 +166,7 @@ export function ControlPanel() {
   };
   const closeFlyout = () => {
     blurFlyoutFocus();
+    setStandalone(false);
     updateUi({ activeTab: "" });
   };
   React.useEffect(() => {
@@ -144,19 +175,23 @@ export function ControlPanel() {
     }
   }, [ui.activeTab]);
   React.useEffect(() => {
-    if (!open) {
+    if (!open && !standalone) {
       setFlyoutVisible(false);
       return;
     }
-    const id = window.setTimeout(() => setFlyoutVisible(true), 220);
+    // Standalone pop-outs appear immediately; beside the drawer the flyout
+    // waits for the sheet's slide-in.
+    const id = window.setTimeout(() => setFlyoutVisible(true), open ? 220 : 30);
     return () => window.clearTimeout(id);
-  }, [open]);
+  }, [open, standalone]);
   // Broadcast open state so the shortcut bar can get out of the way — the
-  // drawer + flyout cover most of the screen and overlapping windows read
-  // as clutter.
+  // drawer/pop-outs cover a lot of screen and overlapping windows read as
+  // clutter.
   React.useEffect(() => {
-    window.dispatchEvent(new CustomEvent(SETTINGS_PANEL_STATE_EVENT, { detail: { open } }));
-  }, [open]);
+    window.dispatchEvent(
+      new CustomEvent(SETTINGS_PANEL_STATE_EVENT, { detail: { open: open || standalone } }),
+    );
+  }, [open, standalone]);
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
   const pinnedIn = (ids: FxLockId[]) => ids.filter((id) => s.fxLocks.includes(id)).length;
 
@@ -211,23 +246,52 @@ export function ControlPanel() {
   }, []);
 
   React.useEffect(() => {
-    // Plain event = toggle the drawer. With a `tab` detail (shortcut-bar
-    // group titles / Settings button) = jump straight to that flyout tab,
-    // or close if it's already showing.
+    // Plain event = toggle the controls drawer. With a `tab` detail
+    // (shortcut-bar titles / Settings button): while the drawer is open the
+    // flyout docks beside it as before; with the drawer closed the tab opens
+    // as a STANDALONE pop-out on the screen edge. Repeating the same tab
+    // closes it.
     const onToggleSettingsPanel = (event: Event) => {
       const tab = (event as CustomEvent<{ tab?: UIState["activeTab"] } | undefined>).detail?.tab;
       if (!tab || !["audio", "scene", "post", "saves"].includes(tab)) {
+        setStandalone(false);
         setOpen((v) => !v);
         return;
       }
-      setOpen((wasOpen) => {
-        if (wasOpen && uiRef.current.activeTab === tab) return false;
+      if (openRef.current) {
+        if (uiRef.current.activeTab === tab) {
+          setOpen(false);
+          return;
+        }
         updateUi({ activeTab: tab });
-        return true;
-      });
+        return;
+      }
+      if (standaloneRef.current && uiRef.current.activeTab === tab) {
+        setStandalone(false);
+        return;
+      }
+      updateUi({ activeTab: tab });
+      setStandalone(true);
     };
     window.addEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
     return () => window.removeEventListener(TOGGLE_SETTINGS_PANEL_EVENT, onToggleSettingsPanel);
+  }, []);
+
+  // Escape closes panels progressively: an open flyout/pop-out first, then
+  // the drawer on the next press. (Radix only handles Esc while focus is
+  // inside the sheet; this covers pop-outs and unfocused states.)
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (standaloneRef.current || (openRef.current && uiRef.current.activeTab)) {
+        closeFlyout();
+        return;
+      }
+      if (openRef.current) setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
@@ -265,7 +329,14 @@ export function ControlPanel() {
   return (
     <>
       {xrOverlay}
-      <Sheet open={open} onOpenChange={setOpen} modal={false}>
+      <Sheet
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (v) setStandalone(false);
+        }}
+        modal={false}
+      >
         <SheetContent
           onInteractOutside={(e) => {
             const t = e.target as HTMLElement | null;
@@ -348,46 +419,11 @@ export function ControlPanel() {
                   disabled={!hasGlobalWireframe}
                 />
               </div>
-              <ToggleRow
-                label="Music-reactive view cycle"
-                enabled={s.viewCycleMode}
-                onToggle={(v) => set({ viewCycleMode: v })}
-              >
-                <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                  Randomly switches visuals every 4 bars (16 beats in 4/4). Shortcut: C. Tap{" "}
-                  <span className="text-white/50">T</span> on beats to sync;{" "}
-                  <span className="text-white/50">⇧T</span> on downbeat for bar 1.
-                </p>
-              </ToggleRow>
-              <ToggleRow
-                label="Randomize FX on view switch"
-                enabled={s.viewCycleRandomize}
-                onToggle={(v) => set({ viewCycleRandomize: v })}
-              >
-                <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                  Applies randomize when the view cycle picks a new visual.
-                </p>
-              </ToggleRow>
-              <ToggleRow
-                label="Dynamic mode"
-                enabled={s.evolveEnabled}
-                onToggle={(v) => set({ evolveEnabled: v })}
-              >
-                <S
-                  label="Drift amount"
-                  value={s.evolveAmount}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => set({ evolveAmount: v })}
-                />
-                <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                  Slowly drifts a few impactful settings for the current view over musical phrases,
-                  as a bounded offset around your own values — turn off to return to exactly what
-                  you set. Unlike view cycle, the view itself never changes.
-                </p>
-              </ToggleRow>
             </Row>
+            <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
+              Auto view cycling and Dynamic Mode moved to the Scene panel (bar → Tools → Scene, or
+              the rail).
+            </p>
 
             {hasViewSettings && (
               <div className="rounded-md border border-white/10 bg-white/[0.03]">
@@ -406,14 +442,16 @@ export function ControlPanel() {
           </div>
         </SheetContent>
 
-        {/* Tab strip + slide-out panels (only while sheet is open). Mobile gets a
-            bottom tab bar + full-screen panel since there's no room beside a
-            full-width sheet for the desktop's side-by-side layout. */}
-        {open && (
+        {/* Tab strip + slide-out panels. Beside the open sheet the flyout
+            docks at the sheet's edge with the rail; opened standalone from
+            the shortcut bar it docks to the screen edge without the rail.
+            Mobile gets a bottom tab bar + full-screen panel. */}
+        {(open || standalone) && (
           <>
             {/* Tab strip — vertical rail beside the sheet on desktop, bottom bar on mobile */}
             <div
               data-analyser-flyout
+              hidden={!open && !isMobile}
               className={
                 (isMobile
                   ? "fixed inset-x-0 bottom-0 z-[110] flex flex-row gap-1 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] "
@@ -473,7 +511,9 @@ export function ControlPanel() {
                 "analyser-scroll fixed overflow-y-auto bg-black/85 backdrop-blur-xl text-white text-[12px] " +
                 (isMobile
                   ? "inset-0 z-[105] h-screen w-full border-white/10 "
-                  : "right-[416px] top-0 z-[55] h-screen w-[min(720px,calc(100vw-460px))] border-l border-r border-white/10 ") +
+                  : open
+                    ? "right-[416px] top-0 z-[55] h-screen w-[min(720px,calc(100vw-460px))] border-l border-r border-white/10 "
+                    : "right-0 top-0 z-[90] h-screen w-[min(720px,calc(100vw-48px))] border-l border-white/10 ") +
                 "transition-all duration-300 ease-out " +
                 (ui.activeTab && flyoutVisible
                   ? "translate-x-0 translate-y-0 opacity-100"
@@ -601,6 +641,47 @@ export function ControlPanel() {
 
                 {ui.activeTab === "scene" && (
                   <div className="space-y-4">
+                    <Row label="Motion & auto-pilot">
+                      <ToggleRow
+                        label="Music-reactive view cycle"
+                        enabled={s.viewCycleMode}
+                        onToggle={(v) => set({ viewCycleMode: v })}
+                      >
+                        <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                          Randomly switches visuals every 4 bars (16 beats in 4/4). Shortcut: C. Tap{" "}
+                          <span className="text-white/50">T</span> on beats to sync;{" "}
+                          <span className="text-white/50">⇧T</span> on downbeat for bar 1.
+                        </p>
+                      </ToggleRow>
+                      <ToggleRow
+                        label="Randomize FX on view switch"
+                        enabled={s.viewCycleRandomize}
+                        onToggle={(v) => set({ viewCycleRandomize: v })}
+                      >
+                        <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                          Applies randomize when the view cycle picks a new visual.
+                        </p>
+                      </ToggleRow>
+                      <ToggleRow
+                        label="Dynamic mode"
+                        enabled={s.evolveEnabled}
+                        onToggle={(v) => set({ evolveEnabled: v })}
+                      >
+                        <S
+                          label="Drift amount"
+                          value={s.evolveAmount}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(v) => set({ evolveAmount: v })}
+                        />
+                        <p className="font-mono text-[9px] leading-relaxed text-white/35">
+                          Slowly drifts a few impactful settings for the current view over musical
+                          phrases, as a bounded offset around your own values — turn off to return
+                          to exactly what you set. Unlike view cycle, the view itself never changes.
+                        </p>
+                      </ToggleRow>
+                    </Row>
                     <Row label="Palette">
                       <div className="grid grid-cols-2 gap-2">
                         {PALETTES.map((p, i) => (
@@ -770,8 +851,8 @@ export function ControlPanel() {
                     </Disclosure>
                     <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
                       Effects are grouped below — headers show how many are active. Pin an effect
-                      (📌 on its row) and Randomize will leave it exactly as you set it. Saved looks
-                      live in the Saves tab.
+                      (📌 on its row) and nothing changes it — not Randomize, presets, loading
+                      saves, or view cycling — until you unpin. Saved looks live in the Saves tab.
                     </p>
                     <div className="grid grid-cols-1 items-start gap-3 @[540px]:grid-cols-2">
                       <FxSection
@@ -1473,9 +1554,9 @@ export function ControlPanel() {
                             <div className="grid grid-cols-3 gap-2">
                               {(
                                 [
-                                  ["abstract", "Abstract"],
-                                  ["technical", "Technical"],
-                                  ["organic", "Organic"],
+                                  ["abstract", "Patterns"],
+                                  ["technical", "Diagrams"],
+                                  ["organic", "Botanical"],
                                 ] as const
                               ).map(([topic, label]) => (
                                 <Bn
@@ -1499,8 +1580,10 @@ export function ControlPanel() {
                               technical, softer organic, or rougher chaotic combinations.
                             </p>
                             <p className="mt-1 text-[10px] leading-relaxed text-white/45">
-                              Wikimedia Commons is optional and only loads when enabled. Current
-                              asset attribution is shown in Stats for nerds.
+                              Wikimedia Commons is optional and only loads when enabled — the topic
+                              picks what it searches for (pattern art, circuit diagrams, or
+                              botanical plates). Current asset attribution is shown in Stats for
+                              nerds.
                             </p>
                           </div>
                         </ToggleRow>
@@ -1682,6 +1765,7 @@ export function ControlPanel() {
                         <div className="space-y-1.5">
                           {preset.slots.map((slot, index) => {
                             const isFocused = index === preset.activeIndex;
+                            const meta = describeSlot(slot);
                             return (
                               <div
                                 key={`${slot.name}-${index}`}
@@ -1701,14 +1785,35 @@ export function ControlPanel() {
                                   <span className="shrink-0 font-mono text-[9px] text-white/35">
                                     {index + 1}
                                   </span>
-                                  <span className="truncate text-[12px] text-white/85">
-                                    {slot.name}
-                                  </span>
-                                  {isFocused && (
-                                    <span className="shrink-0 rounded border border-emerald-300/30 bg-emerald-300/10 px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider text-emerald-200/90">
-                                      Focused
+                                  {slot.thumb ? (
+                                    <img
+                                      src={slot.thumb}
+                                      alt=""
+                                      className="h-9 w-16 shrink-0 rounded-sm border border-white/15 object-cover"
+                                    />
+                                  ) : (
+                                    <span
+                                      aria-hidden
+                                      className="flex h-9 w-16 shrink-0 items-center justify-center rounded-sm border border-white/10 bg-gradient-to-br from-white/10 to-white/[0.02] font-mono text-[8px] uppercase tracking-wider text-white/25"
+                                    >
+                                      no img
                                     </span>
                                   )}
+                                  <span className="min-w-0 flex-1">
+                                    <span className="flex items-center gap-2">
+                                      <span className="truncate text-[12px] text-white/85">
+                                        {slot.name}
+                                      </span>
+                                      {isFocused && (
+                                        <span className="shrink-0 rounded border border-emerald-300/30 bg-emerald-300/10 px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider text-emerald-200/90">
+                                          Focused
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="mt-0.5 block truncate font-mono text-[9px] uppercase tracking-wider text-white/40">
+                                      {meta}
+                                    </span>
+                                  </span>
                                 </button>
                                 <div className="flex shrink-0 items-center gap-1">
                                   <Bn

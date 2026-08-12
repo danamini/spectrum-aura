@@ -446,6 +446,12 @@ export type Settings = {
   /** Drift intensity, 0 (none) to 1 (full — up to ~40% of the base value). */
   evolveAmount: number;
 
+  /** Ambient mode — with no audio source, a synthetic musically-structured
+   * signal (engine/ambient-source.ts) drives the visuals so the app works as
+   * a standalone background. Real audio always takes priority when running;
+   * randomize and saves never toggle this. */
+  ambientMode: boolean;
+
   /** Web MIDI control opt-in — requesting access triggers a browser permission
    * prompt, so this only turns on via an explicit user toggle (never randomize
    * or loading a save). */
@@ -724,6 +730,7 @@ export const DEFAULT_SETTINGS: Settings = {
   evolveEnabled: false,
   evolveAmount: 0.6,
 
+  ambientMode: false,
   midiEnabled: false,
 
   // HUDs start hidden; the persisted store still remembers a user's toggle

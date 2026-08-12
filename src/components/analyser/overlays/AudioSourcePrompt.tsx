@@ -1,18 +1,22 @@
-import { Mic, MonitorSpeaker, X } from "lucide-react";
+import { Mic, MonitorSpeaker, Sparkles, X } from "lucide-react";
 import type { AudioCaptureSupport } from "@spectrum-aura/engine/audio-support";
 import { LOCAL_DEV_URL } from "../theme";
 
 export function AudioSourcePrompt({
   support,
   error,
+  ambientActive,
   onMic,
   onSystem,
+  onAmbient,
   onDismiss,
 }: {
   support: AudioCaptureSupport;
   error: string | null;
+  ambientActive: boolean;
   onMic: () => void;
   onSystem: () => void;
+  onAmbient: () => void;
   onDismiss: () => void;
 }) {
   return (
@@ -66,6 +70,33 @@ export function AudioSourcePrompt({
                   Use microphone
                 </span>
                 <span className="text-white/30 group-hover:text-emerald-300">→</span>
+              </button>
+              <button
+                onClick={onAmbient}
+                aria-pressed={ambientActive}
+                className={`group rounded-md border px-4 py-3 text-left transition-colors ${
+                  ambientActive
+                    ? "border-emerald-300/50 bg-emerald-400/10"
+                    : "border-white/15 bg-white/5 hover:border-emerald-300/60 hover:bg-emerald-400/10"
+                }`}
+              >
+                <span className="flex items-center justify-between gap-3 font-mono text-[11px] uppercase tracking-[0.2em] text-white/80 group-hover:text-white">
+                  <span className="flex items-center gap-3">
+                    <Sparkles
+                      className={`h-4 w-4 ${ambientActive ? "text-emerald-300" : "text-white/60 group-hover:text-emerald-300"}`}
+                    />
+                    Ambient mode — no music
+                  </span>
+                  <span
+                    className={`font-mono text-[9px] tracking-wider ${ambientActive ? "text-emerald-300" : "text-white/30"}`}
+                  >
+                    {ambientActive ? "ON" : ""}
+                  </span>
+                </span>
+                <span className="mt-1.5 block font-mono text-[10px] normal-case leading-relaxed tracking-wide text-white/45 group-hover:text-white/70">
+                  A synthetic groove drives the visuals — great as a screen background. Real audio
+                  takes over whenever you pick a source.
+                </span>
               </button>
             </div>
           </>

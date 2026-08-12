@@ -18,7 +18,9 @@ import {
   WEBXR_STATE_EVENT,
   WebXrRuntime,
 } from "@spectrum-aura/engine/xr";
+import { AmbientSource } from "@spectrum-aura/engine/ambient-source";
 import { PALETTES, settingsStore, type Settings, type ViewMode } from "../store";
+import { hasPendingFrameCaptures, resolveFrameCaptures } from "../frame-capture";
 import type { LatencyHudState, NerdStats } from "../overlays/stats-types";
 
 /**
@@ -154,6 +156,9 @@ export function useAnalyserEngine(params: {
       qualityTier: 0 as 0 | 1 | 2,
     };
     const mandalaPostFx = { ...settingsStore.get() };
+    const ambientSource = new AmbientSource();
+    let ambientWasActive = false;
+    let lastFrameStatsAt = 0;
     let lastPaletteIndex = settingsRef.current.paletteIndex;
     let lastPerformanceMode = settingsRef.current.performance;
     let smoothedLatency = { audioToRenderMs: 0, signalToRenderMs: 0 };
@@ -385,7 +390,13 @@ export function useAnalyserEngine(params: {
         lastOpacity = nextOpacity;
       }
 
-      const bands = audio.read(s.beatSensitivity, now);
+      // Ambient mode: with no capture running, a synthetic musically-shaped
+      // signal keeps every visual (and the SongClock phrase machinery) alive
+      // so the app works as a standalone background. Real audio wins.
+      const ambientActive = s.ambientMode && !audio.isRunning();
+      if (!ambientActive && ambientWasActive) ambientSource.reset();
+      ambientWasActive = ambientActive;
+      const bands = ambientActive ? ambientSource.read(now) : audio.read(s.beatSensitivity, now);
       const barTimingFrame = songClockRef.current.tick({
         now,
         estimatedBpm: bands.bpm,
@@ -432,7 +443,7 @@ export function useAnalyserEngine(params: {
       }
       radialKickEnv = bands.beat ? 1 : Math.max(0, radialKickEnv - dt * 5);
       const tempoFrame = {
-        audioRunning: audio.isRunning(),
+        audioRunning: audio.isRunning() || ambientActive,
         beat: bands.beat,
         bpm: Math.round(clockBpm),
         bpmConfidence: bands.bpmConfidence,
@@ -501,6 +512,18 @@ export function useAnalyserEngine(params: {
       } else {
         renderer.render(scene.scene, scene.camera);
       }
+      // Save-slot thumbnails must be read back in the same task as the
+      // render (preserveDrawingBuffer is false).
+      if (hasPendingFrameCaptures()) resolveFrameCaptures(dom);
+      // Lightweight health beacon for the shortcut bar's live FPS chip —
+      // unconditional (unlike the stats panel data, which only flows while
+      // that panel is open).
+      if (now - lastFrameStatsAt >= 500) {
+        lastFrameStatsAt = now;
+        window.dispatchEvent(
+          new CustomEvent("spectrum-aura:frame-stats", { detail: { fps: smoothedFps } }),
+        );
+      }
       const tAfterRender = performance.now();
 
       const latency = measureFrameLatency({
@@ -513,7 +536,13 @@ export function useAnalyserEngine(params: {
       smoothedLatency = smoothLatency(smoothedLatency, latency);
       const { audioToSceneMs, sceneToRenderMs } = latency;
 
-      if (s.showLatency && audio.isRunning() && now - lastLatencyHudCommitAt >= 100) {
+      // Ambient mode measures the synthetic-signal → render path — still a
+      // real pipeline number, and it keeps the HUD alive without audio.
+      if (
+        s.showLatency &&
+        (audio.isRunning() || ambientActive) &&
+        now - lastLatencyHudCommitAt >= 100
+      ) {
         lastLatencyHudCommitAt = now;
         setLatencyHud({
           audioToRenderMs: smoothedLatency.audioToRenderMs,

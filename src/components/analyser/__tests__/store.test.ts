@@ -170,6 +170,7 @@ describe("analyser store utility functions", () => {
     expect(state.retroDither).toBe(0.55);
     expect(state.retroBorder).toBe(true);
     expect(state.fxLocks).toEqual([]);
+    expect(state.ambientMode).toBe(false);
     expect(state.showBPM).toBe(false);
     expect(state.showLatency).toBe(false);
   });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { settingsStore, useSlots, type SavedSlot } from "../store";
+import { requestFrameCapture } from "../frame-capture";
 
 /**
  * Result of a preset action, so callers can render their own feedback (e.g.
@@ -111,6 +112,12 @@ export function usePresetActions(): PresetActions {
   const saveAt = (index: number, name: string): PresetActionResult => {
     settingsStore.saveSlot(index, name);
     setCursor(index);
+    // The save is synchronous; the thumbnail arrives with the next rendered
+    // frame and attaches after the fact (null when no frame renders, e.g.
+    // in tests or a hidden tab — the slot simply keeps no image).
+    void requestFrameCapture().then((thumb) => {
+      if (thumb) settingsStore.attachSlotThumb(index, thumb);
+    });
     return { status: "ok", index, name };
   };
 

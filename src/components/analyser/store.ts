@@ -175,6 +175,21 @@ function normalizeWikichromaActorPacks(packs: unknown): WikichromaActorPack[] {
   return valid;
 }
 
+/** Pins are a contract across every look-changing flow, not just Randomize:
+ * presets, save loading (incl. Play Saves rotation), and view-cycle defaults
+ * must all leave a pinned group's keys exactly as the user set them. The
+ * lock list itself is session state and always survives. */
+function preserveLockedFx(prev: Settings, next: Settings): Settings {
+  const out = { ...next, fxLocks: prev.fxLocks };
+  for (const group of FX_RANDOMIZE_GROUPS) {
+    if (!prev.fxLocks.includes(group.id)) continue;
+    for (const key of group.keys) {
+      (out as Record<string, unknown>)[key] = prev[key];
+    }
+  }
+  return out;
+}
+
 function normalizePostFxRanges(settings: Settings): Settings {
   return {
     ...settings,
@@ -272,11 +287,19 @@ function normalizeSettings(settings: Settings): Settings {
 const STORAGE_KEY = "analyser-settings-v1";
 const SLOTS_KEY = "analyser-slots-v1";
 
-export type SavedSlot = { name: string; settings: Settings };
+export type SavedSlot = {
+  name: string;
+  settings: Settings;
+  /** Small JPEG data URL captured from the canvas at save time. */
+  thumb?: string;
+  savedAt?: number;
+};
 
 type SlotSeed = {
   name: string;
   settings: Partial<Settings> & { rippleWaveLayers?: number };
+  thumb?: string;
+  savedAt?: number;
 } | null;
 
 const AUTO_SLOT_NAME_RE = /^(Save|Slot)\s+\d+$/;
@@ -313,6 +336,10 @@ function normalizeSlot(seed: SlotSeed): SavedSlot | null {
   return {
     name: seed.name,
     settings: normalizeSettings(merged),
+    ...(typeof seed.thumb === "string" && seed.thumb.startsWith("data:image/")
+      ? { thumb: seed.thumb }
+      : {}),
+    ...(typeof seed.savedAt === "number" ? { savedAt: seed.savedAt } : {}),
   };
 }
 
@@ -336,7 +363,7 @@ const slots: SavedSlot[] = DEPLOYMENT_DEFAULT_SLOTS.map((slot) => normalizeSlot(
 /** Shallow copy so `useSyncExternalStore` sees a new snapshot when slots change (in-place `slots[]` edits keep the same array ref). */
 let slotsSnapshot: SavedSlot[] = [];
 function refreshSlotsSnapshot() {
-  slotsSnapshot = slots.map((slot) => ({ name: slot.name, settings: { ...slot.settings } }));
+  slotsSnapshot = slots.map((slot) => ({ ...slot, settings: { ...slot.settings } }));
 }
 const listeners = new Set<() => void>();
 const slotListeners = new Set<() => void>();
@@ -731,31 +758,50 @@ export const settingsStore = {
     const fullscreenKey = VISUALS.find((v) => v.id === next)?.fullscreenKey as
       | keyof Settings
       | undefined;
-    state = normalizeSettings({
-      ...state,
-      view: next,
-      ...(getVisualOverlayBiasDefault(next)
-        ? { assetOverlayBias: getVisualOverlayBiasDefault(next) }
-        : {}),
-      activePreset: null,
-      ...(fullscreenKey ? { [fullscreenKey]: false } : {}),
-    });
+    state = normalizeSettings(
+      preserveLockedFx(state, {
+        ...state,
+        view: next,
+        ...(getVisualOverlayBiasDefault(next)
+          ? { assetOverlayBias: getVisualOverlayBiasDefault(next) }
+          : {}),
+        activePreset: null,
+        ...(fullscreenKey ? { [fullscreenKey]: false } : {}),
+      }),
+    );
     emit();
     if (state.viewCycleRandomize) {
       settingsStore.randomize();
     }
   },
   applyPreset: (name: keyof typeof PRESETS) => {
-    state = normalizeSettings({ ...state, ...PRESETS[name], activePreset: name as string });
+    state = normalizeSettings(
+      preserveLockedFx(state, { ...state, ...PRESETS[name], activePreset: name as string }),
+    );
     emit();
   },
   getSlots: () => slotsSnapshot,
   saveSlot: (index: number, name?: string) => {
     if (index < 0 || index > slots.length) return;
-    const slot = { name: name ?? `Save ${index + 1}`, settings: { ...state } };
+    const slot: SavedSlot = {
+      name: name ?? `Save ${index + 1}`,
+      settings: { ...state },
+      savedAt: Date.now(),
+    };
     if (index === slots.length) slots.push(slot);
     else slots[index] = slot;
     reindexAutoSlotNames();
+    refreshSlotsSnapshot();
+    persistSlots();
+    slotListeners.forEach((l) => l());
+  },
+  /** Attaches a canvas thumbnail to a just-saved slot. Separate from
+   * saveSlot because captures resolve on the next rendered frame — the save
+   * itself stays synchronous. */
+  attachSlotThumb: (index: number, thumb: string) => {
+    const slot = slots[index];
+    if (!slot || !thumb.startsWith("data:image/")) return;
+    slot.thumb = thumb;
     refreshSlotsSnapshot();
     persistSlots();
     slotListeners.forEach((l) => l());
@@ -773,19 +819,25 @@ export const settingsStore = {
         rippleColumns: Math.max(1, Math.min(50, Math.round(raw.rippleWaveLayers))),
       };
     }
-    state = normalizeSettings({
-      ...merged,
-      slotCycleMode: currentCycleMode,
-      slotCycleSeconds: currentCycleSeconds,
-      // Performance Mode is a machine-specific tradeoff, not part of a saved
-      // "look" — and it hard-bypasses all post FX. Old saves (including a
-      // previous batch of bundled defaults) carried performance: true, so
-      // loading one silently killed post FX and persisted that across
-      // sessions. Saves can no longer toggle it.
-      performance: state.performance,
-      // MIDI is a hardware/permission opt-in tied to this machine, not a look.
-      midiEnabled: state.midiEnabled,
-    });
+    state = normalizeSettings(
+      // Pinned FX groups survive save loading too — a pinned Retro look must
+      // hold through the Play Saves rotation just like through Randomize.
+      preserveLockedFx(state, {
+        ...merged,
+        slotCycleMode: currentCycleMode,
+        slotCycleSeconds: currentCycleSeconds,
+        // Performance Mode is a machine-specific tradeoff, not part of a saved
+        // "look" — and it hard-bypasses all post FX. Old saves (including a
+        // previous batch of bundled defaults) carried performance: true, so
+        // loading one silently killed post FX and persisted that across
+        // sessions. Saves can no longer toggle it.
+        performance: state.performance,
+        // MIDI is a hardware/permission opt-in tied to this machine, not a look.
+        midiEnabled: state.midiEnabled,
+        // Ambient (no-music) mode is a session choice, not part of a look.
+        ambientMode: state.ambientMode,
+      }),
+    );
     emit();
   },
   clearSlot: (index: number) => {

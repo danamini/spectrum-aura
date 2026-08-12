@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import {
+  Camera,
   LayoutGrid,
+  SlidersHorizontal,
   Maximize2,
   Mic,
+  MonitorSpeaker,
   Play,
   Repeat,
   Save,
@@ -11,6 +14,7 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { settingsStore, useSettings, type Settings } from "./store";
@@ -23,6 +27,33 @@ import { useDraggablePanel } from "./hooks/useDraggablePanel";
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 const SETTINGS_PANEL_STATE_EVENT = "spectrum-aura:settings-panel-state";
+const FRAME_STATS_EVENT = "spectrum-aura:frame-stats";
+const AUDIO_SOURCE_STATE_EVENT = "spectrum-aura:audio-source-state";
+
+/** Always-visible FPS readout in the Tools cluster; clicking opens the full
+ * Stats for nerds panel. Colour tracks render health. */
+function FpsChip({ fps, onClick }: { fps: number | null; onClick: () => void }) {
+  if (fps === null) return null;
+  const rounded = Math.round(fps);
+  const tone =
+    rounded >= 50
+      ? "text-emerald-300 border-emerald-300/30"
+      : rounded >= 30
+        ? "text-amber-300 border-amber-300/30"
+        : "text-red-400 border-red-400/40";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`${rounded} frames per second — open stats for nerds`}
+      title="Live FPS — open Stats for nerds"
+      className={`pointer-events-auto flex min-w-[3rem] flex-col items-center justify-center gap-0.5 rounded-md border bg-white/[0.04] px-1.5 py-1 transition-colors hover:bg-white/10 ${tone}`}
+    >
+      <span className="font-mono text-[13px] leading-none tabular-nums">{rounded}</span>
+      <span className="text-[8px] leading-none tracking-[0.14em] text-white/40">FPS</span>
+    </button>
+  );
+}
 const TOGGLE_FULLSCREEN_EVENT = "spectrum-aura:toggle-fullscreen";
 const STOP_AUDIO_EVENT = "spectrum-aura:stop-audio";
 
@@ -53,6 +84,9 @@ type Hint = {
   active?: boolean;
   showKey?: boolean;
   ariaLabel?: string;
+  /** Small status line under the label (e.g. the live audio source). */
+  sub?: string;
+  subTone?: string;
 };
 
 function TooltipBlock({ title, hint, detail }: { title: string; hint?: string; detail: string }) {
@@ -85,6 +119,45 @@ export function Shortcuts() {
     };
     window.addEventListener(SETTINGS_PANEL_STATE_EVENT, onPanelState);
     return () => window.removeEventListener(SETTINGS_PANEL_STATE_EVENT, onPanelState);
+  }, []);
+  // What's feeding the visuals right now — broadcast by Analyser on source
+  // changes; ambient mode comes from settings. Shown on the Audio Source
+  // button so the HUD always says where the signal comes from.
+  const [audioSource, setAudioSource] = useState<"mic" | "system" | "none">("none");
+  useEffect(() => {
+    const onSourceState = (event: Event) => {
+      const source = (event as CustomEvent<{ source?: "mic" | "system" | "none" }>).detail?.source;
+      setAudioSource(source === "mic" || source === "system" ? source : "none");
+    };
+    window.addEventListener(AUDIO_SOURCE_STATE_EVENT, onSourceState);
+    return () => window.removeEventListener(AUDIO_SOURCE_STATE_EVENT, onSourceState);
+  }, []);
+  const ambientOn = settings.ambientMode && audioSource === "none";
+  const sourceSub =
+    audioSource === "mic"
+      ? "mic · live"
+      : audioSource === "system"
+        ? "system · live"
+        : ambientOn
+          ? "ambient"
+          : "off";
+  const sourceTone =
+    audioSource !== "none"
+      ? "text-emerald-300"
+      : ambientOn
+        ? "text-emerald-300/80"
+        : "text-white/35";
+
+  // Live render-health beacon from the engine loop (500ms cadence) — the
+  // always-visible slice of Stats for nerds.
+  const [liveFps, setLiveFps] = useState<number | null>(null);
+  useEffect(() => {
+    const onFrameStats = (event: Event) => {
+      const fps = (event as CustomEvent<{ fps?: number }>).detail?.fps;
+      setLiveFps(typeof fps === "number" ? fps : null);
+    };
+    window.addEventListener(FRAME_STATS_EVENT, onFrameStats);
+    return () => window.removeEventListener(FRAME_STATS_EVENT, onFrameStats);
   }, []);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
@@ -475,12 +548,23 @@ export function Shortcuts() {
     {
       key: "X",
       label: "Audio Source",
-      icon: <Mic />,
+      icon: audioSource === "system" ? <MonitorSpeaker /> : ambientOn ? <Sparkles /> : <Mic />,
+      active: audioSource !== "none" || ambientOn,
+      sub: sourceSub,
+      subTone: sourceTone,
       tooltip: (
         <TooltipBlock
           title="Audio Source"
           hint="X"
-          detail="Stops the current input so you can pick mic, tab, or system audio again."
+          detail={`Current source: ${
+            audioSource === "mic"
+              ? "microphone"
+              : audioSource === "system"
+                ? "system audio"
+                : ambientOn
+                  ? "ambient mode (synthetic groove)"
+                  : "none"
+          }. Click to stop and pick a new input.`}
         />
       ),
       onClick: () => {
@@ -601,11 +685,41 @@ export function Shortcuts() {
       <TooltipBlock
         title="Settings"
         hint="S"
-        detail="Opens the control drawer straight onto the Post FX panel. Group titles in this bar jump to the other panels."
+        detail="Opens the controls drawer: visual picker, per-view settings, and the panel rail."
+      />
+    ),
+    onClick: () => {
+      doToggleSettings();
+    },
+  };
+  const postFxHint: Hint = {
+    key: "",
+    label: "Post FX",
+    icon: <SlidersHorizontal />,
+    showKey: false,
+    tooltip: (
+      <TooltipBlock
+        title="Post FX panel"
+        detail="Pops out the effects panel on its own: presets, randomize, effect groups, pins, and pipeline order."
       />
     ),
     onClick: () => {
       doToggleSettings("post");
+    },
+  };
+  const sceneHint: Hint = {
+    key: "",
+    label: "Scene",
+    icon: <Camera />,
+    showKey: false,
+    tooltip: (
+      <TooltipBlock
+        title="Scene panel"
+        detail="Pops out palette, camera, motion, and auto-pilot settings (view cycle, Dynamic Mode)."
+      />
+    ),
+    onClick: () => {
+      doToggleSettings("scene");
     },
   };
   const cycleSavesHint: Hint = {
@@ -746,6 +860,13 @@ export function Shortcuts() {
           </span>
           {h.label ? (
             <span className="text-[9px] leading-none tracking-[0.12em]">{h.label}</span>
+          ) : null}
+          {h.sub ? (
+            <span
+              className={`text-[8px] leading-none tracking-[0.14em] ${h.subTone ?? "text-white/40"}`}
+            >
+              {h.sub}
+            </span>
           ) : null}
         </button>
       </TooltipTrigger>
@@ -912,6 +1033,13 @@ export function Shortcuts() {
                   <Btn h={saveCurrentHint} />
                   <Btn h={deleteSaveHint} />
                 </Group>
+                <Group title="panels" titleHint="Pop-out panels and overlays">
+                  <Btn h={postFxHint} />
+                  <Btn h={sceneHint} />
+                  <Btn h={settingsHint} />
+                  <Btn h={hints[5]!} />
+                  <Btn h={hints[4]!} />
+                </Group>
                 <Group
                   title="tools"
                   onTitleClick={() => doToggleSettings("audio")}
@@ -920,10 +1048,8 @@ export function Shortcuts() {
                   <Btn h={hints[1]!} />
                   <Btn h={hints[2]!} />
                   <Btn h={hints[3]!} />
-                  <Btn h={hints[4]!} />
-                  <Btn h={hints[5]!} />
+                  <FpsChip fps={liveFps} onClick={doToggleStats} />
                   <Btn h={beatTapHint} />
-                  <Btn h={settingsHint} />
                   <Btn h={hints[6]!} />
                 </Group>
               </div>

@@ -35,6 +35,29 @@ presets) may change between minor versions.
 - Direct panel access: shortcut-bar group titles open their matching settings
   slide-out (Saves, Audio, controls drawer); the Settings button opens the
   Post FX panel.
+- **Ambient mode (no music)**: a synthetic, musically-structured signal —
+  beat grid, backbeats, hats, 32-beat sections with builds and breakdowns,
+  shaped spectrum — drives all visuals with no audio source, so the app works
+  as a standalone background. Selectable from the audio-source dialog,
+  persisted across sessions, and real audio always takes priority. The
+  SongClock locks to the synthetic tempo, so phrase-based view cycling works
+  exactly as with real music.
+- **Richer save slots**: each save now captures a canvas thumbnail at save
+  time plus a derived summary line (view, palette, standout FX) shown in the
+  Saves list; existing saves without images keep working.
+- **Standalone panel pop-outs**: Post FX, Scene, Saves, and Audio open
+  directly from the shortcut bar as edge-docked pop-outs without the full
+  controls drawer (a new Scene button joins the Tools cluster); the drawer
+  now focuses on view picking and per-view settings. View cycle, "Randomize
+  FX on view switch", and Dynamic Mode moved into the Scene panel's new
+  Motion & Auto-Pilot section.
+- **Live FPS chip** in the Tools cluster — a 500ms render-health beacon
+  (green/amber/red) that opens Stats for nerds on click.
+- **Audio source indicator**: the bar's Audio Source button shows what feeds
+  the visuals (mic / system / ambient / off) with a matching icon and live
+  glow.
+- Escape closes panels progressively: pop-out or flyout first, then the
+  controls drawer.
 
 ### Changed
 
@@ -61,6 +84,16 @@ presets) may change between minor versions.
   decision boundaries) instead of dissolving into full-field checkerboard.
 - The BPM HUD no longer shows the camera-drag grab cursor it couldn't honour
   (and is now actually draggable).
+- Effect pins now hold through every look-changing flow — presets, loading
+  saves (incl. Play Saves rotation), and view cycling could previously
+  overwrite a pinned effect; only Randomize respected the pin. The pin list
+  itself is session state that saves never overwrite.
+- The Latency HUD renders without a live capture again: it measures the
+  synthetic-signal path in ambient mode and explains itself when no signal
+  exists (it previously stayed invisible).
+- Wikimedia Commons topics renamed to what they actually search for
+  (Patterns / Diagrams / Botanical) so they no longer read as duplicates of
+  the local-pack bias buttons.
 
 ## [0.3.0] - 2026-07-17
 

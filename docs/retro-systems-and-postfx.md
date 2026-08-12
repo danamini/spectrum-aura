@@ -81,8 +81,12 @@ touches the order.
 
 ## Randomize locks & statement effects
 
-Each effect row has a pin (`fxLocks`, groups in `FX_RANDOMIZE_GROUPS`); a
-pinned group's keys are stripped from the randomize patch. The whole-frame
+Each effect row has a pin (`fxLocks`, groups in `FX_RANDOMIZE_GROUPS`). The
+pin is a contract across **every** look-changing flow: randomize strips a
+pinned group's keys from its patch, and `preserveLockedFx` in the app store
+restores pinned values through presets, save loading (including the Play
+Saves rotation), and view-cycle defaults. The lock list itself is session
+state — saves never overwrite it. The whole-frame
 "statement" effects (kaleidoscope, mirror, pixelate, sobel, glitch, ASCII,
 retro — `FX_STATEMENT_FLAGS`) stay mutually exclusive: if a pinned statement
 effect is active, randomize suppresses rolling any other statement effect.

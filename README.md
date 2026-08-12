@@ -39,13 +39,6 @@ It is not designed to be used for any formal audio analysis, it's intended purel
 
 Depending on your hardware you may need to tune performance via the options in settings.
 
-## WebXR (Alpha)
-
-- WebXR support for Meta Quest is currently **alpha**.
-- Desktop mode remains the primary, fully supported experience.
-- If WebXR is unavailable in your browser, the app continues to work in desktop mode without XR.
-- Production testing URL: [https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)
-
 ## A Quick Summary
 
 - Browser-native real-time rendering with animated 3D scenes and post-processing.
@@ -57,6 +50,15 @@ Depending on your hardware you may need to tune performance via the options in s
 - **Retro hardware emulation**: re-render any visual under a classic machine's real video limits — ZX Spectrum (genuine ROM font + attribute clash), Commodore 64, Game Boy, NES, CGA, Amstrad CPC, Amiga 500, MS-DOS EGA, VGA, Hercules, and Apple II — each with hi-res, system-font text, and low-res block-graphics modes, hardware borders, and matching scene palettes.
 - Classic CRT scanline and projector-film artifact passes, a **user-reorderable post-FX pipeline** (e.g. CRT scanlines over the emulated retro screen), and per-effect pins that protect a look from Randomize.
 - Movable overlay panels: drag the command bar, BPM grid, latency HUD, and stats panel anywhere; double-click to reset.
+- **Ambient mode** — no music needed: a synthetic, musically-structured groove (beat grid, builds, breakdowns) drives every visual, so the app works as a standalone screen background.
+- **Web MIDI control** (opt-in): map hardware knobs, faders, and pads to settings — beat taps, randomize, view switching, and FX levels from a physical controller.
+
+## WebXR (Alpha)
+
+- WebXR support for Meta Quest is currently **alpha**.
+- Desktop mode remains the primary, fully supported experience.
+- If WebXR is unavailable in your browser, the app continues to work in desktop mode without XR.
+- Production testing URL: [https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)
 
 ## Screenshots
 
