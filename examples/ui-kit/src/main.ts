@@ -44,6 +44,7 @@ for (let i = 0; i < EQ_BAR_COUNT; i += 1) {
   eqBars.push(bar);
 }
 
+let raf: number | null = null;
 let beatPulse = 0;
 let lastTime = performance.now();
 
@@ -72,18 +73,20 @@ function frame(now: number) {
     bands.bpm > 0 && bands.bpmConfidence > 0.5 ? `${Math.round(bands.bpm)} BPM` : "— BPM";
   query("#beat-dot").textContent = beatPulse > 0.4 ? "●" : "○";
 
-  requestAnimationFrame(frame);
+  raf = requestAnimationFrame(frame);
 }
 
 async function start(kind: "mic" | "tab") {
   const errorEl = query("#start-error");
   errorEl.classList.add("hidden");
   try {
-    if (kind === "mic") await engine.startMic();
-    else await engine.startSystem();
+    const started = kind === "mic" ? await engine.startMic() : await engine.startSystem();
+    if (!started) return;
     query("#start-overlay").classList.add("hidden");
-    lastTime = performance.now();
-    requestAnimationFrame(frame);
+    if (raf === null) {
+      lastTime = performance.now();
+      raf = requestAnimationFrame(frame);
+    }
   } catch (error) {
     errorEl.textContent = error instanceof Error ? error.message : String(error);
     errorEl.classList.remove("hidden");
@@ -98,3 +101,10 @@ query("#palette-btn").addEventListener("click", () => {
 });
 
 applyPalette();
+
+window.addEventListener("pagehide", (event) => {
+  if (event.persisted) return;
+  if (raf !== null) cancelAnimationFrame(raf);
+  raf = null;
+  engine.stop();
+});

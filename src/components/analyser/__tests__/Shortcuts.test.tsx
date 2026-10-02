@@ -14,6 +14,8 @@ type MockState = {
   postFxEnabled: boolean;
   showBPM: boolean;
   showLatency: boolean;
+  visualResponse: number;
+  autoBalanceEnabled: boolean;
 };
 
 const mocks = vi.hoisted(() => {
@@ -26,9 +28,14 @@ const mocks = vi.hoisted(() => {
     postFxEnabled: true,
     showBPM: true,
     showLatency: false,
+    visualResponse: 1,
+    autoBalanceEnabled: false,
   };
 
-  const slots: Slot[] = [{ name: "Slot 1", settings: { view: "combo" } }, null, null, null, null];
+  const slots: Slot[] = [
+    { name: "Slot 1", settings: { view: "combo" } },
+    { name: "Slot 2", settings: { view: "classic" } },
+  ];
 
   return {
     state,
@@ -40,6 +47,7 @@ const mocks = vi.hoisted(() => {
         Object.assign(state, patch);
       }),
       getSlots: vi.fn(() => slots),
+      getCurrentSaveIndex: vi.fn(() => -1),
       loadSlot: vi.fn(),
       saveSlot: vi.fn(),
       clearSlot: vi.fn(),
@@ -48,6 +56,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("../store", () => ({
+  DEFAULT_SETTINGS: { autoBalanceEnabled: true },
   settingsStore: mocks.settingsStore,
   useSettings: () => mocks.state,
   useSlots: () => mocks.slots,
@@ -60,6 +69,15 @@ describe("Shortcuts", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    mocks.settingsStore.getCurrentSaveIndex.mockReturnValue(-1);
     mocks.state.view = "combo";
     mocks.state.comboFullscreen = false;
     mocks.state.slotCycleMode = false;
@@ -68,6 +86,8 @@ describe("Shortcuts", () => {
     mocks.state.postFxEnabled = true;
     mocks.state.showBPM = true;
     mocks.state.showLatency = false;
+    mocks.state.visualResponse = 1;
+    mocks.state.autoBalanceEnabled = false;
 
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -82,6 +102,73 @@ describe("Shortcuts", () => {
   afterEach(() => {
     root.unmount();
     container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("adjusts response with arrow keys without changing visuals", () => {
+    const slider = container.querySelector<HTMLElement>('[role="slider"]')!;
+    slider.focus();
+    slider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(mocks.settingsStore.set).toHaveBeenCalledTimes(1);
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ visualResponse: 1.04 });
+  });
+
+  it("offers automatic balance and disables the neutral response reset", () => {
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Reset response to 1×"]')
+        ?.disabled,
+    ).toBe(true);
+    const toggle = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Auto balance",
+    )!;
+    toggle.click();
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ autoBalanceEnabled: true });
+  });
+
+  it("uses minus and plus for calm/punchy response and clamps at the limits", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "-", bubbles: true }));
+    expect(mocks.state.visualResponse).toBe(0.97);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+", bubbles: true }));
+    expect(mocks.state.visualResponse).toBe(1);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "=", bubbles: true }));
+    expect(mocks.state.visualResponse).toBe(1.04);
+    mocks.state.visualResponse = 4;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+", bubbles: true }));
+    expect(mocks.state.visualResponse).toBe(4);
+    mocks.state.visualResponse = 0.25;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "-", bubbles: true }));
+    expect(mocks.state.visualResponse).toBe(0.25);
+  });
+
+  it("leaves typing and browser zoom alone for response shortcuts", () => {
+    const input = document.createElement("input");
+    container.append(input);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "-", bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "+", ctrlKey: true, bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "-", metaKey: true, bubbles: true }));
+    expect(mocks.settingsStore.set).not.toHaveBeenCalled();
+  });
+
+  it("keeps the auto balance explanation visible through live status updates", async () => {
+    const toggle = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Auto balance",
+    )!;
+    toggle.focus();
+    await tick();
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain(
+      "Gradually adjusts brightness",
+    );
+    flushSync(() =>
+      window.dispatchEvent(
+        new CustomEvent("spectrum-aura:balance-state", {
+          detail: { status: "balanced", exposure: 1.1, response: 1, sampleMs: 2 },
+        }),
+      ),
+    );
+    expect(document.activeElement).toBe(toggle);
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain(
+      "Performance Mode and VR",
+    );
   });
 
   it("renders the updated shortcut labels", () => {
@@ -92,7 +179,24 @@ describe("Shortcuts", () => {
     expect(container.textContent).toContain("BPM Grid");
     expect(container.textContent).toContain("Latency");
     expect(container.textContent).toContain("Beat Tap");
-    expect(container.textContent).toContain("Hide All");
+    expect(container.textContent).toContain("Hide Controls");
+  });
+
+  it("keeps a focused tooltip open through live FPS updates", async () => {
+    const button = container.querySelector<HTMLButtonElement>("button[aria-label='Randomize']")!;
+    button.focus();
+    await tick();
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+
+    for (const fps of [60, 59, 61]) {
+      flushSync(() => {
+        window.dispatchEvent(new CustomEvent("spectrum-aura:frame-stats", { detail: { fps } }));
+      });
+      await tick();
+      expect(container.querySelector("button[aria-label='Randomize']")).toBe(button);
+      expect(document.activeElement).toBe(button);
+      expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+    }
   });
 
   it("shows the current visual name in the header and a view count in the visual cluster", () => {
@@ -262,13 +366,19 @@ describe("Shortcuts", () => {
   it("uses A key for Play Saves", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
 
-    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ slotCycleMode: true });
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({
+      slotCycleMode: true,
+      viewCycleMode: false,
+    });
   });
 
   it("uses C key for View Cycle", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
 
-    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ viewCycleMode: true });
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({
+      viewCycleMode: true,
+      slotCycleMode: false,
+    });
   });
 
   it("uses M key for BPM grid toggle", () => {
@@ -363,7 +473,7 @@ describe("Shortcuts", () => {
     });
     await tick();
 
-    const playSavesButton = container.querySelector("button[aria-label='Play Saves']");
+    const playSavesButton = container.querySelector("button[aria-label='Pause Saves']");
     expect(playSavesButton?.getAttribute("aria-pressed")).toBe("true");
   });
 
@@ -385,7 +495,9 @@ describe("Shortcuts", () => {
     expect(container.textContent).toContain("Exit VR");
   });
 
-  it("deletes the focused save from the shortcut bar", () => {
+  it("deletes only the current saved look from the shortcut bar", () => {
+    mocks.settingsStore.getCurrentSaveIndex.mockReturnValue(1);
+    flushSync(() => root.render(<Shortcuts />));
     const deleteButton = Array.from(container.querySelectorAll("button")).find((button) =>
       (button.textContent ?? "").includes("Delete"),
     );
@@ -394,6 +506,39 @@ describe("Shortcuts", () => {
 
     deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-    expect(mocks.settingsStore.clearSlot).toHaveBeenCalledWith(0);
+    expect(mocks.settingsStore.clearSlot).toHaveBeenCalledWith(1);
+  });
+  it("disables Save for a saved look and Delete for an unsaved look", () => {
+    const deleteButton = container.querySelector<HTMLButtonElement>("button[aria-label='Delete']")!;
+    expect(deleteButton.getAttribute("aria-disabled")).toBe("true");
+    deleteButton.click();
+    expect(mocks.settingsStore.clearSlot).not.toHaveBeenCalled();
+    mocks.settingsStore.getCurrentSaveIndex.mockReturnValue(0);
+    flushSync(() => root.render(<Shortcuts />));
+    const save = container.querySelector<HTMLButtonElement>("button[aria-label='Save']")!;
+    expect(save.textContent).toContain("Saved");
+    expect(save.getAttribute("aria-disabled")).toBe("true");
+    save.click();
+    expect(mocks.settingsStore.saveSlot).not.toHaveBeenCalled();
+    expect(deleteButton.getAttribute("aria-disabled")).toBe("false");
+  });
+
+  it("renders FPS as a readout, not an action", () => {
+    flushSync(() =>
+      window.dispatchEvent(new CustomEvent("spectrum-aura:frame-stats", { detail: { fps: 60 } })),
+    );
+    expect(
+      container.querySelector("output[title='Live rendering frame rate']")?.textContent,
+    ).toContain("60");
+    expect(container.querySelector("button[title*='FPS']")).toBeNull();
+  });
+
+  it("lets a resize handle own its arrow keys", () => {
+    const handle = document.createElement("button");
+    handle.setAttribute("data-own-arrow-keys", "");
+    document.body.append(handle);
+    handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(mocks.settingsStore.set).not.toHaveBeenCalled();
+    handle.remove();
   });
 });

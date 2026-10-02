@@ -57,7 +57,9 @@ export function useDraggablePanel(id: string) {
     if (e.button !== 0) return;
     const target = e.target as Element | null;
     if (
-      target?.closest("button, a, input, textarea, select, kbd, [role='slider'], [role='switch']")
+      target?.closest(
+        "[data-ui-control], button, a, input, textarea, select, kbd, [role='slider'], [role='switch']",
+      )
     ) {
       return;
     }

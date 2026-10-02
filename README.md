@@ -139,7 +139,7 @@ Press `C` to enable **music-reactive view cycle**. Views switch at the start of 
 
 **Where to see it**
 
-- **Canvas overlay** (`M`): large BPM digits + 16-beat grid when audio is running.
+- **BPM mini panel** (`M`): BPM digits, experimental label and 16-beat grid, aligned with the latency panel.
 - **Settings → Audio** (`S`): same tempo readout, plus toggles for the latency HUD (`L`) and beat sensitivity.
 - **Latency HUD** (`L`): frame timing breakdown (audio → scene → render) for tuning on slower hardware.
 
@@ -147,6 +147,7 @@ Technical deep dive: [Song clock and sync](docs/song-clock-and-sync.md).
 
 ### Live controls
 
+- `−` / `+` calmer / punchier visual response (`=` also increases it)
 - `R` randomize look
 - `←` / `→` prev / next visual (`B` / `V` aliases)
 - `[` / `]` (or `⇧←` / `⇧→`) prev / next saved look
@@ -154,7 +155,7 @@ Technical deep dive: [Song clock and sync](docs/song-clock-and-sync.md).
 - `F` toggle fullscreen
 - `S` toggle settings panel
 - `X` reset the current audio source selection
-- `N` toggle stats panel
+- `N` toggle stats panel; `Shift+N` toggle full-page stats
 - `G` show/hide shortcut bar (restores via `G` or the bottom pill)
 - `T` beat tap (learn tempo + lock grid)
 - `⇧T` downbeat tap (reset phrase to beat 1/16)
@@ -168,8 +169,31 @@ Bottom shortcut rail:
 - `inc` toggles whether randomize touches view settings in addition to post FX.
 - `fx` toggles the post-processing pipeline.
 - Save controls are grouped like a transport cluster: previous, play saves, next, random, save, delete.
-- Utility cluster: audio source, fullscreen, stats, latency, BPM grid, beat tap, settings, hide all (`G`).
-- Every shortcut button and toggle has an in-app styled tooltip with usage details.
+- Panel cluster: Post FX, Scene, Settings, BPM Grid and Latency.
+- Utility cluster: Audio Source, Fullscreen, Stats, FPS readout, Beat Tap and Hide Controls (`G`).
+- Styled tooltips stay open while live readouts update. Auto balance explains its behavior and current correction.
+- Save becomes **Saved** and disables when the displayed look already matches a save. Delete only applies to a matching saved look. Play Saves requires at least two saves.
+- Button groups, mini panels and Stats share the same translucent blur fill.
+
+### Response and automatic balance
+
+The bottom toolbar has a **Response** slider from 0.25× to 4×. Move toward
+Calm or Punchy, use `−` / `+`, or press the reset button to return to 1×.
+This changes visual sensitivity without changing audio volume or beat detection.
+
+**Auto balance is on by default.** It watches the rendered scene and gradually
+adjusts brightness or boosts visual response after sustained low activity.
+The slider remains your baseline. Toggle Auto balance off to use manual control;
+your choice and Response survive reloads and switching saved looks.
+
+Auto balance pauses in Performance Mode and VR. It reduces sampling frequency
+or pauses if canvas reads become costly. Corrections are bounded, so it cannot
+restore detail already clipped by an effect or animate a scene with no reactive
+movement. See [response and balance](docs/response-and-balance.md) for the limits.
+
+Stats (`N`) can be dragged and resized, scrolls to show all rows, and remembers
+its position and size locally. `Shift+N` opens the full-page view. Graphs use
+light smoothing and adaptive ranges; numerical readings remain unchanged.
 
 Control panel additions:
 

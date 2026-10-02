@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { settingsStore, useSlots, type SavedSlot } from "../store";
+import { settingsStore, useSlots, useSettings, type SavedSlot } from "../store";
+import { sameSavedLook } from "../saved-look";
 import { requestFrameCapture } from "../frame-capture";
 
 /**
@@ -8,6 +9,7 @@ import { requestFrameCapture } from "../frame-capture";
  */
 export type PresetActionResult =
   | { status: "ok"; index: number; name: string }
+  | { status: "unchanged"; index: number; name: string }
   | { status: "empty" }
   | { status: "missing"; index: number };
 
@@ -27,6 +29,10 @@ export function wrapIndex(current: number, dir: 1 | -1, length: number): number 
 export type PresetActions = {
   slots: SavedSlot[];
   hasPresets: boolean;
+  currentSaveIndex: number;
+  canSaveNew: boolean;
+  canLoadAnother: boolean;
+  deleteCurrent: () => PresetActionResult;
   /** Cursor clamped to the current slot list. */
   activeIndex: number;
   /** Move the cursor without loading. */
@@ -58,6 +64,8 @@ export type PresetActions = {
  */
 export function usePresetActions(): PresetActions {
   const slots = useSlots();
+  useSettings();
+  const currentSaveIndex = settingsStore.getCurrentSaveIndex();
   const [cursor, setCursor] = useState(0);
   const hasPresets = slots.length > 0;
   const activeIndex = hasPresets ? Math.min(cursor, slots.length - 1) : 0;
@@ -82,6 +90,7 @@ export function usePresetActions(): PresetActions {
     const slot = list[index];
     if (!slot) return { status: "missing", index };
     setCursor(index);
+    settingsStore.set({ slotCycleMode: false, viewCycleMode: false });
     settingsStore.loadSlot(index);
     return { status: "ok", index, name: slot.name };
   };
@@ -94,7 +103,9 @@ export function usePresetActions(): PresetActions {
   const step = (dir: 1 | -1, opts?: { load?: boolean }): PresetActionResult => {
     const list = settingsStore.getSlots();
     if (list.length === 0) return { status: "empty" };
-    const next = wrapIndex(activeIndex, dir, list.length);
+    const current = opts?.load ? settingsStore.getCurrentSaveIndex() : activeIndex;
+    const next =
+      current < 0 ? (dir === 1 ? 0 : list.length - 1) : wrapIndex(current, dir, list.length);
     if (opts?.load) return loadAt(next);
     focus(next);
     return slotResult(list, next);
@@ -103,13 +114,19 @@ export function usePresetActions(): PresetActions {
   const random = (opts?: { load?: boolean }): PresetActionResult => {
     const list = settingsStore.getSlots();
     if (list.length === 0) return { status: "empty" };
-    const next = pickRandomOtherIndex(list.length, activeIndex);
+    const current = opts?.load ? settingsStore.getCurrentSaveIndex() : activeIndex;
+    const next = pickRandomOtherIndex(list.length, current);
     if (opts?.load) return loadAt(next);
     focus(next);
     return slotResult(list, next);
   };
 
   const saveAt = (index: number, name: string): PresetActionResult => {
+    const target = settingsStore.getSlots()[index];
+    if (index < 0 || index > settingsStore.getSlots().length) return { status: "missing", index };
+    if (target && sameSavedLook(settingsStore.get(), target.settings)) {
+      return { status: "unchanged", index, name: target.name };
+    }
     settingsStore.saveSlot(index, name);
     setCursor(index);
     // The save is synchronous; the thumbnail arrives with the next rendered
@@ -122,6 +139,13 @@ export function usePresetActions(): PresetActions {
   };
 
   const saveNew = (): PresetActionResult => {
+    const existing = settingsStore.getCurrentSaveIndex();
+    if (existing >= 0)
+      return {
+        status: "unchanged",
+        index: existing,
+        name: settingsStore.getSlots()[existing].name,
+      };
     const index = settingsStore.getSlots().length;
     return saveAt(index, `Save ${index + 1}`);
   };
@@ -158,7 +182,16 @@ export function usePresetActions(): PresetActions {
     return { status: "ok", index, name: slot.name };
   };
 
+  const deleteCurrent = (): PresetActionResult => {
+    const index = settingsStore.getCurrentSaveIndex();
+    return index < 0 ? { status: "empty" } : deleteAt(index);
+  };
+
   return {
+    currentSaveIndex,
+    canSaveNew: currentSaveIndex < 0,
+    canLoadAnother: slots.length > 1 || (slots.length === 1 && currentSaveIndex < 0),
+    deleteCurrent,
     slots,
     hasPresets,
     activeIndex,

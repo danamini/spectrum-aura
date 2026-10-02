@@ -50,3 +50,8 @@ export function smoothLatency(
 export function isSignalLatencyVisible(signalToRenderMs: number): boolean {
   return signalToRenderMs >= SIGNAL_LATENCY_VISIBLE_MS;
 }
+
+/** Derive measured FPS independently of the animation delta clamp. */
+export function calculateFps(elapsedSeconds: number): number {
+  return Number.isFinite(elapsedSeconds) && elapsedSeconds > 0 ? 1 / elapsedSeconds : 0;
+}

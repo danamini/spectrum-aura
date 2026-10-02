@@ -28,7 +28,7 @@ requestAnimationFrame(desktopLoop)
 
 **Allocation discipline:** the hot path is allocation-free — `bandsForScene`
 and `audio.read()`'s `AudioBands` output are pooled objects mutated in place
-every frame, not fresh literals. (`tempoFrame` is deliberately *not* pooled:
+every frame, not fresh literals. (`tempoFrame` is deliberately _not_ pooled:
 it flows into a React `useState` that detects changes by reference identity.)
 
 ---
@@ -52,9 +52,9 @@ warning banner while it's on. Loading a saved preset can never toggle it.
 auto-degrades post-FX under **sustained** low FPS, with hysteresis so it never
 flaps and recovers one tier at a time:
 
-| Tier | Enters below | Recovers at | Effect                                                  |
-| ---- | ------------ | ----------- | ------------------------------------------------------- |
-| 1    | 40 fps       | ≥ 54 fps    | Disables SSAO + DoF only                                 |
+| Tier | Enters below | Recovers at | Effect                                                          |
+| ---- | ------------ | ----------- | --------------------------------------------------------------- |
+| 1    | 40 fps       | ≥ 54 fps    | Disables SSAO + DoF only                                        |
 | 2    | 24 fps       | ≥ 48 fps    | Also SMAA, motion trails, film grain, asset overlay; caps bloom |
 
 Margins are deliberately generous so a 60Hz display's normal dips and
@@ -188,3 +188,24 @@ Toggle with `L`. Stats panel (`N`) shows the same metrics under **Timing**.
 4. If FPS < 60, SongClock phase updates coarser (engine-bound) — HUD rAF may repeat stale frames
 
 See [latency-metrics.test.ts](../packages/engine/src/__tests__/latency-metrics.test.ts) and [latency-benchmark.test.ts](../packages/engine/src/__tests__/latency-benchmark.test.ts).
+
+## Response and HUD presentation
+
+[Response and automatic balance](response-and-balance.md) describes the optional
+feedback work after render and the presentation-only gain before scene update.
+Auto balance is enabled by default, but is suspended in Performance Mode and VR.
+
+The latency mini panel shows audio → UI, audio → scene, scene → render, signal → UI,
+FFT window and audio-read CPU. A stale signal reading shows idle; ambient mode
+labels FFT timing synthetic. These are distinct quantities, not an additive
+end-to-end audio-device latency estimate.
+
+Stats histories sample every 100 ms into 52-point buffers. Light exponential
+smoothing affects graph samples only. Slowly adapting ranges keep small changes
+visible without treating every fluctuation as a full-scale jump. Numerical rows
+retain their measured values. The graphs add no independent animation loop.
+
+Stats geometry is stored under `analyser-stats-layout-v1`, clamped to the viewport
+and restored after full-page mode. Its scroll area keeps all sections reachable
+when the panel is small. Shared `HUD_GLASS` styles keep blur consistent across
+Stats, toolbar groups and mini panels.

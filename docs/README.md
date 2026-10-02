@@ -2,15 +2,18 @@
 
 Deep reference for contributors, users tuning sync, and coding agents.
 
-| Document                                                   | Contents                                                    |
-| ---------------------------------------------------------- | ----------------------------------------------------------- |
-| [DEVELOPMENT.md](./DEVELOPMENT.md)                         | Project structure, workflows, testing, conventions          |
-| [audio-analysis-pipeline.md](./audio-analysis-pipeline.md) | FFT, bands, BeatMatcher, BPMDetector (equations + code map) |
-| [song-clock-and-sync.md](./song-clock-and-sync.md)         | Authoritative SongClock, taps, bar grid, view cycle         |
-| [rendering-and-latency.md](./rendering-and-latency.md)     | rAF loop, GPU path, latency budgets, HUD bus                |
-| [fft-and-beat-detection.md](./fft-and-beat-detection.md)   | Short overview (links to detailed docs)                     |
+| Document                                                     | Contents                                                    |
+| ------------------------------------------------------------ | ----------------------------------------------------------- |
+| [DEVELOPMENT.md](./DEVELOPMENT.md)                           | Project structure, workflows, testing, conventions          |
+| [audio-analysis-pipeline.md](./audio-analysis-pipeline.md)   | FFT, bands, BeatMatcher, BPMDetector (equations + code map) |
+| [song-clock-and-sync.md](./song-clock-and-sync.md)           | Authoritative SongClock, taps, bar grid, view cycle         |
+| [rendering-and-latency.md](./rendering-and-latency.md)       | rAF loop, GPU path, latency budgets, HUD bus                |
+| [fft-and-beat-detection.md](./fft-and-beat-detection.md)     | Short overview (links to detailed docs)                     |
 | [retro-systems-and-postfx.md](./retro-systems-and-postfx.md) | Retro hardware emulation pass, fonts, pipeline order, locks |
-| [THIRD_PARTY_ASSETS.md](./THIRD_PARTY_ASSETS.md)           | Runtime asset licensing                                     |
+| [THIRD_PARTY_ASSETS.md](./THIRD_PARTY_ASSETS.md)             | Runtime asset licensing                                     |
+
+- [Response and automatic balance](response-and-balance.md): visual gain, feedback limits and persistence.
+- [v0.4.0 completion plan](plans/controls-and-balance.plan.md): requested work, verification and release checklist.
 
 ## Quick mental model
 

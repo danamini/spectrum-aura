@@ -79,16 +79,27 @@ export class AudioEngine {
   private outTiming: AudioTiming = { ...EMPTY_TIMING };
   private outBands: AudioBands = { ...EMPTY_BANDS, timing: this.outTiming };
 
+  private captureRequest = 0;
+
+  /** Resolves false when a newer source request or stop supersedes this capture. */
   async startMic(options?: { latencyOptimized?: boolean }) {
+    const request = ++this.captureRequest;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (request !== this.captureRequest) {
+        stream.getTracks().forEach((track) => track.stop());
+        return false;
+      }
       this.attach(stream, options);
+      return true;
     } catch (error) {
+      if (request !== this.captureRequest) return false;
       throw new Error(formatMediaError(error));
     }
   }
 
   async startSystem(options?: { latencyOptimized?: boolean }) {
+    const request = ++this.captureRequest;
     try {
       // Steer Chrome's picker toward "Entire screen" with the system-audio
       // checkbox visible and preselected where supported — whole-system audio
@@ -107,6 +118,10 @@ export class AudioEngine {
         monitorTypeSurfaces: "include",
         selfBrowserSurface: "exclude",
       } as MediaStreamConstraints);
+      if (request !== this.captureRequest) {
+        stream.getTracks().forEach((track) => track.stop());
+        return false;
+      }
       stream.getVideoTracks().forEach((t) => t.stop());
       if (stream.getAudioTracks().length === 0) {
         stream.getTracks().forEach((t) => t.stop());
@@ -115,7 +130,9 @@ export class AudioEngine {
         );
       }
       this.attach(stream, options);
+      return true;
     } catch (error) {
+      if (request !== this.captureRequest) return false;
       if (error instanceof Error && error.message.includes("No audio was shared")) {
         throw error;
       }
@@ -126,30 +143,39 @@ export class AudioEngine {
   /** Attach an arbitrary MediaStream — e.g. `videoElement.captureStream()` —
    * for frontends that analyse media they are also playing. */
   startStream(stream: MediaStream, options?: { latencyOptimized?: boolean }) {
+    ++this.captureRequest;
     this.attach(stream, options);
   }
 
   private attach(stream: MediaStream, options?: { latencyOptimized?: boolean }) {
-    this.stop();
-    const latencyOptimized = options?.latencyOptimized ?? true;
-    const ctx = new AudioContext({
-      latencyHint: latencyOptimized ? "interactive" : "playback",
-    });
-    const source = ctx.createMediaStreamSource(stream);
-    const gain = ctx.createGain();
-    gain.gain.value = 1;
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = latencyOptimized ? 0.45 : 0.82;
-    source.connect(gain).connect(analyser);
-    this.ctx = ctx;
-    this.source = source;
-    this.gain = gain;
-    this.analyser = analyser;
+    this.releaseResources();
+    // Take ownership before setup so a failed graph cannot leave capture active.
     this.stream = stream;
-    this.bins = new Uint8Array(analyser.frequencyBinCount);
-    this.updateBandBounds(analyser.frequencyBinCount);
-    void ctx.resume();
+    try {
+      const latencyOptimized = options?.latencyOptimized ?? true;
+      const ctx = new AudioContext({
+        latencyHint: latencyOptimized ? "interactive" : "playback",
+      });
+      this.ctx = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const gain = ctx.createGain();
+      gain.gain.value = 1;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = latencyOptimized ? 0.45 : 0.82;
+      source.connect(gain).connect(analyser);
+      this.source = source;
+      this.gain = gain;
+      this.analyser = analyser;
+      this.bins = new Uint8Array(analyser.frequencyBinCount);
+      this.updateBandBounds(analyser.frequencyBinCount);
+      void ctx.resume().catch(() => {
+        // A pending resume may reject after stop() closes this context.
+      });
+    } catch (error) {
+      this.releaseResources();
+      throw error;
+    }
   }
 
   private updateBandBounds(n: number) {
@@ -169,7 +195,7 @@ export class AudioEngine {
     if (this.analyser) this.analyser.smoothingTimeConstant = v;
   }
   setFftSize(n: number) {
-    if (this.analyser) {
+    if (this.analyser && this.analyser.fftSize !== n) {
       this.analyser.fftSize = n;
       this.bins = new Uint8Array(this.analyser.frequencyBinCount);
       this.updateBandBounds(this.analyser.frequencyBinCount);
@@ -292,13 +318,20 @@ export class AudioEngine {
   }
 
   stop() {
+    ++this.captureRequest;
+    this.releaseResources();
+  }
+
+  private releaseResources() {
     try {
       this.stream?.getTracks().forEach((t) => t.stop());
     } catch {
       // Ignore teardown errors from stale/ended tracks.
     }
     try {
-      this.ctx?.close();
+      void this.ctx?.close().catch(() => {
+        // Closing an already terminated context can reject asynchronously.
+      });
     } catch {
       // Ignore close errors if the context was already terminated.
     }
@@ -307,6 +340,10 @@ export class AudioEngine {
     this.source = null;
     this.gain = null;
     this.stream = null;
+    this.bins = EMPTY_BANDS.bins;
+    this.lastTickBpm = 0;
+    this.lastTickBpmConfident = false;
+    Object.assign(this.outTiming, EMPTY_TIMING);
     this.beatMatcher.reset();
     this.bpmDetector.reset();
   }

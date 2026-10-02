@@ -1,3 +1,4 @@
+import { MINI_HUD_SURFACE } from "../theme";
 import { isSignalLatencyVisible } from "@spectrum-aura/engine/latency-metrics";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import type { LatencyHudState } from "./stats-types";
@@ -25,7 +26,7 @@ export function LatencyHud({
         {...drag.handleProps}
         style={{ bottom: "calc(0.75rem + var(--bottom-hud-clearance, 0px))", ...drag.style }}
       >
-        <div className="max-w-[220px] rounded-md border border-white/15 bg-black/60 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] backdrop-blur-md">
+        <div className={`${MINI_HUD_SURFACE} font-mono text-[10px] uppercase tracking-[0.14em]`}>
           <div className="mb-1 flex items-center gap-2 text-white/40">
             <span className="h-1.5 w-1.5 rounded-full bg-white/25" />
             Latency
@@ -46,10 +47,10 @@ export function LatencyHud({
       style={{ bottom: "calc(0.75rem + var(--bottom-hud-clearance, 0px))", ...drag.style }}
     >
       <div
-        className={`rounded-md border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] backdrop-blur-md ${
+        className={`${MINI_HUD_SURFACE} font-mono text-[10px] uppercase tracking-[0.14em] ${
           latency.performanceMode
-            ? "border-amber-300/35 bg-black/75 shadow-[0_0_24px_rgba(251,191,36,0.12)]"
-            : "border-white/15 bg-black/60"
+            ? "border-amber-300/35 shadow-[0_0_24px_rgba(251,191,36,0.12)]"
+            : ""
         }`}
       >
         <div className="mb-1 flex items-center gap-2 text-white/40">
@@ -63,12 +64,41 @@ export function LatencyHud({
             </span>
           )}
         </div>
-        <div className={`tabular-nums text-sm font-bold ${tone}`}>{fmt(primary)} ms</div>
+        <div className={`tabular-nums text-xl font-bold ${tone}`}>{fmt(primary)} ms</div>
         <div className="mt-1 text-[9px] normal-case tracking-normal text-white/45">Audio → UI</div>
-        <div className="mt-1 grid gap-0.5 text-[9px] normal-case tracking-normal text-white/35">
-          <span>audio→scene {fmt(latency.audioToSceneMs)} ms</span>
-          <span>scene→render {fmt(latency.sceneToRenderMs)} ms</span>
-          {showSignal && <span>signal→ui {fmt(latency.signalToRenderMs)} ms</span>}
+        <div className="mt-1 grid gap-0.5 text-[9px] normal-case tracking-normal text-white/50">
+          <span className="flex justify-between gap-2">
+            <span>Audio → scene</span>
+            <span className="tabular-nums">{fmt(latency.audioToSceneMs)} ms</span>
+          </span>
+          <span className="flex justify-between gap-2">
+            <span>Scene → render</span>
+            <span className="tabular-nums">{fmt(latency.sceneToRenderMs)} ms</span>
+          </span>
+          <span className="flex justify-between gap-2">
+            <span>Signal → UI</span>
+            <span className="tabular-nums">
+              {showSignal ? `${fmt(latency.signalToRenderMs)} ms` : "idle"}
+            </span>
+          </span>
+          <span
+            className="mt-1 flex justify-between gap-2 border-t border-white/10 pt-1"
+            title="Audio analysed per FFT window; separate from the audio → UI processing time above."
+          >
+            <span>FFT window</span>
+            <span className="tabular-nums">
+              {latency.synthetic ? "synthetic" : `${fmt(latency.fftWindowMs)} ms`}
+            </span>
+          </span>
+          <span
+            className="flex justify-between gap-2"
+            title="CPU time spent reading and analysing audio."
+          >
+            <span>Audio read</span>
+            <span className="tabular-nums">
+              {latency.synthetic ? "—" : `${latency.audioReadCpuMs.toFixed(2)} ms`}
+            </span>
+          </span>
         </div>
       </div>
     </div>

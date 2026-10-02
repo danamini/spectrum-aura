@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { HUD_GLASS, MINI_HUD_SURFACE } from "./theme";
 import { BEATS_PER_PHRASE, type BarTiming } from "@spectrum-aura/engine/bar-clock";
 import { useLiveTempoFrame } from "./hooks/useLiveTempoFrame";
 
@@ -73,9 +75,12 @@ function BeatDots({ timing }: { timing: BarTiming }) {
   const pulse = 0.55 + timing.beatPhase * 0.45;
 
   return (
-    <div className="mt-2 flex justify-center gap-1.5">
+    <div className="mt-2 grid grid-cols-4 gap-1.5">
       {Array.from({ length: 4 }, (_, barIdx) => (
-        <div key={barIdx} className="flex gap-0.5 rounded-sm bg-white/[0.03] px-0.5 py-0.5">
+        <div
+          key={barIdx}
+          className="grid grid-cols-4 gap-0.5 rounded-sm bg-white/[0.03] px-0.5 py-0.5"
+        >
           {Array.from({ length: 4 }, (_, beatIdx) => {
             const beatNumber = barIdx * 4 + beatIdx + 1;
             const beatIdx0 = beatNumber - 1;
@@ -84,7 +89,7 @@ function BeatDots({ timing }: { timing: BarTiming }) {
             return (
               <div
                 key={beatNumber}
-                className={`h-2 w-2 rounded-full ${
+                className={`aspect-square w-full max-h-2 max-w-2 justify-self-center rounded-full ${
                   isCurrent ? "bg-emerald-300" : isPast ? "bg-white/30" : "bg-white/10"
                 }`}
                 style={
@@ -105,7 +110,13 @@ function BeatDots({ timing }: { timing: BarTiming }) {
   );
 }
 
-export function BarTimingHud({ compact = false }: { compact?: boolean }) {
+export function BarTimingHud({
+  compact = false,
+  header,
+}: {
+  compact?: boolean;
+  header?: ReactNode;
+}) {
   const {
     barTiming: timing,
     bpmConfidence: confidence,
@@ -115,16 +126,17 @@ export function BarTimingHud({ compact = false }: { compact?: boolean }) {
 
   return (
     <div
-      className={`rounded-lg border backdrop-blur-sm ${
-        hintFlash ? "border-emerald-300/50 bg-emerald-400/10" : "border-white/10 bg-black/20"
-      } ${compact ? "px-2.5 py-2" : "mb-3 px-3 py-2 bg-black/35"}`}
+      className={`${header ? MINI_HUD_SURFACE : `rounded-lg border ${HUD_GLASS}`} ${
+        hintFlash ? "border-emerald-300/50" : "border-white/10"
+      } ${header ? "" : compact ? "px-2.5 py-2" : "mb-3 px-3 py-2"}`}
       style={{
         boxShadow: timing.synced
           ? `0 0 ${glow}px rgba(52, 211, 153, ${confidence * 0.25})`
           : undefined,
       }}
     >
-      <div className="flex items-center justify-center gap-2 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
+      {header}
+      <div className="flex flex-wrap items-center justify-center gap-2 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
         <span>4/4</span>
         {timing.source === "manual" && (
           <span className="rounded border border-emerald-300/25 bg-emerald-400/15 px-1 py-0.5 text-[7px] tracking-[0.12em] text-emerald-200/90">
@@ -174,7 +186,7 @@ export function BarTimingHud({ compact = false }: { compact?: boolean }) {
         }`}
         aria-hidden={timing.synced || timing.bpmLocked}
       >
-        Syncing grid… · tap T on beats
+        Syncing · tap T on beats
       </div>
     </div>
   );

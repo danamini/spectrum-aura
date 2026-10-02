@@ -349,9 +349,11 @@ export class Scene {
   rippleGroup = new THREE.Group();
   private rippleColumnData: Array<{
     root: THREE.Group;
+    instances: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
     meshes: THREE.Mesh[];
     mats: THREE.MeshStandardMaterial[];
   }> = [];
+  private readonly rippleInstanceMatrix = new THREE.Matrix4();
   private rippleGeo?: THREE.BufferGeometry;
   /** Phase per side-by-side column (max 5). */
   private ripplePhases = new Float32Array(50);
@@ -381,13 +383,13 @@ export class Scene {
   private monolithGravity = 7;
 
   // mandala view
+  private readonly mandalaSample = new THREE.Vector3();
   private mandalaRibbons: Array<{
     line: Line2;
     geometry: LineGeometry;
     material: LineMaterial;
     points: THREE.Vector3[];
     curve: THREE.CatmullRomCurve3;
-    positions: number[];
   }> = [];
   private mandalaRibbonCount = 12;
 
@@ -874,6 +876,7 @@ export class Scene {
   buildBars(count: number) {
     if (this.bars) {
       this.group.remove(this.bars);
+      this.bars.dispose();
       this.bars.geometry.dispose();
       (this.bars.material as THREE.Material).dispose();
     }
@@ -1031,8 +1034,10 @@ export class Scene {
     if (this.classicBars) {
       this.classicGroup.remove(this.classicBars);
       this.classicGroup.remove(this.classicPeaks);
+      this.classicBars.dispose();
       this.classicBars.geometry.dispose();
       (this.classicBars.material as THREE.Material).dispose();
+      this.classicPeaks.dispose();
       this.classicPeaks.geometry.dispose();
       (this.classicPeaks.material as THREE.Material).dispose();
     }
@@ -1485,6 +1490,7 @@ export class Scene {
   buildMonolith(gridSize: number = this.monolithGrid) {
     if (this.monolith) {
       this.monolithGroup.remove(this.monolith);
+      this.monolith.dispose();
       this.monolith.geometry.dispose();
       (this.monolith.material as THREE.Material).dispose();
     }
@@ -1674,7 +1680,7 @@ export class Scene {
       const line = new Line2(geometry, material);
       line.computeLineDistances();
       this.mandalaGroup.add(line);
-      this.mandalaRibbons.push({ line, geometry, material, points, curve, positions });
+      this.mandalaRibbons.push({ line, geometry, material, points, curve });
     }
   }
 
@@ -1705,14 +1711,16 @@ export class Scene {
           Math.sin(angle) * radius,
         );
       }
-      const sampled = r.curve.getPoints(r.positions.length / 3 - 1);
-      for (let s = 0; s < sampled.length; s++) {
-        const pt = sampled[s]!;
-        r.positions[s * 3] = pt.x;
-        r.positions[s * 3 + 1] = pt.y;
-        r.positions[s * 3 + 2] = pt.z;
+      const start = r.geometry.getAttribute("instanceStart") as THREE.InterleavedBufferAttribute;
+      const end = r.geometry.getAttribute("instanceEnd") as THREE.InterleavedBufferAttribute;
+      for (let sample = 0; sample <= start.count; sample++) {
+        const point = r.curve.getPoint(sample / start.count, this.mandalaSample);
+        if (sample < start.count) start.setXYZ(sample, point.x, point.y, point.z);
+        if (sample > 0) end.setXYZ(sample - 1, point.x, point.y, point.z);
       }
-      r.geometry.setPositions(r.positions);
+      start.data.needsUpdate = true;
+      r.geometry.computeBoundingBox();
+      r.geometry.computeBoundingSphere();
       const mat = r.material;
       mat.opacity = 0.55 + audio.mid * 0.55;
       // LineMaterial width is in screen-space px, so scale slider to a visibly thick range.
@@ -2279,6 +2287,7 @@ export class Scene {
     // Dispose previous
     if (this.soundwallPillars) {
       this.soundwallGroup.remove(this.soundwallPillars);
+      this.soundwallPillars.dispose();
       this.soundwallPillars.geometry.dispose();
       this.soundwallMat?.dispose();
     }
@@ -4186,6 +4195,8 @@ export class Scene {
   buildRipple() {
     for (const col of this.rippleColumnData) {
       this.rippleGroup.remove(col.root);
+      col.instances.dispose();
+      col.instances.material.dispose();
       for (const mat of col.mats) mat.dispose();
     }
     this.rippleColumnData = [];
@@ -4216,27 +4227,37 @@ export class Scene {
       root.position.x = (c - (C - 1) / 2) * gapLocal;
       const meshes: THREE.Mesh[] = [];
       const mats: THREE.MeshStandardMaterial[] = [];
-      for (let i = 0; i < N; i++) {
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x000000,
-          emissive: 0xffffff,
-          emissiveIntensity: 1.4,
-          metalness: 0.2,
-          roughness: 0.45,
-          toneMapped: false,
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 1,
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.frustumCulled = false;
-        root.add(mesh);
-        meshes.push(mesh);
-        mats.push(mat);
-      }
+      const material = this.createRippleMaterial();
+      material.emissiveIntensity = 1;
+      material.onBeforeCompile = (shader) => {
+        // Instance colors carry the full per-ring emissive radiance.
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "vec3 totalEmissiveRadiance = emissive;",
+          "vec3 totalEmissiveRadiance = emissive * vColor.rgb;",
+        );
+      };
+      material.customProgramCacheKey = () => "ripple-instance-emissive";
+      const instances = new THREE.InstancedMesh(geo, material, N);
+      instances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      instances.setColorAt(0, this.white);
+      instances.instanceColor!.setUsage(THREE.DynamicDrawUsage);
+      instances.frustumCulled = false;
+      root.add(instances);
       this.rippleGroup.add(root);
-      this.rippleColumnData.push({ root, meshes, mats });
+      this.rippleColumnData.push({ root, instances, meshes, mats });
     }
+  }
+
+  private createRippleMaterial() {
+    return new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      emissive: 0xffffff,
+      emissiveIntensity: 1.4,
+      metalness: 0.2,
+      roughness: 0.45,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    });
   }
 
   /** Average normalized energy (0..1) for FFT bins in slice `col` of `colCount` contiguous bands (low → high). */
@@ -4322,9 +4343,24 @@ export class Scene {
       const sliceV = this.rippleSliceScratch[c]!;
       const col = this.rippleColumnData[c];
       if (!col) continue;
+      const transparent = opts.rippleOpacity < 1;
+      // Transparent surfaces need per-ring depth sorting. Allocate that path
+      // only when selected, then reuse it across opacity changes.
+      if (transparent && col.meshes.length === 0) {
+        for (let i = 0; i < N; i++) {
+          const mat = this.createRippleMaterial();
+          mat.transparent = true;
+          const mesh = new THREE.Mesh(this.rippleGeo!, mat);
+          mesh.frustumCulled = false;
+          col.root.add(mesh);
+          col.meshes.push(mesh);
+          col.mats.push(mat);
+        }
+      }
+      col.instances.visible = !transparent;
+      col.instances.material.wireframe = opts.rippleWireframe;
+      for (const mesh of col.meshes) mesh.visible = transparent;
       for (let i = 0; i < N; i++) {
-        const mesh = col.meshes[i];
-        if (!mesh) continue;
         const t = N === 1 ? 0.5 : i / (N - 1);
         const ringSpectrum = this.rippleRingSpectrumInSlice(bins, t, c, C);
         const wavePhase = t * waveCycles * Math.PI * 2 - this.ripplePhases[c] * Math.PI * 2;
@@ -4332,7 +4368,11 @@ export class Scene {
           Math.sin(wavePhase) *
           amplitude *
           (0.58 + normalizedBand(sliceV) * 0.85 + normalizedBand(ringSpectrum) * 0.55);
-        mesh.position.y = yWave;
+        if (transparent) col.meshes[i].position.y = yWave;
+        else {
+          this.rippleInstanceMatrix.makeTranslation(0, yWave, 0);
+          col.instances.setMatrixAt(i, this.rippleInstanceMatrix);
+        }
 
         if (t < 0.5) _c.copy(colA).lerp(colB, t * 2);
         else _c.copy(colB).lerp(colC, (t - 0.5) * 2);
@@ -4340,12 +4380,20 @@ export class Scene {
         const vPeak = Math.max(sliceV, ringSpectrum);
         const brightness = 0.68 + 0.68 * phaseAnim + vPeak * 0.55;
         _c.multiplyScalar(brightness);
-        const mat = col.mats[i]!;
-        mat.emissive.copy(_c);
-        mat.emissiveIntensity = 1.15 + sliceV * 1.25 + ringSpectrum * 0.7;
-        mat.opacity = opts.rippleOpacity;
-        mat.transparent = opts.rippleOpacity < 1;
-        if (mat.wireframe !== opts.rippleWireframe) mat.wireframe = opts.rippleWireframe;
+        const intensity = 1.15 + sliceV * 1.25 + ringSpectrum * 0.7;
+        if (transparent) {
+          const mat = col.mats[i];
+          mat.emissive.copy(_c);
+          mat.emissiveIntensity = intensity;
+          mat.opacity = opts.rippleOpacity;
+          mat.wireframe = opts.rippleWireframe;
+        } else {
+          col.instances.setColorAt(i, _c.multiplyScalar(intensity));
+        }
+      }
+      if (!transparent) {
+        col.instances.instanceMatrix.needsUpdate = true;
+        col.instances.instanceColor!.needsUpdate = true;
       }
     }
 
@@ -4439,8 +4487,6 @@ export class Scene {
         placeholder,
       });
     }
-
-    this.requestAssetflowAssets(this.assetflowBuildToken);
   }
 
   private createAssetflowFallbackGeometry(index: number) {
@@ -4744,6 +4790,7 @@ export class Scene {
       assetflowBackgroundDrift: number;
     },
   ) {
+    this.requestAssetflowAssets(this.assetflowBuildToken);
     const bins = audio.bins;
     const includeShapes = Boolean(opts.assetflowIncludeShapes);
     const modelCountInput = Number.isFinite(opts.assetflowModelCount)
@@ -6197,6 +6244,18 @@ export class Scene {
 
   dispose() {
     this.detachWebXrControllers();
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.InstancedMesh) object.dispose();
+    });
+    this.classicBars.geometry.dispose();
+    (this.classicBars.material as THREE.Material).dispose();
+    this.classicPeaks.geometry.dispose();
+    (this.classicPeaks.material as THREE.Material).dispose();
+    this.classicGrid?.geometry.dispose();
+    this.classicGridMat?.dispose();
+    this.reztubeGeo?.dispose();
+    this.reztubeMat?.dispose();
+    this.disposeTorusCells();
     if (this.xrHudPanel) {
       this.xrHudPanel.geometry.dispose();
       this.xrHudPanel.material.dispose();
@@ -6216,6 +6275,7 @@ export class Scene {
     this.particleMat.dispose();
     this.rippleGeo?.dispose();
     for (const col of this.rippleColumnData) {
+      col.instances.material.dispose();
       for (const m of col.mats) m.dispose();
     }
     this.rippleColumnData = [];

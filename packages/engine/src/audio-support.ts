@@ -10,7 +10,7 @@ function formatMediaError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
   if (error.name === "NotAllowedError") {
-    return "Microphone or screen-share permission was denied. Allow access in the browser prompt or macOS System Settings → Privacy & Security.";
+    return `Audio capture was cancelled or blocked. Try again and allow access in the picker. If no picker opens in this embedded preview, open ${LOCAL_DEV_URL} in Chrome and choose your audio source there. If access is still blocked, check the browser's site permissions and macOS Privacy & Security permissions for that browser. Ambient mode works without capture permission.`;
   }
   if (error.name === "NotFoundError") {
     return "No microphone was found. Connect an input device or choose a different audio source.";

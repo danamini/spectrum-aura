@@ -1,3 +1,4 @@
+import { VISUAL_RESPONSE } from "./visual-response";
 import type { ViewMode } from "./visuals";
 import type { OverlayCommonsTopic } from "./overlay-manifest";
 
@@ -154,6 +155,9 @@ export type Settings = {
   smoothing: number; // 0..0.99
   fftSize: 512 | 1024 | 2048 | 4096;
   gain: number;
+  /** Presentation-only sensitivity applied after audio analysis. */
+  visualResponse: number;
+  autoBalanceEnabled: boolean;
   beatSensitivity: number; // 1..3
   latencyOptimized: boolean;
 
@@ -624,6 +628,8 @@ export const DEFAULT_SETTINGS: Settings = {
   smoothing: 0.82,
   fftSize: 2048,
   gain: 1.0,
+  visualResponse: VISUAL_RESPONSE.default,
+  autoBalanceEnabled: true,
   beatSensitivity: 1.4,
   latencyOptimized: true,
 

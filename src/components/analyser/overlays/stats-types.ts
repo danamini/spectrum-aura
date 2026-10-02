@@ -150,6 +150,9 @@ export type LatencyHudState = {
   audioToSceneMs: number;
   sceneToRenderMs: number;
   performanceMode: boolean;
+  fftWindowMs: number;
+  audioReadCpuMs: number;
+  synthetic: boolean;
 };
 
 export const EMPTY_LATENCY_HUD: LatencyHudState = {
@@ -158,4 +161,7 @@ export const EMPTY_LATENCY_HUD: LatencyHudState = {
   audioToSceneMs: 0,
   sceneToRenderMs: 0,
   performanceMode: false,
+  fftWindowMs: 0,
+  audioReadCpuMs: 0,
+  synthetic: false,
 };

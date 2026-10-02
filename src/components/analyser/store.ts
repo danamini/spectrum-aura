@@ -1,3 +1,4 @@
+import { normalizeVisualResponse } from "@spectrum-aura/engine/visual-response";
 import { useSyncExternalStore } from "react";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
@@ -20,6 +21,7 @@ import {
 } from "@spectrum-aura/engine/settings";
 import { VISUALS, getVisualOverlayBiasDefault, pickNextView } from "@spectrum-aura/engine/visuals";
 import defaultSaves from "./default-saves.json";
+import { preserveSessionSettings, sameSavedLook } from "./saved-look";
 
 export type { ViewMode } from "@spectrum-aura/engine/visuals";
 // Re-exported so existing app imports of the schema keep working.
@@ -193,6 +195,11 @@ function preserveLockedFx(prev: Settings, next: Settings): Settings {
 function normalizePostFxRanges(settings: Settings): Settings {
   return {
     ...settings,
+    visualResponse: normalizeVisualResponse(settings.visualResponse),
+    autoBalanceEnabled:
+      typeof settings.autoBalanceEnabled === "boolean"
+        ? settings.autoBalanceEnabled
+        : DEFAULT_SETTINGS.autoBalanceEnabled,
     assetflowIncludeShapes: Boolean(settings.assetflowIncludeShapes),
     trailDecay: Math.max(0.75, Math.min(0.99, settings.trailDecay)),
     trailInject: Math.max(0.5, Math.min(2.25, settings.trailInject)),
@@ -357,6 +364,7 @@ function reindexAutoSlotNames() {
   }
 }
 
+let lastSavedIndex = -1;
 let state: Settings = { ...DEFAULT_SETTINGS };
 const slots: SavedSlot[] = DEPLOYMENT_DEFAULT_SLOTS.map((slot) => normalizeSlot(slot)).filter(
   isSavedSlot,
@@ -415,6 +423,8 @@ function emit() {
 export const settingsStore = {
   get: () => state,
   set: (patch: Partial<Settings>) => {
+    if (patch.slotCycleMode === true) patch = { ...patch, viewCycleMode: false };
+    else if (patch.viewCycleMode === true) patch = { ...patch, slotCycleMode: false };
     // any manual edit clears the active preset (unless caller sets it)
     const clearPreset = !("activePreset" in patch);
     // Only an actual view *switch* pulls in the visual's default overlay bias;
@@ -785,6 +795,11 @@ export const settingsStore = {
     emit();
   },
   getSlots: () => slotsSnapshot,
+  getCurrentSaveIndex: () => {
+    if (slots[lastSavedIndex] && sameSavedLook(state, slots[lastSavedIndex].settings))
+      return lastSavedIndex;
+    return slots.findIndex((slot) => sameSavedLook(state, slot.settings));
+  },
   saveSlot: (index: number, name?: string) => {
     if (index < 0 || index > slots.length) return;
     const slot: SavedSlot = {
@@ -794,6 +809,7 @@ export const settingsStore = {
     };
     if (index === slots.length) slots.push(slot);
     else slots[index] = slot;
+    lastSavedIndex = index;
     reindexAutoSlotNames();
     refreshSlotsSnapshot();
     persistSlots();
@@ -813,8 +829,6 @@ export const settingsStore = {
   loadSlot: (index: number) => {
     if (index < 0 || index >= slots.length) return;
     const slot = slots[index];
-    const currentCycleMode = state.slotCycleMode;
-    const currentCycleSeconds = state.slotCycleSeconds;
     const raw = slot.settings as Partial<Settings> & { rippleWaveLayers?: number };
     let merged = { ...DEFAULT_SETTINGS, ...raw } as Settings;
     if (raw.rippleWaveLayers != null && raw.rippleColumns === undefined) {
@@ -826,27 +840,20 @@ export const settingsStore = {
     state = normalizeSettings(
       // Pinned FX groups survive save loading too — a pinned Retro look must
       // hold through the Play Saves rotation just like through Randomize.
-      preserveLockedFx(state, {
-        ...merged,
-        slotCycleMode: currentCycleMode,
-        slotCycleSeconds: currentCycleSeconds,
-        // Performance Mode is a machine-specific tradeoff, not part of a saved
-        // "look" — and it hard-bypasses all post FX. Old saves (including a
-        // previous batch of bundled defaults) carried performance: true, so
-        // loading one silently killed post FX and persisted that across
-        // sessions. Saves can no longer toggle it.
-        performance: state.performance,
-        // MIDI is a hardware/permission opt-in tied to this machine, not a look.
-        midiEnabled: state.midiEnabled,
-        // Ambient (no-music) mode is a session choice, not part of a look.
-        ambientMode: state.ambientMode,
-      }),
+      preserveLockedFx(state, preserveSessionSettings(state, merged)),
     );
+    lastSavedIndex = index;
     emit();
   },
   clearSlot: (index: number) => {
     if (index < 0 || index >= slots.length) return;
     slots.splice(index, 1);
+    if (slots.length < 2 && state.slotCycleMode) {
+      state = { ...state, slotCycleMode: false };
+      emit();
+    }
+    if (lastSavedIndex === index) lastSavedIndex = -1;
+    else if (lastSavedIndex > index) lastSavedIndex -= 1;
     reindexAutoSlotNames();
     refreshSlotsSnapshot();
     persistSlots();

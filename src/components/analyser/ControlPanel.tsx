@@ -1754,19 +1754,26 @@ export function ControlPanel() {
                 {ui.activeTab === "saves" && (
                   <div className="space-y-3">
                     <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
-                      Captures every setting — view, post FX, and audio — as one saved look. Loaded
-                      and saved from here, the shortcut bar, or number keys 1–5 all share the same
-                      list.
+                      Saves view, post FX, and audio response as one look. Session controls stay
+                      unchanged when loading. Loaded and saved from here, the shortcut bar, or
+                      number keys 1–5 all share the same list.
                     </p>
                     <Row label="Save current setup">
                       <div className="flex flex-wrap gap-1.5">
-                        <Bn variant="primary" onClick={() => preset.saveNew()}>
-                          <Plus className="mr-1 h-3.5 w-3.5" /> New save
+                        <Bn
+                          variant="primary"
+                          onClick={() => preset.saveNew()}
+                          disabled={!preset.canSaveNew}
+                        >
+                          <Plus className="mr-1 h-3.5 w-3.5" />{" "}
+                          {preset.canSaveNew ? "New save" : "Already saved"}
                         </Bn>
                         <Bn
                           variant="default"
                           onClick={() => preset.saveFocused()}
-                          disabled={!preset.hasPresets}
+                          disabled={
+                            !preset.hasPresets || preset.activeIndex === preset.currentSaveIndex
+                          }
                         >
                           <Save className="mr-1 h-3.5 w-3.5" /> Overwrite focused
                         </Bn>
@@ -1816,6 +1823,9 @@ export function ControlPanel() {
                                       <span className="truncate text-[12px] text-white/85">
                                         {slot.name}
                                       </span>
+                                      {index === preset.currentSaveIndex && (
+                                        <span className="text-[9px] text-emerald-300">Current</span>
+                                      )}
                                       {isFocused && (
                                         <span className="shrink-0 rounded border border-emerald-300/30 bg-emerald-300/10 px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider text-emerald-200/90">
                                           Focused
@@ -1832,6 +1842,7 @@ export function ControlPanel() {
                                     variant="ghost"
                                     className="h-7 px-1.5"
                                     onClick={() => preset.loadAt(index)}
+                                    disabled={index === preset.currentSaveIndex}
                                     title={`Load ${slot.name}`}
                                     aria-label={`Load ${slot.name}`}
                                   >
@@ -1841,6 +1852,7 @@ export function ControlPanel() {
                                     variant="ghost"
                                     className="h-7 px-1.5"
                                     onClick={() => preset.saveAt(index, slot.name)}
+                                    disabled={index === preset.currentSaveIndex}
                                     title={`Overwrite ${slot.name}`}
                                     aria-label={`Overwrite ${slot.name}`}
                                   >
@@ -1872,7 +1884,7 @@ export function ControlPanel() {
                           variant="default"
                           className="h-8 px-2"
                           onClick={() => preset.step(-1)}
-                          disabled={!preset.hasPresets}
+                          disabled={preset.slots.length < 2}
                         >
                           <SkipBack className="mr-1 h-3.5 w-3.5" /> Focus prev
                         </Bn>
@@ -1880,7 +1892,7 @@ export function ControlPanel() {
                           variant="default"
                           className="h-8 px-2"
                           onClick={() => preset.step(1)}
-                          disabled={!preset.hasPresets}
+                          disabled={preset.slots.length < 2}
                         >
                           <SkipForward className="mr-1 h-3.5 w-3.5" /> Focus next
                         </Bn>
@@ -1888,14 +1900,19 @@ export function ControlPanel() {
                           variant="default"
                           className="h-8 px-2"
                           onClick={() => preset.random()}
-                          disabled={!preset.hasPresets}
+                          disabled={preset.slots.length < 2}
                         >
                           <Shuffle className="mr-1 h-3.5 w-3.5" /> Focus random
                         </Bn>
                       </div>
                     </Row>
                     <ToggleRow
-                      label="Cycle saves (auto-load each preset)"
+                      label={
+                        preset.slots.length < 2
+                          ? "Play saves (needs at least two saves)"
+                          : "Play saves"
+                      }
+                      disabled={!s.slotCycleMode && preset.slots.length < 2}
                       enabled={s.slotCycleMode}
                       onToggle={(v) => set({ slotCycleMode: v })}
                     >

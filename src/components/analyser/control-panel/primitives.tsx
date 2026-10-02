@@ -103,10 +103,12 @@ export function ToggleRow({
   enabled,
   onToggle,
   lockId,
+  disabled = false,
   children,
 }: {
   label: string;
   enabled: boolean;
+  disabled?: boolean;
   onToggle: (v: boolean) => void;
   /** When set, shows a pin that excludes this effect group from Randomize. */
   lockId?: FxLockId;
@@ -157,7 +159,7 @@ export function ToggleRow({
               <Pin className={`h-3.5 w-3.5 ${locked ? "fill-current" : ""}`} />
             </button>
           )}
-          <Sw checked={enabled} onCheckedChange={onToggle} />
+          <Sw checked={enabled} onCheckedChange={onToggle} disabled={disabled} />
         </div>
       </div>
       {enabled && children}

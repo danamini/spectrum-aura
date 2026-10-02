@@ -1,3 +1,4 @@
+import { LocalVideoSource } from "./local-video-source";
 /**
  * Aura Video Loop — the engine package as a VJ deck for video.
  *
@@ -40,6 +41,7 @@ const engine = new AudioEngine();
 const video = document.createElement("video");
 video.loop = true;
 video.playsInline = true;
+const localVideoSource = new LocalVideoSource(video);
 
 let look: Settings = { ...DEFAULT_SETTINGS, ...PRESETS[LOOKS[0]] };
 let renderer: THREE.WebGLRenderer | null = null;
@@ -169,7 +171,7 @@ function frame(now: number) {
       qualityTier: 0,
     };
     camera.position.z = CAMERA_DIST - 0.14 * beatPulse;
-    composer.apply(look, reactive);
+    composer.apply(look, reactive, dt);
     composer.render(dt);
   }
   if (mode === "youtube" && overlayFx) {
@@ -196,9 +198,9 @@ async function startAudio(kind: "video" | "tab" | "mic") {
       if (!stream) throw new Error("This browser cannot capture the video element's audio.");
       engine.startStream(stream);
     } else if (kind === "tab") {
-      await engine.startSystem();
+      if (!(await engine.startSystem())) return;
     } else {
-      await engine.startMic();
+      if (!(await engine.startMic())) return;
     }
     startFrameLoop();
     ["#audio-video", "#audio-tab", "#audio-mic"].forEach((sel) =>
@@ -215,12 +217,18 @@ query<HTMLInputElement>("#file-input").addEventListener("change", (event) => {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (!file) return;
   ensureLocalPipeline();
-  video.src = URL.createObjectURL(file);
-  void video.play().then(() => {
-    layoutPlane();
-    setMode("local");
-    void startAudio("video");
-  });
+  void localVideoSource
+    .load(file)
+    .then((started) => {
+      if (!started) return;
+      layoutPlane();
+      setMode("local");
+      void startAudio("video");
+    })
+    .catch((error: unknown) => {
+      query("#mode-label").textContent =
+        error instanceof Error ? error.message : "Video playback failed";
+    });
 });
 
 query("#load-yt").addEventListener("click", () => {
@@ -257,3 +265,9 @@ for (const name of LOOKS) {
   presetRow.appendChild(btn);
 }
 applyLook(LOOKS[0]);
+
+window.addEventListener("pagehide", (event) => {
+  if (event.persisted) return;
+  localVideoSource.clear();
+  engine.stop();
+});

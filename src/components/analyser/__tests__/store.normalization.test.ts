@@ -251,4 +251,25 @@ describe("settingsStore normalization", () => {
     expect(state.torusCount).toBe(DEFAULT_SETTINGS.torusCount);
     expect(state.geometrynebulaSpread).toBe(DEFAULT_SETTINGS.geometrynebulaSpread);
   });
+  it("defaults legacy response values and clamps invalid calibration", async () => {
+    const { settingsStore: store } = await import("../store");
+    expect(store.get().visualResponse).toBe(1);
+    expect(store.get().autoBalanceEnabled).toBe(true);
+    store.set({ visualResponse: 100 });
+    expect(store.get().visualResponse).toBe(4);
+    store.set({ visualResponse: NaN });
+    expect(store.get().visualResponse).toBe(1);
+    store.set({ visualResponse: -1 });
+    expect(store.get().visualResponse).toBe(0.25);
+  });
+  it("enables auto balance for legacy settings and retains a persisted opt-out", async () => {
+    localStorage.setItem("analyser-settings-v1", JSON.stringify({ visualResponse: 1.5 }));
+    const { settingsStore: legacy } = await import("../store");
+    expect(legacy.get().autoBalanceEnabled).toBe(true);
+    legacy.set({ autoBalanceEnabled: false });
+    vi.resetModules();
+    const { settingsStore: restored } = await import("../store");
+    expect(restored.get().autoBalanceEnabled).toBe(false);
+    expect(restored.get().visualResponse).toBe(1.5);
+  });
 });

@@ -57,6 +57,9 @@ export function Analyser() {
 
   useEffect(() => {
     statsOpenRef.current = statsOpen;
+    window.dispatchEvent(
+      new CustomEvent("spectrum-aura:stats-panel-state", { detail: { open: statsOpen } }),
+    );
   }, [statsOpen]);
 
   useEffect(() => {
@@ -98,12 +101,12 @@ export function Analyser() {
     const SLOT_CYCLE_DWELL_MS = Math.max(1, settings.slotCycleSeconds) * 1000;
 
     const initialCount = settingsStore.getSlots().length;
-    if (initialCount === 0) {
+    if (initialCount < 2) {
       settingsStore.set({ slotCycleMode: false });
       return;
     }
 
-    let cursor = 0;
+    let cursor = Math.max(0, settingsStore.getCurrentSaveIndex());
     settingsStore.loadSlot(cursor);
     let lastSwitch = performance.now();
 
@@ -112,7 +115,7 @@ export function Analyser() {
       if (performance.now() - lastSwitch < SLOT_CYCLE_DWELL_MS) return;
 
       const count = settingsStore.getSlots().length;
-      if (count === 0) {
+      if (count < 2) {
         settingsStore.set({ slotCycleMode: false });
         window.clearInterval(id);
         return;
@@ -175,7 +178,8 @@ export function Analyser() {
     try {
       setAudioError(null);
       const current = settingsStore.get();
-      await audioRef.current?.startMic({ latencyOptimized: current.latencyOptimized });
+      if (!(await audioRef.current?.startMic({ latencyOptimized: current.latencyOptimized })))
+        return;
       audioRef.current?.setSmoothing(current.smoothing);
       audioRef.current?.setFftSize(current.fftSize);
       audioRef.current?.setGain(current.gain);
@@ -190,7 +194,8 @@ export function Analyser() {
     try {
       setAudioError(null);
       const current = settingsStore.get();
-      await audioRef.current?.startSystem({ latencyOptimized: current.latencyOptimized });
+      if (!(await audioRef.current?.startSystem({ latencyOptimized: current.latencyOptimized })))
+        return;
       audioRef.current?.setSmoothing(current.smoothing);
       audioRef.current?.setFftSize(current.fftSize);
       audioRef.current?.setGain(current.gain);
@@ -203,6 +208,7 @@ export function Analyser() {
   };
   const handleStop = () => {
     audioRef.current?.stop();
+    setAudioError(null);
     songClockRef.current.reset();
     beatHintFlashRef.current = null;
     dispatchLiveTempo(EMPTY_LIVE_TEMPO);
@@ -239,7 +245,13 @@ export function Analyser() {
           onAmbient={() => {
             const next = !settingsStore.get().ambientMode;
             settingsStore.set({ ambientMode: next });
-            if (next) setAudioPromptDismissed(true);
+            if (next) {
+              audioRef.current?.stop();
+              setAudioError(null);
+              setAudioStatus("idle");
+              broadcastSource("none");
+              setAudioPromptDismissed(true);
+            }
           }}
           onDismiss={() => setAudioPromptDismissed(true)}
         />

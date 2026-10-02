@@ -83,8 +83,8 @@ const DEFAULT_OVERLAY_META: OverlayTextureMeta = {
   creditLine: "Spectrum Aura generated overlay",
 };
 
-/** Glitch duty-cycle window length in frames (~1s at 60fps) — see `glitchIntensity`. */
-const GLITCH_DUTY_WINDOW_FRAMES = 60;
+/** Glitch duty-cycle window in seconds — see `glitchIntensity`. */
+const GLITCH_DUTY_WINDOW_SECONDS = 1;
 
 /** Minimum wait before re-trying a failed Wikimedia Commons load — matches the
  * TextBuffer refill cooldown so no network source is hammered on failure. */
@@ -177,6 +177,7 @@ export class Composer {
   grade: ShaderPass;
   sobel: ShaderPass;
   smaa: SMAAPass;
+  private pixelRatio: number;
   width: number;
   height: number;
   private assetOverlayTime = 0;
@@ -196,7 +197,7 @@ export class Composer {
   private assetOverlayCommonsFailedTopic: CommonsOverlayTopic | null = null;
   private assetOverlayCommonsRetryAt = 0;
   private retroFxTime = 0;
-  private glitchDutyFrame = 0;
+  private glitchDutyTime = 0;
   private appliedPipelineKey = "";
   private assetOverlayLocalPackEnabled = true;
 
@@ -208,6 +209,7 @@ export class Composer {
     height: number,
   ) {
     this.renderer = renderer;
+    this.pixelRatio = renderer.getPixelRatio();
     this.width = width;
     this.height = height;
     this.composer = new EffectComposer(renderer);
@@ -301,7 +303,6 @@ export class Composer {
     this.composer.addPass(this.vignette);
 
     this.smaa = new SMAAPass();
-    this.smaa.setSize(width, height);
     this.composer.addPass(this.smaa);
 
     // Retro-system and ASCII both re-render the composited frame from
@@ -612,7 +613,8 @@ export class Composer {
     ];
   }
 
-  apply(s: Settings, reactive: PostFxReactiveState) {
+  apply(s: Settings, reactive: PostFxReactiveState, delta = 1 / 60) {
+    const frameStep = Number.isFinite(delta) ? THREE.MathUtils.clamp(delta, 0, 0.1) : 0;
     this.syncCommonsOverlayTextures(s);
     this.applyPipelineOrder(s.fxPipelineOrder);
     const bass = reactive.bass ?? 0;
@@ -622,7 +624,7 @@ export class Composer {
     const bpm = reactive.bpm ?? 0;
     const bpmConfidence = reactive.bpmConfidence ?? 0;
     const pulse = reactive.pulse ?? (reactive.beat ? 1 : 0);
-    this.retroFxTime += 1 / 60;
+    this.retroFxTime += frameStep;
 
     this.ssao.enabled = s.ssao && !reactive.performance;
     this.ssao.kernelRadius = THREE.MathUtils.clamp(s.ssaoRadius * (0.75 + mid * 0.7), 2, 18);
@@ -687,9 +689,9 @@ export class Composer {
     // approximate intensity by only letting the pass actually render for a
     // fraction of each ~1s window, in one contiguous chunk rather than a
     // per-frame coin flip (which would just look like flicker).
-    this.glitchDutyFrame = (this.glitchDutyFrame + 1) % GLITCH_DUTY_WINDOW_FRAMES;
+    this.glitchDutyTime = (this.glitchDutyTime + frameStep) % GLITCH_DUTY_WINDOW_SECONDS;
     const glitchIntensity = THREE.MathUtils.clamp(s.glitchIntensity, 0, 1);
-    const glitchDutyOn = this.glitchDutyFrame < glitchIntensity * GLITCH_DUTY_WINDOW_FRAMES;
+    const glitchDutyOn = this.glitchDutyTime < glitchIntensity * GLITCH_DUTY_WINDOW_SECONDS;
     this.glitch.enabled = s.glitch && glitchDutyOn;
     this.glitch.goWild = s.glitchWild;
 
@@ -707,10 +709,10 @@ export class Composer {
       this.assetOverlayLocalPackEnabled = s.assetOverlayLocalPack;
       this.resetAssetOverlaySlots();
     }
-    this.assetOverlayTime += 0.016 * s.assetOverlaySpeed * (0.7 + centroid * 1.2);
+    // Preserve the old 60 Hz speed: 0.016 seconds per frame = 0.96 per second.
+    this.assetOverlayTime += frameStep * 0.96 * s.assetOverlaySpeed * (0.7 + centroid * 1.2);
     this.assetOverlay.uniforms.time.value = this.assetOverlayTime;
     if (this.assetOverlayPool.length >= 3) {
-      const frameStep = 1 / 60;
       this.assetOverlayBeatHoldoff = Math.max(0, this.assetOverlayBeatHoldoff - frameStep);
       const activity = THREE.MathUtils.clamp(
         bass * 0.45 + mid * 0.35 + high * 0.2 + pulse * 0.35,
@@ -913,17 +915,22 @@ export class Composer {
   }
 
   resize(w: number, h: number) {
+    const pixelRatio = this.renderer.getPixelRatio();
+    const ratioChanged = pixelRatio !== this.pixelRatio;
+    if (ratioChanged) {
+      this.pixelRatio = pixelRatio;
+      this.composer.setPixelRatio(pixelRatio);
+    }
+    if (!ratioChanged || this.width !== w || this.height !== h) {
+      this.composer.setSize(w, h);
+    }
     this.width = w;
     this.height = h;
-    this.composer.setSize(w, h);
     (this.pixelate.uniforms.resolution.value as [number, number]) = [w, h];
     this.crtFx.uniforms.resolution.value.set(w, h);
     this.sobel.uniforms.resolution.value.set(w, h);
     this.retroFx.uniforms.resolution.value.set(w, h);
     this.asciiFx.uniforms.resolution.value.set(w, h);
-    this.bloom.setSize(w, h);
-    this.ssao.setSize(w, h);
-    this.motionTrails.setSize(w, h);
     this.motionTrails.reset(this.renderer);
   }
 
@@ -976,8 +983,12 @@ export class Composer {
     this.assetOverlayTextures = [];
     this.assetOverlayPool = [];
     this.assetOverlayMeta = [];
-    this.motionTrails.dispose();
-    this.ssao.dispose();
+    this.retroFx.uniforms.tFont.value.dispose();
+    // EffectComposer owns its ping-pong targets, but does not dispose passes.
+    for (const pass of new Set(this.composer.passes)) pass.dispose();
+    // Three.js r184 SSAOPass.dispose omits these two owned resources.
+    this.ssao.ssaoMaterial.dispose();
+    this.ssao.noiseTexture.dispose();
     this.composer.dispose();
   }
 }

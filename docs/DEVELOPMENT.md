@@ -118,7 +118,7 @@ Recent controls:
 - `assetflowBackgroundDrift`: Speed/intensity control for Asset-Flow's layered 2D background drift.
 - `assetflowSpriteAmount`: Controls layered 2D background presence/intensity in Asset-Flow.
 - Asset-Flow actor motion is intentionally biased toward vertical movement with smoothed horizontal follow to prevent visual left/right flicker.
-- **Stage Lights** view: a row of overhead spotlight beams (LOW/MID/HIGH-aligned by position, `stagelightsFixtureCount` 3/5/7) sweeping and fanning out on strong beats, plus an optional `stagelightsLasers` fan of thin upward beams from a downstage projector. Per-fixture tuning (sweep speed/phase/amplitude/width/color) is a continuous blend across the LOW/MID/HIGH anchors by each fixture's position (`stagelightsTent3` in `scene.ts`) rather than a fixed 3-way lookup, so extra fixtures land *between* bands instead of repeating them.
+- **Stage Lights** view: a row of overhead spotlight beams (LOW/MID/HIGH-aligned by position, `stagelightsFixtureCount` 3/5/7) sweeping and fanning out on strong beats, plus an optional `stagelightsLasers` fan of thin upward beams from a downstage projector. Per-fixture tuning (sweep speed/phase/amplitude/width/color) is a continuous blend across the LOW/MID/HIGH anchors by each fixture's position (`stagelightsTent3` in `scene.ts`) rather than a fixed 3-way lookup, so extra fixtures land _between_ bands instead of repeating them.
 - `kaleidoscope` / `kaleidoscopeSides` / `kaleidoscopeAngle`: mirrored radial wedge post-FX pass.
 - `mirrorFx` / `mirrorMode` / `mirrorOffset`: directional mirror post-FX pass.
 - `crtFx` / `crtScanlineIntensity` / `crtCurvature` / `crtVignette`: retro CRT post-FX pass.
@@ -139,12 +139,13 @@ Recent controls:
 
 Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bottom shortcut bar:
 
+- `−` / `+` or `=`: Decrease / increase visual response
 - `R`: Randomize
 - `←` / `→`: Prev / Next Visual (`B` / `V` kept as aliases)
 - `[` / `]` or `Shift+←` / `Shift+→`: Prev / Next Save
 - `X`: Audio Source (stops the current audio engine so a new source can be selected)
 - `F`: Toggle fullscreen
-- `N`: Toggle Stats panel
+- `N`: Toggle Stats panel; `Shift+N`: Toggle full-page stats
 - `G`: Show/Hide shortcut hints
 - `A`: Play Saves (save-list auto-cycle mode)
 - `S`: Toggle settings panel
@@ -164,7 +165,9 @@ Shortcut rail clusters:
 
 - Visual cluster: view count, Prev Visual (B), Randomize, View Cycle (C), `inc`, `fx`, Next Visual (V)
 - Save cluster: save count, Prev, Play Saves, Next, Random, Save, Delete
-- Utility cluster: Audio Source (X), Fullscreen (F), Stats (N), Latency (L), BPM Grid (M), Beat Tap (T), Settings (S), Hide All (G)
+- Panel cluster: Post FX, Scene, Settings (S), BPM Grid (M), Latency (L)
+- Response panel: sensitivity slider, neutral reset and Auto balance
+- Utility cluster: Audio Source (X), Fullscreen (F), Stats (N), FPS output, Beat Tap (T), Hide Controls (G)
 
 When hidden (`G`), a **shortcuts · g** pill at the bottom restores the bar (or press `G` again).
 
@@ -230,9 +233,9 @@ npm run test                   # Watch mode
 
 All tests live under `__tests__/` (see `vitest.config.ts`):
 
-| Location                     | Suites                                                                                                                                 |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `analyser/__tests__/`        | `Analyser.regression`, `ControlPanel.regression`, `usePresetActions`, `theme`, `Shortcuts`, `store.*`, `visuals`, `BarTimingHud`      |
+| Location                         | Suites                                                                                                                                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `analyser/__tests__/`            | `Analyser.regression`, `ControlPanel.regression`, `usePresetActions`, `theme`, `Shortcuts`, `store.*`, `visuals`, `BarTimingHud`                                                                      |
 | `packages/engine/src/__tests__/` | `song-clock`, `sync-invariants`, `bpm-detector`, `bpm-detector.realistic`, `beat-matcher`, `latency-metrics`, `view-cycle-controller`, `latency-benchmark`, `loudness`, `evolution`, `composer`, `xr` |
 
 Shared fixtures: `__tests__/helpers/test-helpers.ts`, `engine/__tests__/helpers/song-clock.harness.ts`.
@@ -350,3 +353,22 @@ Render-loop safety note:
 - Update relevant tests when adding features
 - Verify build passes: `npm run build`
 - All tests must pass: `npm run test:run`
+
+## Response, saved state and HUD regression checks
+
+See [response and balance](response-and-balance.md) for the feedback controller
+and default/persistence contract. `visual-response.test.ts` verifies that gain
+never modifies detector input or timing. `visual-balance.test.ts` covers sustained
+brightness/activity, silence, bounds and reset. `visual-balance-monitor.test.ts`
+checks readback cadence, backoff and failure handling.
+
+`Shortcuts.test.tsx` covers response keys, limits, typing/browser-zoom exclusions,
+VR hints and tooltip survival through live updates. `store.normalization.test.ts`
+checks legacy defaults and a persisted Auto balance opt-out. Saved-look comparison
+lives in `saved-look.ts`; use `usePresetActions` for both toolbar and settings flows.
+`preset-state.test.tsx` and `store.slots.test.ts` cover action availability and
+calibration preservation when loading saves.
+
+`StatsPanel.test.tsx` covers panel layout and persistence. `stats-history.test.ts`
+checks graph smoothing/ranges. Panel primitives must remain stable across live
+updates so focused controls and open tooltips are not remounted.

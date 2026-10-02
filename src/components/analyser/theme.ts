@@ -8,6 +8,10 @@
  */
 import type { CSSProperties } from "react";
 
+/** Shared surface for controls over the live scene. */
+export const HUD_GLASS = "bg-black/35 backdrop-blur-sm";
+export const MINI_HUD_SURFACE = `${HUD_GLASS} w-[min(220px,calc(50vw-1.125rem))] min-h-[172px] rounded-lg border border-white/15 px-3 py-2`;
+
 /** App shell / default scene background. */
 export const APP_BACKGROUND = "#05060a";
 

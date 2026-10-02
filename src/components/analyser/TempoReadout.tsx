@@ -7,10 +7,10 @@ import { bpmGlowStyle } from "./theme";
  * place that shows tempo so the text-shadow / opacity / fallback rules live in
  * one spot.
  */
-function BpmDigits({ tempo }: { tempo: LiveTempoState }) {
+function BpmDigits({ tempo, small = false }: { tempo: LiveTempoState; small?: boolean }) {
   return (
     <div
-      className="min-w-[3ch] text-center font-mono text-3xl font-bold tabular-nums text-white/70"
+      className={`min-w-[3ch] text-center font-mono ${small ? "text-xl" : "text-3xl"} font-bold tabular-nums text-white/70`}
       style={bpmGlowStyle(tempo.bpm, tempo.bpmConfidence)}
     >
       {tempo.audioRunning && tempo.bpm > 0 ? tempo.bpm : "—"}
@@ -32,30 +32,27 @@ export function TempoReadout({
 }) {
   if (variant === "overlay") {
     return (
-      <>
-        <BarTimingHud />
-        <div className="text-center">
-          <div className="mb-1 flex items-center justify-center gap-2 font-mono text-xs uppercase tracking-widest text-white/40">
-            BPM
-            <ExperimentalBadge />
-          </div>
-          <div className="flex justify-center">
-            {/* Spinner floats out of flow so the digits stay put as it appears/animates. */}
-            <div className="relative">
-              <div className="absolute right-full top-1/2 mr-2 -translate-y-1/2">
-                <BpmLockIndicator
-                  bpm={tempo.bpm}
-                  confidence={tempo.bpmConfidence}
-                  locked={tempo.barTiming.bpmLocked}
-                  beatPhase={tempo.barTiming.beatPhase}
-                  size={20}
-                />
-              </div>
-              <BpmDigits tempo={tempo} />
+      <BarTimingHud
+        compact
+        header={
+          <div className="mb-1 flex items-center justify-between gap-1 border-b border-white/10 pb-1">
+            <div className="flex flex-col items-start gap-1 font-mono text-[9px] uppercase tracking-wider text-white/55">
+              <span>BPM</span>
+              <ExperimentalBadge />
+            </div>
+            <div className="flex items-center gap-1">
+              <BpmLockIndicator
+                bpm={tempo.bpm}
+                confidence={tempo.bpmConfidence}
+                locked={tempo.barTiming.bpmLocked}
+                beatPhase={tempo.barTiming.beatPhase}
+                size={14}
+              />
+              <BpmDigits tempo={tempo} small />
             </div>
           </div>
-        </div>
-      </>
+        }
+      />
     );
   }
 

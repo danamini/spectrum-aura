@@ -1,3 +1,6 @@
+import { VisualBalanceMonitor, BALANCE_STATE_EVENT } from "../visual-balance-monitor";
+import { VisualResponse } from "@spectrum-aura/engine/visual-response";
+import { pushStatsHistory, STATS_SAMPLE_MS } from "../overlays/stats-history";
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import * as THREE from "three";
 import { Scene } from "@spectrum-aura/engine/scene";
@@ -11,7 +14,11 @@ import {
   syncSceneUpdateOpts,
 } from "@spectrum-aura/engine/scene-update-opts";
 import { ViewEvolutionEngine } from "@spectrum-aura/engine/evolution";
-import { measureFrameLatency, smoothLatency } from "@spectrum-aura/engine/latency-metrics";
+import {
+  measureFrameLatency,
+  smoothLatency,
+  calculateFps,
+} from "@spectrum-aura/engine/latency-metrics";
 import {
   WEBXR_BACKGROUND_EVENT,
   WEBXR_REQUEST_EVENT,
@@ -104,7 +111,6 @@ export function useAnalyserEngine(params: {
     let last = performance.now();
     const start = last;
     let smoothedFps = 60;
-    let statsFrameCounter = 0;
     let statsUpdateCount = 0;
     const drawBufferSize = new THREE.Vector2();
     const fpsHistory: number[] = [];
@@ -157,16 +163,20 @@ export function useAnalyserEngine(params: {
     };
     const mandalaPostFx = { ...settingsStore.get() };
     const ambientSource = new AmbientSource();
+    const visualResponse = new VisualResponse();
+    const balanceMonitor = new VisualBalanceMonitor();
+    let lastBalanceSettings: Settings | null = null;
+    let lastBalanceView: ViewMode | null = null;
+    let lastBalanceXr = false;
+    let lastBalanceHidden = false;
+    let lastBalanceStatus = "";
+    let balanceSource: MediaStream | null = null;
     let ambientWasActive = false;
     let lastFrameStatsAt = 0;
     let lastPaletteIndex = settingsRef.current.paletteIndex;
     let lastPerformanceMode = settingsRef.current.performance;
     let smoothedLatency = { audioToRenderMs: 0, signalToRenderMs: 0 };
     let lastLatencyHudCommitAt = 0;
-    const pushHistory = (history: number[], value: number, max = 52) => {
-      history.push(value);
-      if (history.length > max) history.shift();
-    };
     let lastBgColor = "";
     let lastOpacity = "";
     let lastStatsCommitAt = 0;
@@ -277,7 +287,7 @@ export function useAnalyserEngine(params: {
     const isInteractiveUiTarget = (target: EventTarget | null) => {
       const el = target instanceof Element ? target : null;
       return !!el?.closest(
-        "button, [role='button'], input, textarea, select, a, [role='dialog'], [data-state='open']",
+        "[data-ui-control], [role='slider'], button, [role='button'], input, textarea, select, a, [role='dialog'], [data-state='open']",
       );
     };
     const onPointerDown = (e: PointerEvent) => {
@@ -338,10 +348,11 @@ export function useAnalyserEngine(params: {
     window.addEventListener(WEBXR_BACKGROUND_EVENT, onWebXrBackground);
 
     const frameBody = (now: number, _frame?: XRFrame) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const elapsedSeconds = Math.max(0, (now - last) / 1000);
+      const dt = Math.min(0.05, elapsedSeconds);
       last = now;
       xrRuntime.tick(dt);
-      const fps = dt > 0 ? 1 / dt : 0;
+      const fps = calculateFps(elapsedSeconds);
       smoothedFps = smoothedFps * 0.9 + fps * 0.1;
       const t = (now - start) / 1000;
       const s = settingsRef.current;
@@ -424,7 +435,29 @@ export function useAnalyserEngine(params: {
       }
       const clockBpm = barTimingFrame.clockBpm || bands.bpm;
       const clockBeatPhase = barTimingFrame.synced ? barTimingFrame.beatPhase : bands.beatPhase;
-      Object.assign(bandsForScene, bands);
+      const balanceAllowed =
+        s.autoBalanceEnabled && !xrRuntime.active && !s.performance && !document.hidden;
+      if (
+        s !== lastBalanceSettings ||
+        displayedView !== lastBalanceView ||
+        xrRuntime.active !== lastBalanceXr ||
+        document.hidden !== lastBalanceHidden ||
+        balanceSource !== audio.stream ||
+        viewTransition !== null
+      ) {
+        balanceMonitor.reset(now);
+        dom.style.filter = "";
+        lastBalanceSettings = s;
+        lastBalanceView = displayedView;
+        lastBalanceXr = xrRuntime.active;
+        lastBalanceHidden = document.hidden;
+        balanceSource = audio.stream;
+      }
+      visualResponse.apply(
+        bands,
+        bandsForScene,
+        s.visualResponse * (balanceAllowed ? balanceMonitor.balance.response : 1),
+      );
       bandsForScene.bpm = clockBpm;
       bandsForScene.beatPhase = clockBeatPhase;
       if (s.viewCycleMode) {
@@ -507,10 +540,40 @@ export function useAnalyserEngine(params: {
         postFxReactive.pulse = bpmPulse;
         postFxReactive.performance = s.performance || xrRuntime.active;
         postFxReactive.qualityTier = computeQualityTier(smoothedFps, postFxReactive.qualityTier);
-        composer.apply(postFxSettings, postFxReactive);
+        composer.apply(postFxSettings, postFxReactive, dt);
         composer.render(dt);
       } else {
         renderer.render(scene.scene, scene.camera);
+      }
+      if (balanceAllowed && viewTransition === null) {
+        const state = balanceMonitor.sample(
+          dom,
+          now,
+          (bands.bass + bands.mid + bands.high) / 3,
+          audio.isRunning() || ambientActive,
+        );
+        if (state) {
+          dom.style.filter = state.exposure === 1 ? "" : `brightness(${state.exposure.toFixed(3)})`;
+          window.dispatchEvent(new CustomEvent(BALANCE_STATE_EVENT, { detail: state }));
+          lastBalanceStatus = state.status;
+        }
+      } else {
+        dom.style.filter = "";
+        const status = !s.autoBalanceEnabled
+          ? "off"
+          : xrRuntime.active
+            ? "paused in VR"
+            : s.performance
+              ? "paused in Performance Mode"
+              : "settling";
+        if (status !== lastBalanceStatus) {
+          window.dispatchEvent(
+            new CustomEvent(BALANCE_STATE_EVENT, {
+              detail: { status, exposure: 1, response: 1, sampleMs: 0 },
+            }),
+          );
+          lastBalanceStatus = status;
+        }
       }
       // Save-slot thumbnails must be read back in the same task as the
       // render (preserveDrawingBuffer is false).
@@ -550,11 +613,13 @@ export function useAnalyserEngine(params: {
           audioToSceneMs,
           sceneToRenderMs,
           performanceMode: s.performance,
+          fftWindowMs: bands.timing.fftWindowMs,
+          audioReadCpuMs: bands.timing.readCpuMs,
+          synthetic: !audio.isRunning() && ambientActive,
         });
       }
 
       if (statsOpenRef.current) {
-        statsFrameCounter += 1;
         renderer.getDrawingBufferSize(drawBufferSize);
         const perfMemory = (
           performance as Performance & {
@@ -563,15 +628,13 @@ export function useAnalyserEngine(params: {
         ).memory;
         const programs =
           (renderer.info as unknown as { programs?: unknown[] }).programs?.length ?? 0;
-        if (statsFrameCounter % 3 === 0) {
-          pushHistory(fpsHistory, smoothedFps);
-          pushHistory(drawCallsHistory, renderer.info.render.calls);
-          pushHistory(trianglesHistory, renderer.info.render.triangles);
-          pushHistory(bassHistory, bands.bass);
-          pushHistory(midHistory, bands.mid);
-          pushHistory(highHistory, bands.high);
-        }
-        if (now - lastStatsCommitAt >= 100) {
+        if (now - lastStatsCommitAt >= STATS_SAMPLE_MS) {
+          pushStatsHistory(fpsHistory, smoothedFps);
+          pushStatsHistory(drawCallsHistory, renderer.info.render.calls);
+          pushStatsHistory(trianglesHistory, renderer.info.render.triangles);
+          pushStatsHistory(bassHistory, bands.bass);
+          pushStatsHistory(midHistory, bands.mid);
+          pushStatsHistory(highHistory, bands.high);
           lastStatsCommitAt = now;
           statsUpdateCount += 1;
           const overlayDebug = composer.getAssetOverlayDebugState(settingsRef.current);
@@ -681,6 +744,7 @@ export function useAnalyserEngine(params: {
       window.removeEventListener(WEBXR_REQUEST_EVENT, onWebXrRequest);
       window.removeEventListener(WEBXR_BACKGROUND_EVENT, onWebXrBackground);
       dom.style.opacity = "1";
+      dom.style.filter = "";
       window.removeEventListener("resize", onResize);
       container.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);

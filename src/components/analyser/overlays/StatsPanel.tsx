@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { HUD_GLASS } from "../theme";
+import { memo, useRef } from "react";
+import { nextSparklineRange, sparklinePoints, type SparklineRange } from "./stats-history";
+import { Maximize2, Minimize2, RotateCcw, MoveDiagonal2, X } from "lucide-react";
 import { isSignalLatencyVisible } from "@spectrum-aura/engine/latency-metrics";
+import { useStatsPanelLayout } from "../hooks/useStatsPanelLayout";
 import type { NerdStats } from "./stats-types";
 
 export function StatsForNerdsPanel({
@@ -14,124 +17,34 @@ export function StatsForNerdsPanel({
   onClose: () => void;
   onToggleFullscreen: () => void;
 }) {
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [panelSize, setPanelSize] = useState({ width: 360, height: 520 });
-  const [dragging, setDragging] = useState(false);
-  const [resizing, setResizing] = useState(false);
-  const dragStartRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-  } | null>(null);
-  const resizeStartRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    originWidth: number;
-    originHeight: number;
-  } | null>(null);
-
-  const panelClasses = fullscreen
-    ? "fixed inset-4 z-[120]"
-    : "fixed right-4 top-16 z-[120] max-w-[calc(100vw-2rem)]";
-
-  const fmt = (value: number, digits = 1) => value.toFixed(digits);
-
-  useEffect(() => {
-    if (fullscreen) {
-      setDragging(false);
-      setResizing(false);
-    }
-  }, [fullscreen]);
-
-  const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (fullscreen || resizing) return;
-    const target = e.target as HTMLElement | null;
-    if (target?.closest("button")) return;
-    dragStartRef.current = {
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      startY: e.clientY,
-      originX: dragOffset.x,
-      originY: dragOffset.y,
-    };
-    setDragging(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  };
-
-  const onHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragStartRef.current;
-    if (!drag || drag.pointerId !== e.pointerId || fullscreen) return;
-    const dx = e.clientX - drag.startX;
-    const dy = e.clientY - drag.startY;
-    setDragOffset({ x: drag.originX + dx, y: drag.originY + dy });
-  };
-
-  const onHeaderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragStartRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    dragStartRef.current = null;
-    setDragging(false);
-    e.currentTarget.releasePointerCapture(e.pointerId);
-  };
-
-  const onResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (fullscreen) return;
-    resizeStartRef.current = {
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      startY: e.clientY,
-      originWidth: panelSize.width,
-      originHeight: panelSize.height,
-    };
-    setResizing(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const onResizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const resize = resizeStartRef.current;
-    if (!resize || resize.pointerId !== e.pointerId || fullscreen) return;
-    const dx = e.clientX - resize.startX;
-    const dy = e.clientY - resize.startY;
-    const maxWidth = Math.max(320, window.innerWidth - 32);
-    const maxHeight = Math.max(300, window.innerHeight - 80);
-    const nextWidth = Math.max(300, Math.min(maxWidth, resize.originWidth + dx));
-    const nextHeight = Math.max(280, Math.min(maxHeight, resize.originHeight + dy));
-    setPanelSize({ width: nextWidth, height: nextHeight });
-  };
-
-  const onResizePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const resize = resizeStartRef.current;
-    if (!resize || resize.pointerId !== e.pointerId) return;
-    resizeStartRef.current = null;
-    setResizing(false);
-    e.currentTarget.releasePointerCapture(e.pointerId);
-  };
+  const layout = useStatsPanelLayout(fullscreen);
+  const fmt = (value: number, digits = 1) =>
+    Number.isFinite(value) ? value.toFixed(digits) : "n/a";
 
   return (
     <div
-      className={`${panelClasses} pointer-events-auto flex flex-col overflow-hidden rounded-md border border-white/15 bg-black/70 backdrop-blur-xl shadow-[0_0_50px_rgba(0,0,0,0.45)]`}
+      role="region"
+      data-ui-control
+      aria-label="Stats for nerds"
+      className={`fixed z-[120] pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-white/15 shadow-[0_0_50px_rgba(0,0,0,0.25)] ${HUD_GLASS}`}
       style={
         fullscreen
-          ? undefined
+          ? { inset: 12 }
           : {
-              width: `min(${panelSize.width}px, calc(100vw - 2rem))`,
-              height: `min(${panelSize.height}px, calc(100vh - 6rem))`,
-              transform: `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0)`,
+              left: layout.rect.x,
+              top: layout.rect.y,
+              width: layout.rect.width,
+              height: layout.rect.height,
             }
       }
     >
       <div
-        className={`flex items-center justify-between border-b border-white/10 px-3 py-2 ${fullscreen ? "" : dragging ? "cursor-grabbing" : "cursor-grab"}`}
-        onPointerDown={onHeaderPointerDown}
-        onPointerMove={onHeaderPointerMove}
-        onPointerUp={onHeaderPointerUp}
-        onPointerCancel={onHeaderPointerUp}
+        data-stats-drag-handle
+        className={`flex shrink-0 touch-none select-none items-center justify-between gap-2 border-b border-white/10 px-3 py-2 ${fullscreen ? "" : layout.interaction === "move" ? "cursor-grabbing" : "cursor-grab"}`}
+        {...layout.handle("move")}
+        onDoubleClick={(event) => {
+          if (!(event.target as Element).closest("button") && !fullscreen) layout.reset();
+        }}
       >
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-emerald-300/80">
@@ -142,8 +55,19 @@ export function StatsForNerdsPanel({
           </p>
         </div>
         <div className="flex items-center gap-1.5">
+          {!fullscreen && (
+            <button
+              onClick={layout.reset}
+              aria-label="Reset stats layout"
+              title="Reset position and size"
+              className="rounded border border-white/15 p-1.5 text-white/75 hover:bg-white/10"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             onClick={onToggleFullscreen}
+            aria-label={fullscreen ? "Restore stats panel" : "Expand stats panel"}
             className="rounded border border-white/15 bg-white/5 p-1.5 text-white/75 transition-colors hover:bg-white/10 hover:text-white"
             title={fullscreen ? "Dock panel" : "Full page"}
           >
@@ -155,6 +79,7 @@ export function StatsForNerdsPanel({
           </button>
           <button
             onClick={onClose}
+            aria-label="Close stats"
             className="rounded border border-white/15 bg-white/5 p-1.5 text-white/75 transition-colors hover:bg-white/10 hover:text-white"
             title="Close stats"
           >
@@ -163,9 +88,20 @@ export function StatsForNerdsPanel({
         </div>
       </div>
 
-      <div className="analyser-scroll grid flex-1 min-h-0 auto-rows-min grid-cols-[repeat(auto-fit,minmax(260px,1fr))] content-start gap-3 overflow-y-auto p-3 font-mono text-[10px] uppercase tracking-[0.12em] text-white/75">
+      <div
+        data-stats-content
+        tabIndex={0}
+        aria-label="Diagnostics"
+        className="analyser-scroll grid flex-1 min-h-0 auto-rows-min grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] content-start gap-3 overflow-y-auto p-3 font-mono text-[10px] uppercase tracking-[0.12em] text-white/75"
+      >
         <StatSection title="Timing">
-          <Stat label="FPS" value={fmt(stats.fps)} sparkline={stats.fpsHistory} color="emerald" />
+          <Stat
+            label="FPS"
+            value={fmt(stats.fps)}
+            sparkline={stats.fpsHistory}
+            scaleMinimum={3}
+            color="emerald"
+          />
           <Stat label="Frame ms" value={fmt(stats.frameMs, 2)} />
           <Stat label="Audio → UI" value={`${fmt(stats.audioToRenderMs, 1)} ms`} color="emerald" />
           <Stat
@@ -191,12 +127,14 @@ export function StatsForNerdsPanel({
             label="Draw calls"
             value={String(stats.drawCalls)}
             sparkline={stats.drawCallsHistory}
+            scaleMinimum={10}
             color="cyan"
           />
           <Stat
             label="Triangles"
             value={String(stats.triangles)}
             sparkline={stats.trianglesHistory}
+            scaleMinimum={100}
             color="amber"
           />
           <Stat label="Lines" value={String(stats.lines)} />
@@ -294,15 +232,45 @@ export function StatsForNerdsPanel({
         </StatSection>
       </div>
 
-      {!fullscreen && (
-        <div
-          className="absolute bottom-0 right-0 h-8 w-8 cursor-se-resize"
-          onPointerDown={onResizePointerDown}
-          onPointerMove={onResizePointerMove}
-          onPointerUp={onResizePointerUp}
-          onPointerCancel={onResizePointerUp}
-        />
-      )}
+      <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-3 py-1 font-mono text-[9px] text-white/45">
+        <span>
+          {fullscreen
+            ? "Full page · scroll for all diagnostics"
+            : "Drag header · resize edges · scroll for more"}
+        </span>
+        {!fullscreen && (
+          <button
+            aria-label="Resize stats panel"
+            data-own-arrow-keys
+            title="Drag to resize, or use arrow keys (Shift for larger steps)"
+            className="touch-none cursor-se-resize rounded p-1 text-emerald-300/80 focus-visible:outline focus-visible:outline-emerald-300"
+            {...layout.handle("se")}
+            onKeyDown={layout.onResizeKeyDown}
+          >
+            <MoveDiagonal2 className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {!fullscreen &&
+        (
+          [
+            ["n", "top-0 left-3 right-3 h-1 cursor-n-resize"],
+            ["s", "bottom-0 left-3 right-8 h-1 cursor-s-resize"],
+            ["e", "right-0 top-3 bottom-8 w-1 cursor-e-resize"],
+            ["w", "left-0 top-3 bottom-3 w-1 cursor-w-resize"],
+            ["nw", "top-0 left-0 h-3 w-3 cursor-nw-resize"],
+            ["ne", "top-0 right-0 h-3 w-3 cursor-ne-resize"],
+            ["sw", "bottom-0 left-0 h-3 w-3 cursor-sw-resize"],
+          ] as const
+        ).map(([edge, classes]) => (
+          <div
+            key={edge}
+            aria-hidden
+            data-resize-edge={edge}
+            className={`absolute touch-none ${classes}`}
+            {...layout.handle(edge)}
+          />
+        ))}
     </div>
   );
 }
@@ -311,7 +279,7 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
       <div className="mb-0.5 text-white/45">{label}</div>
-      <div className="break-words text-[9px] normal-case tracking-normal text-white/88">
+      <div className="[overflow-wrap:anywhere] text-[9px] normal-case tracking-normal text-white/88">
         {value}
       </div>
     </div>
@@ -320,7 +288,7 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 
 function StatSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="min-w-0 rounded border border-white/10 bg-white/[0.03] p-2.5">
+    <section className="min-w-0 rounded border border-white/10 bg-black/10 p-2.5">
       <p className="mb-2 text-[9px] uppercase tracking-[0.2em] text-emerald-300/70">{title}</p>
       <div className="grid gap-1">{children}</div>
     </section>
@@ -331,11 +299,13 @@ function Stat({
   label,
   value,
   sparkline,
+  scaleMinimum = 0.04,
   color = "emerald",
 }: {
   label: string;
   value: string;
   sparkline?: number[];
+  scaleMinimum?: number;
   color?: "emerald" | "cyan" | "amber";
 }) {
   const sparkColor =
@@ -346,34 +316,43 @@ function Stat({
         : "stroke-emerald-300/90";
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
+    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
       <span className="text-white/45">{label}</span>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 max-w-full flex-wrap justify-end items-center gap-2">
         {sparkline && sparkline.length > 1 && (
-          <Sparkline values={sparkline} colorClass={sparkColor} />
+          <Sparkline values={sparkline} colorClass={sparkColor} scaleMinimum={scaleMinimum} />
         )}
-        <span className="text-right text-white/90 tabular-nums">{value}</span>
+        <span className="min-w-0 text-right [overflow-wrap:anywhere] text-white/90 tabular-nums">
+          {value}
+        </span>
       </div>
     </div>
   );
 }
 
-function Sparkline({ values, colorClass }: { values: number[]; colorClass: string }) {
+const Sparkline = memo(function Sparkline({
+  values,
+  colorClass,
+  scaleMinimum,
+}: {
+  values: number[];
+  colorClass: string;
+  scaleMinimum: number;
+}) {
+  const rangeRef = useRef<SparklineRange | null>(null);
+  rangeRef.current = nextSparklineRange(values, rangeRef.current, scaleMinimum);
+  const points = sparklinePoints(values, rangeRef.current);
   const w = 74;
   const h = 20;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(max - min, 0.000001);
-  const points = values
-    .map((v, i) => {
-      const x = (i / Math.max(1, values.length - 1)) * (w - 1);
-      const y = (1 - (v - min) / span) * (h - 1);
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
 
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="rounded-sm bg-white/[0.03]">
+    <svg
+      width={w}
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      className="shrink-0 rounded-sm bg-white/[0.03]"
+    >
+      <title>Smoothed trend · gradually adapting scale · approximately 5 seconds</title>
       <polyline
         points={points}
         fill="none"
@@ -384,4 +363,4 @@ function Sparkline({ values, colorClass }: { values: number[]; colorClass: strin
       />
     </svg>
   );
-}
+});

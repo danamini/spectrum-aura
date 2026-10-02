@@ -1,3 +1,4 @@
+import { calculateFps } from "../latency-metrics";
 import { describe, expect, it } from "vitest";
 
 import { isSignalLatencyVisible, measureFrameLatency, smoothLatency } from "../latency-metrics";
@@ -73,5 +74,18 @@ describe("isSignalLatencyVisible", () => {
   it("hides values below display threshold", () => {
     expect(isSignalLatencyVisible(0.4)).toBe(false);
     expect(isSignalLatencyVisible(0.5)).toBe(true);
+  });
+});
+
+describe("uncapped FPS measurement", () => {
+  it.each([
+    [1 / 60, 60],
+    [0.1, 10],
+    [2, 0.5],
+    [0, 0],
+    [-1, 0],
+    [NaN, 0],
+  ])("measures %s seconds as %s FPS", (interval, fps) => {
+    expect(calculateFps(interval)).toBeCloseTo(fps);
   });
 });

@@ -9,7 +9,16 @@ presets) may change between minor versions.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-02
+
 ### Added
+
+- Toolbar Response slider with Calm/Punchy labels, minus/plus shortcuts and
+  neutral reset. Visual gain leaves beat detection and audio volume unchanged.
+- Auto balance, enabled by default, gradually corrects sustained brightness
+  problems and low activity. Hover or focus its button for behavior and live
+  correction details. Explicit opt-outs persist; Performance Mode and VR pause
+  balancing, and expensive sampling backs off or stops.
 
 - **Retro system post-FX pass**: emulates eleven classic machines — ZX
   Spectrum (256×192 with genuine per-cell attribute clash and the real
@@ -52,7 +61,7 @@ presets) may change between minor versions.
   FX on view switch", and Dynamic Mode moved into the Scene panel's new
   Motion & Auto-Pilot section.
 - **Live FPS chip** in the Tools cluster — a 500ms render-health beacon
-  (green/amber/red) that opens Stats for nerds on click.
+  (green/amber/red). This is a readout; the Stats button opens the panel.
 - **Audio source indicator**: the bar's Audio Source button shows what feeds
   the visuals (mic / system / ambient / off) with a matching icon and live
   glow.
@@ -65,6 +74,14 @@ presets) may change between minor versions.
   preserves the choice.
 
 ### Changed
+
+- Toolbar action states follow the displayed saved look. Duplicate saves disable,
+  Delete requires a matching save, and Play Saves requires at least two saves.
+- Stats supports persistent position/size, viewport clamping, scrolling,
+  full-page mode and keyboard resizing. Graphs use light smoothing and adaptive
+  ranges. Stats, button groups and mini panels share a translucent blur fill.
+- BPM and its experimental label share one mini panel aligned with Latency.
+  Latency also shows signal timing, FFT window and audio-read CPU cost.
 
 - Post FX tab redesigned into six collapsible themed sections with live
   active-effect badges; presets moved into a disclosure with palette-swatch
@@ -80,6 +97,18 @@ presets) may change between minor versions.
   renamed to Spectrum Aura.
 
 ### Fixed
+
+- Live FPS and balance updates no longer remount toolbar buttons or flash away
+  their tooltips. Slider and resize interactions no longer trigger visual cycling
+  or camera dragging.
+- Stale audio capture requests release late streams without overriding a newer
+  source or Stop action. Permission errors explain external-browser capture.
+- Resource cleanup for audio, scene geometry/materials and composer passes;
+  composer targets resize when renderer pixel ratio changes.
+- Mandala reuses line buffers; opaque Ripple rings use instanced meshes.
+  Asset-Flow model loading starts on first activation.
+- Composer effect timing follows elapsed time, FPS uses uncapped frame intervals,
+  and examples clean up animation chains and replaced local-video URLs.
 
 - Wikimedia Commons overlay textures were starved out of the rotation
   whenever the local-pack bias didn't happen to include their family; opted-in
@@ -138,7 +167,7 @@ presets) may change between minor versions.
 - **Stage Lights visual**: a row of overhead sweeping spotlight beams,
   color/tuning-aligned to LOW/MID/HIGH by position along the rig. Fixture
   count is configurable to 3, 5, or 7 via a continuous band-position blend
-  rather than a fixed per-index lookup, so extra fixtures land *between*
+  rather than a fixed per-index lookup, so extra fixtures land _between_
   bands instead of just repeating one. Beats trigger a brief brighten/tighten
   and, on strong bass hits, a momentary fan-out. An optional laser-fan
   accent (`stagelightsLasers`) adds a fixed fan of thin, bright, upward beams
@@ -263,7 +292,8 @@ Three.js, and Vite — no backend, no upload flow.
 - `npm run check` runs typecheck + lint + tests; strict TypeScript
   (`noUnusedLocals` / `noUnusedParameters`) enabled.
 
-[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/danamini/spectrum-aura/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/danamini/spectrum-aura/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/danamini/spectrum-aura/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/danamini/spectrum-aura/compare/v0.0.1...v0.1.0
