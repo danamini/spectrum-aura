@@ -23,6 +23,8 @@ describe("sync invariants", () => {
     expect(engine).toMatch(/clockBeatPhase/);
     expect(engine).toMatch(/songClockRef\.current\.tick/);
     expect(engine).toMatch(/audioBeat: bands\.beat/);
+    expect(engine).toContain("external: midiClockInput.read(now)");
+    expect(engine).toContain("bandsForScene.bpmLocked = barTimingFrame.bpmLocked");
 
     const beatBridge = readFileSync(
       join(process.cwd(), "src/components/analyser/hooks/useBeatHintBridge.ts"),

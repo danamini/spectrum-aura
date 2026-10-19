@@ -1,3 +1,4 @@
+import { midiClockInput } from "@spectrum-aura/engine/midi-clock";
 import { VisualBalanceMonitor, BALANCE_STATE_EVENT } from "../visual-balance-monitor";
 import { VisualResponse } from "@spectrum-aura/engine/visual-response";
 import { pushStatsHistory, STATS_SAMPLE_MS } from "../overlays/stats-history";
@@ -410,6 +411,7 @@ export function useAnalyserEngine(params: {
       const bands = ambientActive ? ambientSource.read(now) : audio.read(s.beatSensitivity, now);
       const barTimingFrame = songClockRef.current.tick({
         now,
+        external: midiClockInput.read(now),
         estimatedBpm: bands.bpm,
         bpmConfidence: bands.bpmConfidence,
         bpmLocked: bands.bpmLocked,
@@ -433,8 +435,12 @@ export function useAnalyserEngine(params: {
           beatHintFlashRef.current = null;
         }
       }
-      const clockBpm = barTimingFrame.clockBpm || bands.bpm;
-      const clockBeatPhase = barTimingFrame.synced ? barTimingFrame.beatPhase : bands.beatPhase;
+      const externalSync = barTimingFrame.source === "external";
+      const clockBpm = externalSync
+        ? barTimingFrame.clockBpm
+        : barTimingFrame.clockBpm || bands.bpm;
+      const clockBeatPhase =
+        barTimingFrame.synced || externalSync ? barTimingFrame.beatPhase : bands.beatPhase;
       const balanceAllowed =
         s.autoBalanceEnabled && !xrRuntime.active && !s.performance && !document.hidden;
       if (
@@ -460,6 +466,11 @@ export function useAnalyserEngine(params: {
       );
       bandsForScene.bpm = clockBpm;
       bandsForScene.beatPhase = clockBeatPhase;
+      if (externalSync) {
+        bandsForScene.bpmConfidence = barTimingFrame.bpmLocked ? 1 : 0;
+        bandsForScene.bpmLocked = barTimingFrame.bpmLocked;
+        bandsForScene.beat = barTimingFrame.beatJustTicked;
+      }
       if (s.viewCycleMode) {
         const cycle = viewCycleController.tick({
           now,
@@ -474,12 +485,14 @@ export function useAnalyserEngine(params: {
       } else {
         viewCycleController.reset();
       }
-      radialKickEnv = bands.beat ? 1 : Math.max(0, radialKickEnv - dt * 5);
+      radialKickEnv = (externalSync ? barTimingFrame.beatJustTicked : bands.beat)
+        ? 1
+        : Math.max(0, radialKickEnv - dt * 5);
       const tempoFrame = {
-        audioRunning: audio.isRunning() || ambientActive,
-        beat: bands.beat,
+        audioRunning: audio.isRunning() || ambientActive || externalSync,
+        beat: externalSync ? barTimingFrame.beatJustTicked : bands.beat,
         bpm: Math.round(clockBpm),
-        bpmConfidence: bands.bpmConfidence,
+        bpmConfidence: externalSync ? (barTimingFrame.bpmLocked ? 1 : 0) : bands.bpmConfidence,
         barTiming: barTimingFrame,
         beatHintFlash: beatHintFlashRef.current,
       };

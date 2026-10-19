@@ -1,3 +1,5 @@
+import type { MidiClockFrame } from "./midi-clock";
+
 /**
  * Authoritative musical clock for bar/phrase grid, view cycling, and visual beat phase.
  *
@@ -27,7 +29,7 @@ const PHRASE_ONSET_MIN = 0.08;
  * way, alignment checks would otherwise never succeed again on their own. */
 export const MANUAL_REACQUIRE_AFTER_MS = 6000;
 
-export type ClockSource = "idle" | "auto" | "manual";
+export type ClockSource = "idle" | "auto" | "manual" | "external";
 
 export type BarTiming = {
   source: ClockSource;
@@ -66,6 +68,7 @@ export const EMPTY_BAR_TIMING: BarTiming = {
 };
 
 export type SongClockTickInput = {
+  external?: MidiClockFrame;
   now: number;
   estimatedBpm: number;
   bpmConfidence: number;
@@ -156,6 +159,8 @@ function signatureDistance(a: BarSignature, b: BarSignature): number {
 
 export class SongClock {
   private source: ClockSource = "idle";
+  private externalRevision = -1;
+  private externalBeat = 0;
   private clockBpm = 0;
   private epochMs = 0;
   private epochBeatNumber = 1;
@@ -175,6 +180,8 @@ export class SongClock {
   private recentBars: BarSignature[] = [];
 
   reset(): void {
+    this.externalRevision = -1;
+    this.externalBeat = 0;
     this.source = "idle";
     this.clockBpm = 0;
     this.epochMs = 0;
@@ -282,6 +289,8 @@ export class SongClock {
   }
 
   tick(input: SongClockTickInput): BarTiming {
+    if (input.external?.enabled) return this.tickExternal(input.now, input.external);
+    if (this.source === "external") this.reset();
     const {
       now,
       estimatedBpm,
@@ -352,6 +361,39 @@ export class SongClock {
     }
 
     return { ...EMPTY_BAR_TIMING, bpmLocked };
+  }
+
+  private tickExternal(now: number, external: MidiClockFrame): BarTiming {
+    const changed = this.source !== "external" || this.externalRevision !== external.revision;
+    this.source = "external";
+    this.clockBpm = external.bpm;
+    this.externalRevision = external.revision;
+    // Interpolate only within the next MIDI pulse. Missing pulses cannot make
+    // the grid run away or manufacture phrase boundaries.
+    const fraction =
+      external.running && external.bpm > 0
+        ? Math.min(1 / 24 - 1e-7, (Math.max(0, now - external.timestamp) * external.bpm) / 60000)
+        : 0;
+    const requestedBeat = external.beat + fraction;
+    this.externalBeat = changed ? requestedBeat : Math.max(this.externalBeat, requestedBeat);
+    const boundary = changed && external.running && external.beat % 1 === 0;
+    if (changed) this.lastTotalBeats = Math.floor(this.externalBeat) + 1;
+    const timing = timingFromBeatFloat(
+      this.externalBeat,
+      "external",
+      this.clockBpm,
+      external.fresh && external.bpm > 0,
+      this.lastTotalBeats,
+      boundary,
+    );
+    timing.synced = external.running && external.bpm > 0;
+    if (!external.running) {
+      timing.beatJustTicked = false;
+      timing.barJustStarted = false;
+      timing.phraseJustStarted = false;
+    }
+    this.lastTotalBeats = timing.totalBeats;
+    return timing;
   }
 
   private tickManual(

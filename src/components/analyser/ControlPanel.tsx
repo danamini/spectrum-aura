@@ -10,6 +10,7 @@ import {
 
 import { Label } from "@/components/ui/label";
 import { Bn, Disclosure, FxSection, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
+import { MidiPanel } from "./control-panel/MidiPanel";
 import { ViewSettings } from "./control-panel/ViewSettings";
 import {
   ChevronDown,
@@ -253,7 +254,7 @@ export function ControlPanel() {
     // closes it.
     const onToggleSettingsPanel = (event: Event) => {
       const tab = (event as CustomEvent<{ tab?: UIState["activeTab"] } | undefined>).detail?.tab;
-      if (!tab || !["audio", "scene", "post", "saves"].includes(tab)) {
+      if (!tab || !["audio", "midi", "scene", "post", "saves"].includes(tab)) {
         setStandalone(false);
         setOpen((v) => !v);
         return;
@@ -466,6 +467,7 @@ export function ControlPanel() {
               {(
                 [
                   { id: "audio", label: "Audio" },
+                  { id: "midi", label: "MIDI" },
                   { id: "scene", label: "Scene" },
                   { id: "post", label: "Post FX" },
                   { id: "saves", label: "Saves" },
@@ -526,13 +528,15 @@ export function ControlPanel() {
                   <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/70">
                     {ui.activeTab === "audio"
                       ? "Audio"
-                      : ui.activeTab === "scene"
-                        ? "Scene"
-                        : ui.activeTab === "post"
-                          ? "Post FX"
-                          : ui.activeTab === "saves"
-                            ? "Saves"
-                            : ""}
+                      : ui.activeTab === "midi"
+                        ? "MIDI"
+                        : ui.activeTab === "scene"
+                          ? "Scene"
+                          : ui.activeTab === "post"
+                            ? "Post FX"
+                            : ui.activeTab === "saves"
+                              ? "Saves"
+                              : ""}
                   </span>
                   <button
                     onClick={closeFlyout}
@@ -612,32 +616,11 @@ export function ControlPanel() {
                     <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
                       Shortcut: <span className="text-emerald-300/80">L</span>
                     </p>
-                    <ToggleRow
-                      label="MIDI control"
-                      enabled={s.midiEnabled}
-                      onToggle={(v) => set({ midiEnabled: v })}
-                    >
-                      {midi.error && (
-                        <p className="px-1 font-mono text-[9px] leading-relaxed text-amber-200/70">
-                          {midi.error}
-                        </p>
-                      )}
-                      {midi.active && (
-                        <p className="px-1 font-mono text-[9px] leading-relaxed text-white/50">
-                          {midi.inputs.length > 0
-                            ? `Inputs: ${midi.inputs.join(", ")}`
-                            : "No MIDI inputs connected — plug in a controller"}
-                          {midi.lastAction ? ` · last: ${midi.lastAction}` : ""}
-                        </p>
-                      )}
-                      <p className="px-1 font-mono text-[9px] leading-relaxed text-white/35">
-                        Notes C1/D1 tap beat/downbeat, E1 random visual, F1 randomize FX, C2+ load
-                        saves 1–10. Knobs: CC1 bloom, CC7 exposure, CC71 chroma, CC74 hue, CC91
-                        grain, CC93 vignette.
-                      </p>
-                    </ToggleRow>
+                    <Bn onClick={() => updateUi({ activeTab: "midi" })}>MIDI inputs & mappings</Bn>
                   </div>
                 )}
+
+                {ui.activeTab === "midi" && <MidiPanel midi={midi} />}
 
                 {ui.activeTab === "scene" && (
                   <div className="space-y-4">

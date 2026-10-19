@@ -1,3 +1,4 @@
+import { parseMidiSyncMessage, type MidiSyncEvent } from "./midi-clock";
 import type { Settings } from "./settings";
 import { BLOOM_STRENGTH_MAX_NORMAL, VIGNETTE_AMOUNT_MAX, VIGNETTE_AMOUNT_MIN } from "./settings";
 
@@ -20,7 +21,7 @@ export type MidiEvent =
 /** Parse a raw MIDI message. Velocity/CC values are normalized to 0..1; a
  * note-on with velocity 0 is a note-off per the MIDI spec (running status). */
 export function parseMidiMessage(data: ArrayLike<number> | null): MidiEvent | null {
-  if (!data || data.length === 0) return null;
+  if (!data || data.length < 3) return null;
   const status = data[0]!;
   const d1 = data.length > 1 ? data[1]! : 0;
   const d2 = data.length > 2 ? data[2]! : 0;
@@ -123,7 +124,9 @@ export function isMidiSupported(): boolean {
 }
 
 type MidiManagerCallbacks = {
-  onEvent: (event: MidiEvent) => void;
+  onEvent: (event: MidiEvent, device: { id: string; name: string }) => void;
+  onSync?: (event: MidiSyncEvent, device: { id: string; name: string }, timestamp: number) => void;
+  onDevicesChange?: (devices: { id: string; name: string }[]) => void;
   onInputsChange: (names: string[]) => void;
   onError: (message: string) => void;
 };
@@ -165,13 +168,27 @@ export class MidiInputManager {
   private attachInputs(): void {
     if (!this.access) return;
     const names: string[] = [];
+    const devices: { id: string; name: string }[] = [];
     for (const input of this.access.inputs.values()) {
-      names.push(input.name ?? "MIDI input");
+      if (input.state === "disconnected") {
+        input.onmidimessage = null;
+        continue;
+      }
+      const device = { id: input.id, name: input.name ?? "MIDI input" };
+      devices.push(device);
+      names.push(device.name);
       input.onmidimessage = (message: MIDIMessageEvent) => {
+        if (this.stopped) return;
+        const sync = parseMidiSyncMessage(message.data);
+        if (sync) {
+          this.callbacks.onSync?.(sync, device, message.timeStamp);
+          return;
+        }
         const event = parseMidiMessage(message.data);
-        if (event) this.callbacks.onEvent(event);
+        if (event && !this.stopped) this.callbacks.onEvent(event, device);
       };
     }
     this.callbacks.onInputsChange(names);
+    this.callbacks.onDevicesChange?.(devices);
   }
 }

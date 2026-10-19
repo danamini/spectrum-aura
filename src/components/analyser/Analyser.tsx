@@ -253,6 +253,13 @@ export function Analyser() {
               setAudioPromptDismissed(true);
             }
           }}
+          onMidi={() => {
+            settingsStore.set({ midiEnabled: true });
+            setAudioPromptDismissed(true);
+            window.dispatchEvent(
+              new CustomEvent("spectrum-aura:toggle-settings-panel", { detail: { tab: "midi" } }),
+            );
+          }}
           onDismiss={() => setAudioPromptDismissed(true)}
         />
       )}

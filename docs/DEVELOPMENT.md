@@ -84,6 +84,29 @@ docs/
 
 Deep dive: [audio-analysis-pipeline.md](./audio-analysis-pipeline.md), [song-clock-and-sync.md](./song-clock-and-sync.md), [rendering-and-latency.md](./rendering-and-latency.md).
 
+### MIDI control and external sync
+
+The user guide is [MIDI input and Ableton Live](midi.md). Keep MIDI input
+independent of audio capture so controllers can perform with or without sound.
+
+- `packages/engine/src/midi.ts` owns Web MIDI input lifecycle and note/CC parsing.
+- `packages/engine/src/midi-mapping.ts` defines destinations, ranges and pick-up.
+- `packages/engine/src/midi-clock.ts` decodes external pulses and transport.
+  SongClock derives the authoritative beat/bar grid from that input.
+- `src/components/analyser/hooks/useMidiControl.ts` applies actions to the app.
+- `src/components/analyser/midi-store.ts` persists controller configuration
+  separately from visual presets. `control-panel/MidiPanel.tsx` provides Learn,
+  device selection, live input monitoring and clock selection.
+
+Select one external clock port; never combine clocks from multiple devices.
+External sync blocks audio BPM takeover, freezes on Stop or clock loss, and
+returns to manual control through T/Shift+T. Preserve those rules when changing
+sync. Run `midi.test.ts`, `midi-mapping.test.ts`, `midi-clock.test.ts`,
+`midi-store.test.ts`, `useMidiControl.test.tsx`, `song-clock.test.ts` and
+`sync-invariants.test.ts` for MIDI changes. Simulated tests do not establish
+physical-device compatibility; outstanding checks live in the
+[MIDI controller plan](plans/midi-controller-support.plan.md).
+
 ### Visualization Architecture
 
 **Three.js Scene** (`engine/scene.ts`):
@@ -143,7 +166,7 @@ Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bo
 - `R`: Randomize
 - `←` / `→`: Prev / Next Visual (`B` / `V` kept as aliases)
 - `[` / `]` or `Shift+←` / `Shift+→`: Prev / Next Save
-- `X`: Audio Source (stops the current audio engine so a new source can be selected)
+- `X`: Input Source (stops current audio capture and opens audio, MIDI and ambient choices)
 - `F`: Toggle fullscreen
 - `N`: Toggle Stats panel; `Shift+N`: Toggle full-page stats
 - `G`: Show/Hide shortcut hints
@@ -167,7 +190,7 @@ Shortcut rail clusters:
 - Save cluster: save count, Prev, Play Saves, Next, Random, Save, Delete
 - Panel cluster: Post FX, Scene, Settings (S), BPM Grid (M), Latency (L)
 - Response panel: sensitivity slider, neutral reset and Auto balance
-- Utility cluster: Audio Source (X), Fullscreen (F), Stats (N), FPS output, Beat Tap (T), Hide Controls (G)
+- Utility cluster: Input Source (X), Fullscreen (F), Stats (N), FPS output, Beat Tap (T), Hide Controls (G)
 
 When hidden (`G`), a **shortcuts · g** pill at the bottom restores the bar (or press `G` again).
 

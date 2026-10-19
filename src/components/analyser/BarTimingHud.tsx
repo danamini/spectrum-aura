@@ -138,6 +138,7 @@ export function BarTimingHud({
       {header}
       <div className="flex flex-wrap items-center justify-center gap-2 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
         <span>4/4</span>
+        {timing.source === "external" && <span className="text-emerald-300">MIDI</span>}
         {timing.source === "manual" && (
           <span className="rounded border border-emerald-300/25 bg-emerald-400/15 px-1 py-0.5 text-[7px] tracking-[0.12em] text-emerald-200/90">
             Tap

@@ -2,7 +2,8 @@
 
 **Authoritative timing for bar grid, view cycling, and visual beat phase.**
 
-**Source:** `engine/song-clock.ts`  
+**Source:** `packages/engine/src/song-clock.ts`
+
 **Consumers:** `hooks/useAnalyserEngine.ts`, `BarTimingHud.tsx`, `view-cycle-controller.ts`, `scene.ts` (via injected `beatPhase`)
 
 ---
@@ -12,22 +13,35 @@
 > One clock owns bar/beat position. Manual taps anchor the grid; aligned audio may nudge phase and resume auto correction.
 
 ```
-BPMDetector  ──estimated BPM/confidence──┐
-                                       ├──► SongClock.tick() ──► BarTiming
-Manual taps (T / ⇧T) ──epoch/BPM──────┘
+BPMDetector ──estimated BPM/confidence──┐
+Manual taps ──epoch/BPM─────────────────┼→ SongClock.tick() → BarTiming
+MIDI input ───clock/transport───────────┘
 ```
 
 ---
 
 ## Clock modes (`ClockSource`)
 
-| Mode     | Entry                                                       | Behavior                                                                                       |
-| -------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `idle`   | Initial / lost auto confidence                              | No grid (`EMPTY_BAR_TIMING`)                                                                   |
-| `auto`   | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM blends toward estimate with adaptive α (0.25 → 0.03 over ~30 frames)        |
-| `manual` | Any `hintBeat` / `hintDownbeat`                             | Tap-owned epoch; misaligned audio onsets ignored; aligned onsets may nudge and release to auto |
+| Mode       | Entry                                                       | Behavior                                                                                                |
+| ---------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `idle`     | Initial / lost auto confidence                              | No grid (`EMPTY_BAR_TIMING`)                                                                            |
+| `auto`     | 4 consecutive confident frames OR `bpmLocked` from detector | Epoch at lock; BPM blends toward estimate with adaptive α (0.25 → 0.03 over ~30 frames)                 |
+| `manual`   | Any `hintBeat` / `hintDownbeat`                             | Tap-owned epoch; misaligned audio onsets ignored; aligned onsets may nudge and release to auto          |
+| `external` | Selected MIDI clock input                                   | External tempo/position owns the grid; audio cannot override it; Stop or clock loss freezes advancement |
 
 ---
+
+## External MIDI sync
+
+Selecting a clock input in the MIDI panel gives `SongClock` an `external` source.
+`midi-clock.ts` decodes 24 pulses per quarter note and Start/Continue/Stop/song
+position. The source carries pulse position and timestamps, not an independent
+bar grid. SongClock derives all beat/bar/phrase indices and interpolates between
+pulses, capped below the next pulse to avoid inventing beats on a stalled input.
+Audio estimates cannot override external timing. A clock gap freezes the grid;
+restart transport to recover position. T/Shift+T clears the external input choice
+and returns control to manual taps. The grid remains 4/4; MIDI clock does not
+supply time signature. See [MIDI setup](midi.md).
 
 ## Continuous beat index
 
@@ -137,7 +151,7 @@ t*0 = \text{now},\quad b_0 = 1,\quad \text{BPM}\_c = \text{BPM}*{\text{est}}
 
 While auto and not detector-locked, the clock blends toward the estimate with
 an adaptive rate (`autoBpmBlendAlpha`): \(\alpha\) starts at **0.25** on the
-frame auto mode is entered (when \(\text{BPM}_c\) hasn't settled yet) and eases
+frame auto mode is entered (when \(\text{BPM}\_c\) hasn't settled yet) and eases
 down to the steady-state **0.03** over the first 30 frames:
 
 \[

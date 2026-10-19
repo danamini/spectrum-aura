@@ -15,7 +15,7 @@
 
 <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=16+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="16 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
 
-**[Open live demo](https://spectrumaura.org/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [Docs](docs/README.md)
+**[Open live demo](https://spectrumaura.org/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [MIDI setup](docs/midi.md) · [Docs](docs/README.md)
 
 <p><strong>Built with</strong></p>
 
@@ -25,7 +25,7 @@
 
 </div>
 
-Spectrum Aura is a dynamic, real-time visual analyser that turns live sound into motion, light, depth, and rhythm directly in your browser.
+Spectrum Aura turns live sound into motion, light, depth, and rhythm in your browser. Use MIDI controllers to perform scene changes and effects, or follow external MIDI tempo and transport from Ableton Live or a drum machine.
 
 No installs for viewers. No backend. No upload flow. Open the page, feed it audio, and the scene responds instantly.
 
@@ -51,7 +51,8 @@ Depending on your hardware you may need to tune performance via the options in s
 - Classic CRT scanline and projector-film artifact passes, a **user-reorderable post-FX pipeline** (e.g. CRT scanlines over the emulated retro screen), and per-effect pins that protect a look from Randomize.
 - Movable overlay panels: drag the command bar, BPM grid, latency HUD, and stats panel anywhere; double-click to reset.
 - **Ambient mode** — no music needed: a synthetic, musically-structured groove (beat grid, builds, breakdowns) drives every visual, so the app works as a standalone screen background.
-- **Web MIDI control** (opt-in): map hardware knobs, faders, and pads to settings — beat taps, randomize, view switching, and FX levels from a physical controller.
+- **MIDI input and mapping:** learn pads, knobs and sliders, combine multiple devices, monitor incoming values, and save mappings separately from visual looks.
+- **External MIDI sync:** follow tempo, start/stop, continue and song position from one selected MIDI port. [Controller and Ableton setup](docs/midi.md).
 
 ## WebXR (Alpha)
 
@@ -79,11 +80,36 @@ Depending on your hardware you may need to tune performance via the options in s
 
 - Use microphone for ambient or live room capture.
 - Use tab/system audio for direct playback-reactive visuals.
+- Choose **Use MIDI controller** for scene and effect control, with or without audio capture.
+- Use Ambient mode for a synthetic groove without an audio source.
 
 For shared tab/system audio in Chrome:
 
 - Select a browser tab when prompted.
 - Enable **Share tab audio**.
+
+### MIDI controllers and Ableton Live
+
+Open **Settings → MIDI**, select **Learn** beside a destination, and move a
+knob, slider or pad. The panel shows connected devices, assignments and live
+incoming values. Learned controls remember their device and MIDI channel, so
+several controllers can work together without identical CC numbers colliding.
+
+- Sweep through scenes with a touch strip, or adjust bloom, hue and other FX.
+- Map pads to saved looks, beat/downbeat taps and randomisation. Use a **Load save**
+  destination when a pad should always recall a particular look.
+- Narrow or reverse a control's range. Enable **Pick-up** to avoid a slider
+  jumping to its physical position after loading a different look.
+- Select **Tempo & transport source** to follow an external MIDI clock through
+  Aura's existing SongClock. Live clips can also send notes and CC automation.
+
+The [MIDI guide](docs/midi.md) covers APC64 and MiniLab 3 setup, mixed rigs,
+and connecting Ableton Live through a macOS IAC bus. MIDI carries control data;
+use audio capture alongside it for sound-reactive motion.
+
+Automated tests and browser checks use simulated MIDI ports. Physical-device
+verification is pending. LED colour output, relative encoders and deeper Live
+metadata are not implemented; external sync currently uses a 4/4 grid.
 
 ### Visual engines
 
@@ -112,7 +138,13 @@ Spectrum Aura treats rhythm as a first-class input — not just loudness. A **So
 
 This is tuned for fun, live visuals — not DAW-grade beat tracking — but manual taps make it surprisingly tight for DJ sets, streams, and browser playback.
 
-**Manual sync (recommended for live use)**
+**External MIDI sync**
+
+Select a clock port in **Settings → MIDI** to follow its tempo and transport.
+Audio BPM detection cannot override that source. Stop or lost clock freezes the
+grid; press `T` or `⇧T` to leave external sync and return to manual taps.
+
+**Manual sync**
 
 | Key  | What it does                                                                                                                                                                                    |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -154,7 +186,7 @@ Technical deep dive: [Song clock and sync](docs/song-clock-and-sync.md).
 - `A` play saved looks in rotation
 - `F` toggle fullscreen
 - `S` toggle settings panel
-- `X` reset the current audio source selection
+- `X` open Input Source, stopping any current audio capture
 - `N` toggle stats panel; `Shift+N` toggle full-page stats
 - `G` show/hide shortcut bar (restores via `G` or the bottom pill)
 - `T` beat tap (learn tempo + lock grid)
@@ -170,7 +202,7 @@ Bottom shortcut rail:
 - `fx` toggles the post-processing pipeline.
 - Save controls are grouped like a transport cluster: previous, play saves, next, random, save, delete.
 - Panel cluster: Post FX, Scene, Settings, BPM Grid and Latency.
-- Utility cluster: Audio Source, Fullscreen, Stats, FPS readout, Beat Tap and Hide Controls (`G`).
+- Utility cluster: Input Source, Fullscreen, Stats, FPS readout, Beat Tap and Hide Controls (`G`).
 - Styled tooltips stay open while live readouts update. Auto balance explains its behavior and current correction.
 - Save becomes **Saved** and disables when the displayed look already matches a save. Delete only applies to a matching saved look. Play Saves requires at least two saves.
 - Button groups, mini panels and Stats share the same translucent blur fill.
@@ -343,11 +375,13 @@ Spectrum Aura runs a real-time pipeline: **FFT → band features → BeatMatcher
 
 - **Beats and bars:** 4 beats per bar, 16 beats per phrase (4 bars in 4/4).
 - **Manual taps** (`T`, `⇧T`) anchor the grid; audio estimates tempo but does not fight misaligned taps.
+- **External MIDI clock** supplies tempo and transport to the same SongClock; notes and CCs drive mapped controls.
 - **View cycle** (`C`) advances on phrase boundaries after a short warm-up.
 
 Technical documentation (equations, algorithms, latency):
 
 - [Documentation index](docs/README.md)
+- [MIDI controllers and Ableton Live](docs/midi.md) — mapping, live monitoring, external sync and setup
 - [Audio analysis pipeline](docs/audio-analysis-pipeline.md) — FFT, BeatMatcher, BPMDetector
 - [Song clock and sync](docs/song-clock-and-sync.md) — bar grid, taps, view cycle
 - [Rendering and latency](docs/rendering-and-latency.md) — rAF loop, timing budgets

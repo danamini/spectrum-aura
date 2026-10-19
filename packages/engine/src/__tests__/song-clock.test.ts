@@ -282,3 +282,41 @@ describe("SongClock", () => {
     expect(b.beatJustTicked).toBe(true);
   });
 });
+
+describe("external clock ownership", () => {
+  it("ignores conflicting audio and freezes while external transport is stopped", () => {
+    const clock = new SongClock();
+    const external = {
+      enabled: true,
+      bpm: 123,
+      beat: 16,
+      timestamp: 1000,
+      running: true,
+      fresh: true,
+      revision: 1,
+      status: "playing" as const,
+    };
+    const playing = clock.tick({
+      now: 1000,
+      external,
+      estimatedBpm: 80,
+      bpmConfidence: 1,
+      bpmLocked: true,
+      audioBeat: true,
+    });
+    expect(playing.clockBpm).toBe(123);
+    expect(playing.phraseJustStarted).toBe(true);
+    const stopped = clock.tick({
+      now: 5000,
+      external: { ...external, running: false, fresh: false },
+      estimatedBpm: 180,
+      bpmConfidence: 1,
+      bpmLocked: true,
+      audioBeat: true,
+    });
+    expect(stopped.source).toBe("external");
+    expect(stopped.totalBeats).toBe(17);
+    expect(stopped.beatJustTicked).toBe(false);
+    expect(stopped.phraseJustStarted).toBe(false);
+  });
+});

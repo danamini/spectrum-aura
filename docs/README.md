@@ -1,16 +1,20 @@
 # Spectrum Aura — Technical Documentation
 
-Deep reference for contributors, users tuning sync, and coding agents.
+Setup guides and technical reference for controllers, audio, musical sync and rendering.
 
-| Document                                                     | Contents                                                    |
-| ------------------------------------------------------------ | ----------------------------------------------------------- |
-| [DEVELOPMENT.md](./DEVELOPMENT.md)                           | Project structure, workflows, testing, conventions          |
-| [audio-analysis-pipeline.md](./audio-analysis-pipeline.md)   | FFT, bands, BeatMatcher, BPMDetector (equations + code map) |
-| [song-clock-and-sync.md](./song-clock-and-sync.md)           | Authoritative SongClock, taps, bar grid, view cycle         |
-| [rendering-and-latency.md](./rendering-and-latency.md)       | rAF loop, GPU path, latency budgets, HUD bus                |
-| [fft-and-beat-detection.md](./fft-and-beat-detection.md)     | Short overview (links to detailed docs)                     |
-| [retro-systems-and-postfx.md](./retro-systems-and-postfx.md) | Retro hardware emulation pass, fonts, pipeline order, locks |
-| [THIRD_PARTY_ASSETS.md](./THIRD_PARTY_ASSETS.md)             | Runtime asset licensing                                     |
+Start with [MIDI input and Ableton Live](midi.md) to connect controllers, learn
+scene/effect mappings, monitor incoming messages and select an external clock.
+
+| Document                                                     | Contents                                                                        |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [midi.md](./midi.md)                                         | MIDI Learn, multiple controllers, APC64 examples, Ableton setup and limitations |
+| [DEVELOPMENT.md](./DEVELOPMENT.md)                           | Project structure, workflows, testing, conventions                              |
+| [audio-analysis-pipeline.md](./audio-analysis-pipeline.md)   | FFT, bands, BeatMatcher, BPMDetector (equations + code map)                     |
+| [song-clock-and-sync.md](./song-clock-and-sync.md)           | Authoritative SongClock, taps, bar grid, view cycle                             |
+| [rendering-and-latency.md](./rendering-and-latency.md)       | rAF loop, GPU path, latency budgets, HUD bus                                    |
+| [fft-and-beat-detection.md](./fft-and-beat-detection.md)     | Short overview (links to detailed docs)                                         |
+| [retro-systems-and-postfx.md](./retro-systems-and-postfx.md) | Retro hardware emulation pass, fonts, pipeline order, locks                     |
+| [THIRD_PARTY_ASSETS.md](./THIRD_PARTY_ASSETS.md)             | Runtime asset licensing                                                         |
 
 - [Response and automatic balance](response-and-balance.md): visual gain, feedback limits and persistence.
 - [v0.4.0 completion plan](plans/controls-and-balance.plan.md): requested work, verification and release checklist.
@@ -18,14 +22,16 @@ Deep reference for contributors, users tuning sync, and coding agents.
 ## Quick mental model
 
 ```
-Audio capture → FFT bands → BeatMatcher (onsets) + BPMDetector (tempo estimate)
-                                    ↓
-                              SongClock (authoritative bar/beat phase)
-                                    ↓
-              Scene + Post-FX + BarTimingHud + ViewCycleController
+Audio → FFT → BeatMatcher + BPMDetector ─┐
+Manual taps ────────────────────────────┼→ SongClock → beat/bar grid
+Selected MIDI clock + transport ────────┘       ↓
+                                      Scene + Post-FX + HUD + view cycle
+MIDI notes/CCs → learned mappings → scene/effect settings and actions
 ```
 
-Manual taps (`T`, `⇧T`) override grid position. Audio analysis estimates tempo but does **not** advance the bar grid after manual lock.
+Manual taps (`T`, `⇧T`) leave external sync and anchor grid position. While a
+MIDI clock source is selected, audio estimates cannot override it. SongClock
+remains the sole owner of the visual beat/bar grid.
 
 ## Demo-scene text overlay
 

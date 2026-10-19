@@ -1,3 +1,4 @@
+import { midiStore } from "../midi-store";
 import { useEffect, type RefObject } from "react";
 import { AudioEngine } from "@spectrum-aura/engine/audio";
 import { SongClock } from "@spectrum-aura/engine/song-clock";
@@ -22,6 +23,10 @@ export function useBeatHintBridge(params: {
     let flashTimer: number | null = null;
     const onBeatHint = (event: Event) => {
       const detail = ((event as CustomEvent<BeatHintDetail>).detail ?? {}) as BeatHintDetail;
+      if (midiStore.get().syncInput) {
+        midiStore.setSyncInput("");
+        songClockRef.current.reset();
+      }
       const now = performance.now();
       const s = settingsRef.current;
       const running = audioRef.current?.isRunning();

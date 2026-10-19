@@ -287,7 +287,7 @@ export function Shortcuts() {
     return () => window.removeEventListener(AUDIO_SOURCE_STATE_EVENT, onSourceState);
   }, []);
   const ambientOn = settings.ambientMode && audioSource === "none";
-  const sourceSub =
+  const audioSourceSub =
     audioSource === "mic"
       ? "mic · live"
       : audioSource === "system"
@@ -295,6 +295,11 @@ export function Shortcuts() {
         : ambientOn
           ? "ambient"
           : "off";
+  const sourceSub = settings.midiEnabled
+    ? audioSourceSub === "off"
+      ? "MIDI enabled"
+      : `${audioSourceSub} + MIDI`
+    : audioSourceSub;
   const sourceTone =
     audioSource !== "none"
       ? "text-emerald-300"
@@ -738,14 +743,14 @@ export function Shortcuts() {
     },
     {
       key: "X",
-      label: "Audio Source",
+      label: "Input Source",
       icon: audioSource === "system" ? <MonitorSpeaker /> : ambientOn ? <Sparkles /> : <Mic />,
-      active: audioSource !== "none" || ambientOn,
+      active: audioSource !== "none" || ambientOn || settings.midiEnabled,
       sub: sourceSub,
       subTone: sourceTone,
       tooltip: (
         <TooltipBlock
-          title="Audio Source"
+          title="Input Source"
           hint="X"
           detail={`Current source: ${
             audioSource === "mic"

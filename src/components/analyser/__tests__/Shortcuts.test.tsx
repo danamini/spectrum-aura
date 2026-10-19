@@ -175,7 +175,7 @@ describe("Shortcuts", () => {
     expect(container.textContent).toContain("Next Visual");
     expect(container.textContent).toContain("Play Saves");
     expect(container.textContent).toContain("Stats");
-    expect(container.textContent).toContain("Audio Source");
+    expect(container.textContent).toContain("Input Source");
     expect(container.textContent).toContain("BPM Grid");
     expect(container.textContent).toContain("Latency");
     expect(container.textContent).toContain("Beat Tap");

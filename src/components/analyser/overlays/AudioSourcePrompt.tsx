@@ -1,5 +1,6 @@
 import { Mic, MonitorSpeaker, Sparkles, X } from "lucide-react";
 import type { AudioCaptureSupport } from "@spectrum-aura/engine/audio-support";
+import { isMidiSupported } from "@spectrum-aura/engine/midi";
 import { LOCAL_DEV_URL } from "../theme";
 
 export function AudioSourcePrompt({
@@ -10,6 +11,7 @@ export function AudioSourcePrompt({
   onSystem,
   onAmbient,
   onDismiss,
+  onMidi,
 }: {
   support: AudioCaptureSupport;
   error: string | null;
@@ -18,6 +20,7 @@ export function AudioSourcePrompt({
   onSystem: () => void;
   onAmbient: () => void;
   onDismiss: () => void;
+  onMidi?: () => void;
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-[150] flex items-center justify-center p-6">
@@ -31,7 +34,7 @@ export function AudioSourcePrompt({
         </button>
         <div className="mb-5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em] text-emerald-300/80">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-          Audio source
+          Input source
         </div>
         <h1 className="mb-2 font-mono text-2xl uppercase tracking-[0.15em] text-white">
           Spectrum<span className="text-emerald-400">.</span>Aura
@@ -113,11 +116,39 @@ export function AudioSourcePrompt({
             </p>
           </div>
         )}
+        {onMidi && (
+          <button
+            onClick={onMidi}
+            disabled={!isMidiSupported()}
+            className="mt-3 w-full rounded-md border border-white/15 bg-white/5 px-4 py-3 text-left font-mono text-[11px] text-white/80 hover:border-emerald-300/60 disabled:opacity-40"
+          >
+            <span className="block">Use MIDI controller</span>
+            <span className="mt-1 block text-[10px] text-white/50">
+              {isMidiSupported()
+                ? "Pads, knobs and sliders control scenes and effects. Works with or without audio."
+                : "Web MIDI is unavailable in this browser."}
+            </span>
+          </button>
+        )}
         {error && (
           <p className="mt-4 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 font-mono text-[11px] text-red-300">
             {error}
           </p>
         )}
+        <a
+          href="https://github.com/danamini/spectrum-aura"
+          target="_blank"
+          rel="noopener"
+          className="mt-5 inline-flex items-center gap-1.5 font-mono text-[10px] tracking-wide text-white/35 transition-colors hover:text-emerald-300"
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"
+            />
+          </svg>
+          Open source on GitHub
+        </a>
       </div>
     </div>
   );

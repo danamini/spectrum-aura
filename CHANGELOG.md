@@ -9,6 +9,21 @@ presets) may change between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- MIDI input and mapping: learn pads, knobs and sliders per device and
+  channel, combine several controllers, monitor incoming values, and save
+  mappings separately from visual looks. Settings → MIDI, plus a **Use MIDI
+  controller** option on the input source prompt. See [docs/midi.md](docs/midi.md).
+- External MIDI sync: follow tempo, start/stop, continue and song position
+  from one selected MIDI port (Ableton Live, drum machines).
+- Subtle "Open source on GitHub" link on the input source prompt.
+
+### Changed
+
+- The live site now serves from <https://spectrumaura.org/>; the old
+  GitHub Pages URL redirects there.
+
 ## [0.4.0] - 2026-10-02
 
 ### Added
