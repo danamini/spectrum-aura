@@ -3,8 +3,8 @@ import react from "@vitejs/plugin-react";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vite";
 
-export default defineConfig(({ mode }) => ({
-  base: mode === "production" ? "/spectrum-aura/" : "/",
+export default defineConfig(() => ({
+  base: "/",
   plugins: [tailwindcss(), tsConfigPaths({ projects: ["./tsconfig.json"] }), react()],
   build: {
     rollupOptions: {

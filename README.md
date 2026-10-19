@@ -2,7 +2,7 @@
 
 ![Spectrum Aura banner](https://capsule-render.vercel.app/api?type=waving&color=0:05060a,50:0d2820,100:34d399&height=180&section=header&text=Spectrum%20Aura&fontSize=46&fontColor=e6fff5&fontAlignY=38&animation=twinkling&desc=Real-time%20browser%20audio%20visualiser&descSize=14&descAlignY=58&descAlign=50)
 
-[![Live demo](https://img.shields.io/website?down_message=offline&label=demo&up_color=34d399&up_message=online&url=https%3A%2F%2Fdanamini.github.io%2Fspectrum-aura%2F)](https://danamini.github.io/spectrum-aura/)
+[![Live demo](https://img.shields.io/website?down_message=offline&label=demo&up_color=34d399&up_message=online&url=https%3A%2F%2Fspectrumaura.org%2F)](https://spectrumaura.org/)
 [![Release](https://img.shields.io/github/v/release/danamini/spectrum-aura?color=34d399&label=release)](https://github.com/danamini/spectrum-aura/releases)
 [![CI](https://github.com/danamini/spectrum-aura/actions/workflows/ci.yml/badge.svg)](https://github.com/danamini/spectrum-aura/actions/workflows/ci.yml)
 [![Deploy](https://github.com/danamini/spectrum-aura/actions/workflows/deploy.yml/badge.svg)](https://github.com/danamini/spectrum-aura/actions/workflows/deploy.yml)
@@ -15,7 +15,7 @@
 
 <img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=16+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="16 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
 
-**[Open live demo](https://danamini.github.io/spectrum-aura/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [Docs](docs/README.md)
+**[Open live demo](https://spectrumaura.org/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [Docs](docs/README.md)
 
 <p><strong>Built with</strong></p>
 
@@ -35,7 +35,7 @@ It is not designed to be used for any formal audio analysis, it's intended purel
 
 ## Live Demo
 
-**[https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)** — deployed automatically from `main` on every merge.
+**[https://spectrumaura.org/](https://spectrumaura.org/)** — deployed automatically from `main` on every merge.
 
 Depending on your hardware you may need to tune performance via the options in settings.
 
@@ -58,7 +58,7 @@ Depending on your hardware you may need to tune performance via the options in s
 - WebXR support for Meta Quest is currently **alpha**.
 - Desktop mode remains the primary, fully supported experience.
 - If WebXR is unavailable in your browser, the app continues to work in desktop mode without XR.
-- Production testing URL: [https://danamini.github.io/spectrum-aura/](https://danamini.github.io/spectrum-aura/)
+- Production testing URL: [https://spectrumaura.org/](https://spectrumaura.org/)
 
 ## Screenshots
 
