@@ -18,9 +18,84 @@ presets) may change between minor versions.
 - External MIDI sync: follow tempo, start/stop, continue and song position
   from one selected MIDI port (Ableton Live, drum machines).
 - Subtle "Open source on GitHub" link on the input source prompt.
+- Text overlay: five per-character styles — **Wave** (each letter is a band
+  of an equaliser), **Typewriter** (typed in time with the tempo),
+  **Assemble** (letters fly together and breathe on the beat), **Ring** (the
+  phrase on a turning cylinder) and **Rain** (the phrase's letters falling in
+  streams).
+- Text overlay sources: **Your text** (type your own lines), **Live readout**
+  (tempo and band levels as they are measured), **Scrollers** (bundled
+  demo-scene one-liners), **Poetry** (PoetryDB) and **Wikipedia** (random
+  article titles), alongside the renamed **Literature** and **IT excuses**.
+  Each source now carries a one-line description and says whether it needs
+  the network.
+- Five new visuals, taking the total to 21:
+  - **Black Hole** — light is bent around the hole per pixel, so the far side
+    of the accretion disk arches over and under the shadow and the stars smear
+    around it. The disk is a live spectrogram: bass at the hot inner edge,
+    treble at the rim, each slice spiralling round as it ages.
+  - **Outrun** — synthwave drive: a tempo-locked neon grid, wireframe mountains
+    built from spectrum history, striped sun and starfield.
+  - **Globe** — a vector Earth whose countries bounce: each rides its own
+    slice of the spectrum on a spring, lifting off the surface and settling
+    back, and the whole map jumps on the beat. A **Country map** toggle turns
+    the outline download off.
+  - **Spectro-Tunnel** — the demoscene tunnel with a live spectrogram for
+    walls, so a fill is visible travelling down the tube.
+  - **Fractal** — a raymarched Mandelbulb whose shape bends with the bass,
+    with a **Detail** setting for the per-pixel march budget.
 
 ### Changed
 
+- **Low-latency audio** now changes what you see, not only the audio
+  context's latency hint. Visuals follow a fast-attack copy of the spectrum
+  that rises on the frame a sound arrives and releases at the Smoothing
+  slider's rate; beat and tempo detection keep their existing source. The
+  toggle also applies live instead of at the next capture start, and in this
+  mode the microphone is requested without echo cancellation or noise
+  suppression. See [docs/rendering-and-latency.md](docs/rendering-and-latency.md).
+- Asset-Flow fetches only the model it displays instead of all twelve
+  (12 requests / 71 MB down to 1 request / at most 13.5 MB).
+- **Tempo and beat sync** reworked. Measured on simulated tracks with known
+  beats (`sync-benchmark.test.ts`): tempo error 0.15–3.35% → under 0.05%;
+  beat alignment 0.11–0.43 of a beat (no better than chance) → 0.03–0.08;
+  drops that put bar 1 on the drop 0 of 20 → 40 of 40.
+  - Tempo comes from the periodicity of the onset envelope, so a
+    kick-on-1-and-3 groove no longer reads as a nearby wrong tempo.
+  - In auto mode the beat grid locks onto the beats you hear and holds its
+    tempo through breakdowns.
+  - A drop is detected one beat after it lands and becomes bar 1, beat 1.
+    Previously it was noticed a bar late and the phrase anchored there.
+  - Section starts and breakdowns are judged on a new kick band
+    (30–180 Hz) with decibel-aware thresholds, calibrated on recorded tracks.
+    The wide "bass" band (0–1.9 kHz) barely moves when a kick drops out under
+    vocals or synths, so on real music the first version found nothing.
+  - A slightly wrong tempo lock (within 8 BPM) now corrects itself instead of
+    holding for the whole track.
+- **Dynamic mode** now follows the music's structure instead of drifting on a
+  fixed timer. It detects drops, breakdowns and section changes and answers
+  each with a new camera shot (orbit speed and direction, drift, beat kick), a
+  post-FX hit on drops (radial blur, chroma, a brief glitch), an immediate
+  shift in the view's drifting settings, and exposure/saturation and view size
+  that follow the track's energy. At amount 0.5 and above the palette steps on
+  each change. Camera moves now apply in every view.
+- Monolith no longer washes out to a flat colour. Its per-column colours were
+  being multiplied by zero (the material asked for vertex colours the box
+  geometry does not have), leaving only an even glow that bloom smeared across
+  the screen. Columns are now coloured individually, with lit caps and edges
+  that brighten with height.
+- Sound-Wall pillars are shaded: the mirror-metal material had no environment
+  to reflect and rendered black. They are now brushed steel with the same
+  cap-and-edge glow.
+- Terrain is rebuilt as a lit landscape: a clean quad grid instead of
+  triangle wireframe, log-spaced frequency across the width, glowing ridges,
+  a beat band that rolls across it, and a shaded solid mode when Wireframe is
+  off. It now scrolls at a fixed rate that follows the tempo; before, the
+  scroll speed doubled on a 120 Hz display.
+- Torus particles brighten with their own frequency band, so the ring lights
+  up where the spectrum is.
+- New visuals are built on first use and released after 90 seconds
+  off-screen, so they cost no memory or startup time until shown.
 - The live site now serves from <https://spectrumaura.org/>; the old
   GitHub Pages URL redirects there.
 

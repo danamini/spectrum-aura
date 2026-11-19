@@ -121,17 +121,33 @@ The render loop consumes it to also call `BPMDetector.releaseManualLock()`
 (SongClock has no reference to the detector) and flashes "Re-syncing…".
 Re-tapping mid-gap resets the grace period, as does any confirmed alignment.
 
-### 4-bar phrase change detection (auto / post-tap)
+### Section-start ("drop") detection (auto / post-tap)
 
-Each completed bar stores a signature \((\bar{b}, \bar{m}, \bar{c})\).
+The clock averages the **kick band** (`AudioBands.kick`, 30–180 Hz; `bass`
+when a source has none) over each beat. At each beat line it closes the beat
+that just ended and compares it with the previous 8 beats. That beat starts a
+new section when, with at least 6 beats of history and 8 beats since the last
+detection, its kick level is at least **0.04 above the loudest** of those
+beats.
 
-At each bar line, compare the bar that just ended to the mean of recent bars. When:
+Levels are on the analyser's decibel scale (0–1 spans 70 dB), so the test is a
+difference, not a ratio; 0.04 is about 3 dB. On recorded tracks the kick band
+steps by 0.1–0.25 at a section start, while the wide `bass` band (0–1.9 kHz)
+moves by 0.03 or less under vocals and synths.
 
-- At least 4 bar signatures exist
-- Spectral distance \(\geq 0.14\)
-- Strong onset on the new bar (`audioBeat` + `onsetStrength ≥ 0.08`)
+The comparison is against the loudest recent beat, not the mean: in a steady
+groove the kick beats already sit above the average of kick and snare beats.
 
-…the clock realigns to phrase downbeat (same as `⇧T`) and sets `phraseChangeDetected`.
+On detection the phrase is re-anchored so that beat is bar 1, beat 1, and
+`phraseChangeDetected` is set. The anchor is the time of the first
+section-sized onset inside that beat (or late in the beat before it, if the
+grid had drifted), so beat 1 sits on the kick itself. Detection necessarily
+comes one beat after the hit, so the clock usually resumes at beat 2 and
+`phraseJustStarted` does not fire for that phrase.
+
+This replaced a per-bar comparison that noticed a change a full bar after it
+happened and anchored the phrase there — one bar late — and that required an
+onset on the exact frame of the bar line.
 
 ---
 
@@ -143,22 +159,43 @@ Requires:
 \text{BPM} \in [65, 195] \land (\text{bpmLocked} \lor \text{confidence} > 0.62)
 \]
 
-After 4 consecutive qualifying frames (or immediate if `bpmLocked`):
+After 4 consecutive qualifying frames (or immediate if `bpmLocked`) the clock
+enters auto. Beat 1 is placed on the **last confident onset** if one arrived
+within the past beat period, otherwise at `now`.
 
-\[
-t*0 = \text{now},\quad b_0 = 1,\quad \text{BPM}\_c = \text{BPM}*{\text{est}}
-\]
+Until the grid is confirmed (below), tempo follows the detector: while not
+detector-locked the clock blends toward the estimate with `autoBpmBlendAlpha`
+(\(\alpha\) from **0.25** on entry easing to **0.03** over 30 frames), and
+once locked it takes the estimate directly. Every tempo change goes through
+`setClockBpm`, which re-anchors the epoch so the beat position is unchanged —
+a tempo correction no longer slides the grid.
 
-While auto and not detector-locked, the clock blends toward the estimate with
-an adaptive rate (`autoBpmBlendAlpha`): \(\alpha\) starts at **0.25** on the
-frame auto mode is entered (when \(\text{BPM}\_c\) hasn't settled yet) and eases
-down to the steady-state **0.03** over the first 30 frames:
+### Auto phase lock
 
-\[
-\text{BPM}_c \leftarrow (1-\alpha)\,\text{BPM}\_c + \alpha\,\text{BPM}_{\text{est}}
-\]
+In auto mode each confident onset (`audioBeat`, `onsetStrength ≥ 0.06`) is
+compared with the nearest grid beat; \(e\) is the error in beats, positive
+when the onset is late.
 
-No beat index jumps — only tempo slowly corrects.
+| Case | Action |
+| --- | --- |
+| \(\lvert e\rvert \le 0.25\) | Epoch moves by \(0.22\,e\) beats. Once confirmed, tempo is scaled by \(1 - 0.03\,e\). |
+| \(\lvert e\rvert\) within 0.12 of 0.5 | Counts toward an off-beat lock; 6 in a row shift the grid half a beat. |
+| otherwise | Counts toward a lost lock. |
+
+After **6 aligned onsets** the grid is *confirmed* and the clock owns its
+tempo as a flywheel: it no longer follows the detector, so it holds tempo
+through a breakdown with no beats, where the detector's estimate wanders. It
+coasts up to 12 s after the detector loses the tempo before returning to idle.
+
+A confirmed clock still accepts two things from the detector:
+
+- **Octave correction:** an estimate at double or half the clock's tempo for
+  1.5 s switches the clock, leaving the epoch in place so phrase starts stay at
+  the same moments.
+- **Lost lock:** 8 onsets in a row that fit neither the beat nor the off-beat
+  unconfirm the grid, take the detector's tempo and put that onset on a beat.
+
+The phase lock does not run in manual mode, where taps are the anchor.
 
 ---
 
@@ -204,6 +241,11 @@ t*{\min} = \max(3200,\; 0.72 \cdot 16 \cdot T*{\text{beat}})
 5. `⇧T` downbeat sets `beatInPhrase === 1` immediately
 6. A stale manual lock (>6 s with no confirmed alignment) reverts to idle and
    signals the detector tap-lock release (`song-clock.test.ts`)
+7. Phase nudges cannot make a beat tick twice: the beat count is held
+   monotonic except at an explicit re-anchor
+8. End-to-end accuracy against simulated tracks with known beats —
+   `sync-benchmark.test.ts`: tempo within 0.2–0.3%, beats within 0.1 of a beat,
+   bar 1 on the drop, no section calls on a steady track
 
 ---
 

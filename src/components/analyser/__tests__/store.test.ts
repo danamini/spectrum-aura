@@ -270,11 +270,17 @@ describe("analyser store utility functions", () => {
     const allFullscreenTrue = Object.fromEntries(
       VISUALS.filter((v) => v.fullscreenKey).map((v) => [v.fullscreenKey!, true]),
     );
-    settingsStore.set({ ...allFullscreenTrue, viewCycleRandomize: false });
-
-    settingsStore.cycleRandomView();
-    const state = settingsStore.get();
-    const landed = VISUALS.find((v) => v.id === state.view);
+    // Screen-space views (tunnel, fractal, …) have no 2D flag, so keep
+    // cycling until the destination is a view that does.
+    let state = settingsStore.get();
+    let landed = VISUALS.find((v) => v.id === state.view);
+    for (let attempt = 0; attempt < 200; attempt++) {
+      settingsStore.set({ ...allFullscreenTrue, viewCycleRandomize: false });
+      settingsStore.cycleRandomView();
+      state = settingsStore.get();
+      landed = VISUALS.find((v) => v.id === state.view);
+      if (landed?.fullscreenKey) break;
+    }
     expect(landed?.fullscreenKey).toBeDefined();
     expect(state[landed!.fullscreenKey! as keyof typeof state]).toBe(false);
   });

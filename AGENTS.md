@@ -62,6 +62,8 @@ Analyser.tsx (orchestrator)
 | Duplicating preset cursor logic               | Shortcuts/panel drift          | Use `hooks/usePresetActions`                           |
 | Duplicating BPM HUD markup                    | Overlay/panel mismatch         | Use `TempoReadout` + `theme.bpmGlowStyle`              |
 | Reordering `RETRO_SYSTEMS`                    | Wrong machine emulated         | Order = shader mode index; append only                 |
+| Setting `clockBpm` directly while running      | Whole grid slides              | Use `setClockBpm` (re-anchors the epoch)               |
+| Feeding `bands.display` to a detector         | Tempo/onset behaviour shifts   | `display` is presentation only; detectors read `bands` |
 | Raw writes to `fxPipelineOrder`               | Broken pass chain from saves   | Route through `normalizeFxPipelineOrder`               |
 | New FX row without lock/pipeline entries      | Randomize pin / order gaps     | Extend `FX_RANDOMIZE_GROUPS` + `FX_PIPELINE`           |
 
@@ -82,15 +84,19 @@ Analyser.tsx (orchestrator)
 | Song clock             | `packages/engine/src/song-clock.ts`                   |
 | Bar types alias        | `packages/engine/src/bar-clock.ts`                    |
 | BPM estimate           | `packages/engine/src/bpm-detector.ts`                 |
+| Tempo periodicity      | `packages/engine/src/tempo-estimator.ts`              |
 | Onsets                 | `packages/engine/src/beat-matcher.ts`                 |
 | Audio read             | `packages/engine/src/audio.ts`                        |
 | Scene / views          | `packages/engine/src/scene.ts`                        |
+| Lazy views             | `packages/engine/src/views/*-view.ts` (+ `types.ts`)  |
+| Display ballistics     | `packages/engine/src/display-ballistics.ts`           |
 | Post-FX / quality tiers| `packages/engine/src/composer.ts`                     |
 | Post-FX shaders        | `packages/engine/src/shaders.ts`                      |
 | Retro font atlas       | `packages/engine/src/retro-font.ts`                   |
 | Draggable overlays     | `src/components/analyser/hooks/useDraggablePanel.ts`             |
 | Loudness curve         | `packages/engine/src/loudness.ts`                     |
 | Dynamic Mode drift     | `packages/engine/src/evolution.ts`                    |
+| Dynamic Mode director  | `packages/engine/src/music-director.ts`               |
 | View cycle             | `packages/engine/src/view-cycle-controller.ts`        |
 | Visual registry        | `packages/engine/src/visuals.ts`                             |
 | HUD                    | `src/components/analyser/BarTimingHud.tsx`                       |
@@ -121,6 +127,7 @@ npm run check       # typecheck + lint + test
 - `Analyser.regression.test.ts` — render-loop initialization order (`useAnalyserEngine`)
 - `ControlPanel.regression.test.ts` — ViewSettings delegation + per-view keys
 - `usePresetActions.test.ts` — preset cursor helpers + store integration
+- `sync-benchmark.test.ts` — end-to-end tempo, beat alignment and drop anchoring against simulated tracks with known beats (`helpers/sync-sim.ts`); run this after any detector or clock change
 - `song-clock.test.ts` — tap/auto modes, beat math, stale-tap re-acquisition
 - `latency-metrics.test.ts` — signal latency must not grow from stale timestamps
 - `bpm-detector.realistic.test.ts` — must lock on realistic (jittered, layered) music, not just pulse trains
@@ -131,6 +138,10 @@ npm run check       # typecheck + lint + test
 - `settings.test.ts` — schema integrity: FX groups/pipeline reference real keys, retro system order pinned, presets valid
 - `retro-font.test.ts` — glyph ramp monotonicity + atlas orientation (ZX ROM bitmaps)
 - `BarTimingHud.test.tsx` — BPM lock indicator states
+- `music-director.test.ts` — drop/breakdown/section detection, rate limits, bounded camera and post-FX output
+- `lazy-views.test.ts` — lazy views build on activation, survive a short absence, free after the idle window
+- `display-ballistics.test.ts` — fast attack; release matches analyser smoothing
+- `views/__tests__/globe-data.test.ts` — TopoJSON country decoding and the bounce spring
 
 Shared harness: `packages/engine/src/__tests__/helpers/song-clock.harness.ts`
 
@@ -184,8 +195,13 @@ Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcu
 
 ### New visual
 
+Prefer a lazy view: implement `LazyView` in `packages/engine/src/views/`, add it
+to `LAZY_VIEW_FACTORIES` and give `Scene` an empty `<id>Group` holder. It is
+then built on first activation and disposed after the idle window, and
+`lazy-views.test.ts` covers its lifecycle once its id is added there.
+
 1. Manifest in `visuals.ts` or `visuals/*.visual.ts`
-2. `build*` / `update*` in `scene.ts`
+2. A `LazyView` (above), or `build*` / `update*` in `scene.ts`
 3. Registry drives shortcuts — update `Shortcuts.test.tsx` if rail changes
 4. Add view block in `control-panel/ViewSettings.tsx`
 

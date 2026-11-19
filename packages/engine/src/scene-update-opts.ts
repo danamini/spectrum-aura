@@ -132,9 +132,36 @@ export type SceneUpdateOpts = {
   stagelightsSweepSpeed: number;
   stagelightsFixtureCount: number;
   stagelightsLasers: boolean;
+  outrunUsePalette: boolean;
+  outrunAmplitude: number;
+  outrunSpeed: number;
+  outrunSun: boolean;
+  globeUsePalette: boolean;
+  globeAmplitude: number;
+  globeSpinSpeed: number;
+  globeLiveData: boolean;
+  spectrotunnelUsePalette: boolean;
+  spectrotunnelAmplitude: number;
+  spectrotunnelSpeed: number;
+  spectrotunnelTwist: number;
+  fractalUsePalette: boolean;
+  fractalAmplitude: number;
+  fractalDetail: number;
+  fractalPower: number;
+  blackholeUsePalette: boolean;
+  blackholeAmplitude: number;
+  blackholeSpin: number;
+  blackholeTilt: number;
+  blackholeDetail: number;
   textOverlayEnabled: boolean;
-  textOverlaySource: "public-domain" | "bofh";
-  textOverlayStyle: "bounce" | "scroller" | "stack" | "orbit";
+  textOverlaySource: Settings["textOverlaySource"];
+  textOverlayStyle: Settings["textOverlayStyle"];
+  textOverlayCustomText: string;
+  /** Dynamic Mode camera, applied on top of the user's own camera position.
+   * Reset every frame by syncSceneUpdateOpts; written by the music director. */
+  dynamicYawRate: number; // radians per second
+  dynamicPitch: number; // radians, offset
+  dynamicZoom: number; // multiplier, 1 = unchanged
   textOverlayIntensity: number;
   textOverlayPhraseInterval: number;
   textOverlayAllCaps: boolean;
@@ -274,9 +301,34 @@ export function createSceneUpdateOpts(initialView: ViewMode): SceneUpdateOpts {
     stagelightsSweepSpeed: 0,
     stagelightsFixtureCount: 3,
     stagelightsLasers: false,
+    outrunUsePalette: false,
+    outrunAmplitude: 0,
+    outrunSpeed: 0,
+    outrunSun: false,
+    globeUsePalette: false,
+    globeAmplitude: 0,
+    globeSpinSpeed: 0,
+    globeLiveData: false,
+    spectrotunnelUsePalette: false,
+    spectrotunnelAmplitude: 0,
+    spectrotunnelSpeed: 0,
+    spectrotunnelTwist: 0,
+    fractalUsePalette: false,
+    fractalAmplitude: 0,
+    fractalDetail: 0,
+    fractalPower: 0,
+    blackholeUsePalette: false,
+    blackholeAmplitude: 0,
+    blackholeSpin: 0,
+    blackholeTilt: 0,
+    blackholeDetail: 0,
     textOverlayEnabled: false,
     textOverlaySource: "public-domain",
     textOverlayStyle: "bounce",
+    textOverlayCustomText: "",
+    dynamicYawRate: 0,
+    dynamicPitch: 0,
+    dynamicZoom: 1,
     textOverlayIntensity: 0,
     textOverlayPhraseInterval: 6,
     textOverlayAllCaps: false,
@@ -414,9 +466,34 @@ export function syncSceneUpdateOpts(
   o.stagelightsSweepSpeed = s.stagelightsSweepSpeed;
   o.stagelightsFixtureCount = s.stagelightsFixtureCount;
   o.stagelightsLasers = s.stagelightsLasers;
+  o.outrunUsePalette = s.outrunUsePalette;
+  o.outrunAmplitude = s.outrunAmplitude;
+  o.outrunSpeed = s.outrunSpeed;
+  o.outrunSun = s.outrunSun;
+  o.globeUsePalette = s.globeUsePalette;
+  o.globeAmplitude = s.globeAmplitude;
+  o.globeSpinSpeed = s.globeSpinSpeed;
+  o.globeLiveData = s.globeLiveData;
+  o.spectrotunnelUsePalette = s.spectrotunnelUsePalette;
+  o.spectrotunnelAmplitude = s.spectrotunnelAmplitude;
+  o.spectrotunnelSpeed = s.spectrotunnelSpeed;
+  o.spectrotunnelTwist = s.spectrotunnelTwist;
+  o.fractalUsePalette = s.fractalUsePalette;
+  o.fractalAmplitude = s.fractalAmplitude;
+  o.fractalDetail = s.fractalDetail;
+  o.fractalPower = s.fractalPower;
+  o.blackholeUsePalette = s.blackholeUsePalette;
+  o.blackholeAmplitude = s.blackholeAmplitude;
+  o.blackholeSpin = s.blackholeSpin;
+  o.blackholeTilt = s.blackholeTilt;
+  o.blackholeDetail = s.blackholeDetail;
   o.textOverlayEnabled = s.textOverlayEnabled;
   o.textOverlaySource = s.textOverlaySource;
   o.textOverlayStyle = s.textOverlayStyle;
+  o.textOverlayCustomText = s.textOverlayCustomText;
+  o.dynamicYawRate = 0;
+  o.dynamicPitch = 0;
+  o.dynamicZoom = 1;
   o.textOverlayIntensity = s.textOverlayIntensity;
   o.textOverlayPhraseInterval = s.textOverlayPhraseInterval;
   o.textOverlayAllCaps = s.textOverlayAllCaps;

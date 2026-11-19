@@ -65,4 +65,28 @@ describe("visual response", () => {
     expect(normalizeVisualResponse(100)).toBe(4);
     expect(normalizeVisualResponse(0)).toBe(0.25);
   });
+
+  it("shows the fast-attack spectrum when present, leaving detector fields alone", () => {
+    const input = source();
+    input.display = {
+      bass: 0.5,
+      mid: 0.25,
+      high: 0.1,
+      centroid: 0.3,
+      bins: new Uint8Array([10, 20, 30, 40, 50]),
+    };
+    const target = { ...source() };
+    const response = new VisualResponse();
+    response.apply(input, target, 1);
+    expect([target.bass, target.mid, target.high, target.centroid]).toEqual([0.5, 0.25, 0.1, 0.3]);
+    expect(target.bins).toBe(input.display.bins);
+    // Detector-facing values are untouched on the source.
+    expect(input.bass).toBe(0.2);
+    expect([...input.bins]).toEqual([0, 32, 64, 128, 255]);
+
+    response.apply(input, target, 2);
+    expect(target.bass).toBe(1);
+    expect([...target.bins]).toEqual([20, 40, 60, 80, 100]);
+    expect([...input.display.bins]).toEqual([10, 20, 30, 40, 50]);
+  });
 });

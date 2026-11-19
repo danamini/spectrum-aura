@@ -1,4 +1,9 @@
 import { normalizeVisualResponse } from "@spectrum-aura/engine/visual-response";
+import {
+  TEXT_STYLE_IDS,
+  isTextSourceId,
+  isTextStyleId,
+} from "@spectrum-aura/engine/text-sources/registry";
 import { useSyncExternalStore } from "react";
 import {
   BLOOM_STRENGTH_MAX_NORMAL,
@@ -150,6 +155,11 @@ function normalizeAmplitudeFloor(settings: Settings): Settings {
     assetflowAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.assetflowAmplitude),
     wikichromaAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.wikichromaAmplitude),
     stagelightsAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.stagelightsAmplitude),
+    outrunAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.outrunAmplitude),
+    globeAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.globeAmplitude),
+    spectrotunnelAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.spectrotunnelAmplitude),
+    fractalAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.fractalAmplitude),
+    blackholeAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.blackholeAmplitude),
   };
 }
 
@@ -276,9 +286,27 @@ function normalizePostFxRanges(settings: Settings): Settings {
       3,
       Math.min(7, Math.round((settings.stagelightsFixtureCount - 3) / 2) * 2 + 3),
     ),
-    textOverlaySource: (["public-domain", "bofh"] as const).includes(settings.textOverlaySource)
+    outrunSpeed: Math.max(0.1, Math.min(4, settings.outrunSpeed)),
+    globeSpinSpeed: Math.max(0, Math.min(4, settings.globeSpinSpeed)),
+    spectrotunnelSpeed: Math.max(0.1, Math.min(4, settings.spectrotunnelSpeed)),
+    spectrotunnelTwist: Math.max(-4, Math.min(4, settings.spectrotunnelTwist)),
+    // The march budget is per-pixel GPU cost, so a saved value is never trusted past the cap.
+    fractalDetail: Math.max(24, Math.min(128, Math.round(settings.fractalDetail))),
+    fractalPower: Math.max(2, Math.min(12, settings.fractalPower)),
+    blackholeSpin: Math.max(0.05, Math.min(4, settings.blackholeSpin)),
+    blackholeTilt: Math.max(1, Math.min(60, settings.blackholeTilt)),
+    blackholeDetail: Math.max(40, Math.min(120, Math.round(settings.blackholeDetail))),
+    textOverlaySource: isTextSourceId(settings.textOverlaySource)
       ? settings.textOverlaySource
       : "public-domain",
+    textOverlayStyle: isTextStyleId(settings.textOverlayStyle)
+      ? settings.textOverlayStyle
+      : "bounce",
+    // Typed text is the user's own; cap it so a pasted file cannot bloat saved looks.
+    textOverlayCustomText:
+      typeof settings.textOverlayCustomText === "string"
+        ? settings.textOverlayCustomText.slice(0, 4000)
+        : "",
     textOverlayIntensity: Math.max(0, Math.min(2, settings.textOverlayIntensity)),
     textOverlayPhraseInterval: Math.max(3, Math.min(20, settings.textOverlayPhraseInterval)),
     glitchIntensity: Math.max(0, Math.min(1, settings.glitchIntensity)),
@@ -568,7 +596,7 @@ export const settingsStore = {
       // features only turn on when the user opts in explicitly, never via a
       // stray R keypress.
       textOverlaySource: state.textOverlaySource,
-      textOverlayStyle: pick(["bounce", "scroller", "stack", "orbit"] as const),
+      textOverlayStyle: pick(TEXT_STYLE_IDS),
       textOverlayIntensity: rb(0.4, 1.8),
       textOverlayPhraseInterval: r(4, 12),
       textOverlayAllCaps: b(0.7),
@@ -729,6 +757,34 @@ export const settingsStore = {
           stagelightsSweepSpeed: r(0.3, 2.5),
           stagelightsFixtureCount: pick([3, 5, 7] as const),
           stagelightsLasers: b(0.35),
+
+          // outrun
+          outrunUsePalette: b(0.4),
+          outrunAmplitude: rb(0.4, 2.5),
+          outrunSpeed: r(0.5, 2.2),
+          outrunSun: b(0.85),
+
+          // globe (live data is a network choice, never randomized)
+          globeUsePalette: b(0.7),
+          globeAmplitude: rb(0.4, 2.5),
+          globeSpinSpeed: r(0.3, 2.5),
+
+          // spectro-tunnel
+          spectrotunnelUsePalette: b(0.7),
+          spectrotunnelAmplitude: rb(0.5, 2),
+          spectrotunnelSpeed: r(0.5, 2.2),
+          spectrotunnelTwist: r(-2.5, 2.5),
+
+          // fractal (detail is a GPU budget, never randomized)
+          fractalUsePalette: b(0.7),
+          fractalAmplitude: rb(0.4, 2),
+          fractalPower: r(5, 10),
+
+          // black hole (detail is a GPU budget, never randomized)
+          blackholeUsePalette: b(0.5),
+          blackholeAmplitude: rb(0.5, 2),
+          blackholeSpin: r(0.4, 2.2),
+          blackholeTilt: r(3, 30),
         }
       : {};
 

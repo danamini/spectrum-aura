@@ -208,28 +208,47 @@ describe("SongClock", () => {
     expect(clock.getSource()).toBe("manual");
   });
 
-  it("detects phrase change after four bars with spectral shift", () => {
+  it("puts bar 1 on the beat where the music jumps, one beat after it lands", () => {
     const clock = new SongClock();
     startAuto(clock, 0);
-    const stable = { bass: 0.2, mid: 0.18, centroid: 0.3 };
-    const shifted = { bass: 0.65, mid: 0.55, centroid: 0.72 };
+    const steady = { bass: 0.2, mid: 0.18, centroid: 0.3 };
+    const loud = { bass: 0.65, mid: 0.55, centroid: 0.72 };
     const atBeat = (beat1: number) => (beat1 - 1) * BEAT_MS + 40;
 
     for (let beat = 1; beat <= 17; beat++) {
-      tickAt(clock, atBeat(beat), stable);
+      expect(tickAt(clock, atBeat(beat), steady).phraseChangeDetected).toBeUndefined();
     }
-    for (let beat = 18; beat <= 20; beat++) {
-      tickAt(clock, atBeat(beat), shifted);
-    }
+    // Beat 18 is the first loud one. It cannot be judged until it has ended.
+    const during = tickAt(clock, atBeat(18), loud);
+    expect(during.phraseChangeDetected).toBeUndefined();
 
-    const detected = tickAt(clock, atBeat(21), {
-      ...shifted,
-      audioBeat: true,
-      onsetStrength: 0.15,
-    });
-
+    const detected = tickAt(clock, atBeat(19), loud);
     expect(detected.phraseChangeDetected).toBe(true);
-    expect(detected.beatInPhrase).toBe(1);
+    // The loud beat was beat 1; the clock is now one beat on.
+    expect(detected.beatInPhrase).toBe(2);
+    expect(detected.beatInBar).toBe(2);
+
+    // Three beats later the bar turns over, on the original beat grid.
+    const nextBar = tickAt(clock, atBeat(22), loud);
+    expect(nextBar.beatInPhrase).toBe(5);
+    expect(nextBar.beatInBar).toBe(1);
+  });
+
+  it("does not call a section on a steady groove or a quiet patch", () => {
+    const clock = new SongClock();
+    startAuto(clock, 0);
+    const atBeat = (beat1: number) => (beat1 - 1) * BEAT_MS + 40;
+    let detections = 0;
+    for (let beat = 1; beat <= 64; beat++) {
+      // Kick beats and snare beats alternate; one bar drops out entirely.
+      const quiet = beat >= 33 && beat <= 36;
+      const kick = beat % 2 === 1;
+      const bands = quiet
+        ? { bass: 0.03, mid: 0.05, centroid: 0.4 }
+        : { bass: kick ? 0.3 : 0.08, mid: kick ? 0.08 : 0.2, centroid: 0.3 };
+      if (tickAt(clock, atBeat(beat), bands).phraseChangeDetected) detections += 1;
+    }
+    expect(detections).toBe(0);
   });
 
   it("learns BPM from manual taps and holds tempo", () => {

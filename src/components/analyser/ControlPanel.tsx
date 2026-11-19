@@ -10,6 +10,7 @@ import {
 
 import { Label } from "@/components/ui/label";
 import { Bn, Disclosure, FxSection, Row, S, Sw, ToggleRow } from "./control-panel/primitives";
+import { TEXT_SOURCES, TEXT_STYLES } from "@spectrum-aura/engine/text-sources/registry";
 import { MidiPanel } from "./control-panel/MidiPanel";
 import { ViewSettings } from "./control-panel/ViewSettings";
 import {
@@ -194,6 +195,8 @@ export function ControlPanel() {
     );
   }, [open, standalone]);
   const set = (patch: Partial<Settings>) => settingsStore.set(patch);
+  const activeTextSource =
+    TEXT_SOURCES.find((source) => source.id === s.textOverlaySource) ?? TEXT_SOURCES[0];
   const pinnedIn = (ids: FxLockId[]) => ids.filter((id) => s.fxLocks.includes(id)).length;
 
   const hasViewSettings = true;
@@ -651,7 +654,7 @@ export function ControlPanel() {
                         onToggle={(v) => set({ evolveEnabled: v })}
                       >
                         <S
-                          label="Drift amount"
+                          label="Amount"
                           value={s.evolveAmount}
                           min={0}
                           max={1}
@@ -659,9 +662,13 @@ export function ControlPanel() {
                           onChange={(v) => set({ evolveAmount: v })}
                         />
                         <p className="font-mono text-[9px] leading-relaxed text-white/35">
-                          Slowly drifts a few impactful settings for the current view over musical
-                          phrases, as a bounded offset around your own values — turn off to return
-                          to exactly what you set. Unlike view cycle, the view itself never changes.
+                          Follows the music&apos;s structure. A drop triggers a new camera angle, a
+                          post-FX hit and a shift in the view&apos;s settings; a breakdown pulls
+                          back and calms. The camera keeps turning and re-frames every four bars,
+                          and the view grows and shrinks with the track&apos;s energy. At 0.5 and
+                          above the palette also steps on each drop. Everything is an offset around
+                          your own values — turn off to return to exactly what you set. Unlike view
+                          cycle, the view itself never changes.
                         </p>
                       </ToggleRow>
                     </Row>
@@ -1588,41 +1595,73 @@ export function ControlPanel() {
                           enabled={s.textOverlayEnabled}
                           onToggle={(v) => set({ textOverlayEnabled: v })}
                         >
-                          <div className="grid grid-cols-2 gap-2">
-                            {(
-                              [
-                                ["public-domain", "Public Domain"],
-                                ["bofh", "BOFH API"],
-                              ] as const
-                            ).map(([source, label]) => (
-                              <Bn
-                                key={source}
-                                active={s.textOverlaySource === source}
-                                variant={s.textOverlaySource === source ? "default" : "outline"}
-                                onClick={() => set({ textOverlaySource: source })}
-                              >
-                                {label}
-                              </Bn>
-                            ))}
+                          <div>
+                            <Label className="text-[11px]">Text source</Label>
+                            <div className="mt-1.5 grid grid-cols-2 gap-2">
+                              {TEXT_SOURCES.map((source) => (
+                                <Bn
+                                  key={source.id}
+                                  active={s.textOverlaySource === source.id}
+                                  variant={
+                                    s.textOverlaySource === source.id ? "default" : "outline"
+                                  }
+                                  onClick={() => set({ textOverlaySource: source.id })}
+                                >
+                                  {source.label}
+                                </Bn>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-[10px] leading-relaxed text-white/60">
+                              {activeTextSource.description}{" "}
+                              <span className="text-white/40">
+                                {activeTextSource.network
+                                  ? "Needs a network connection; bundled lines are used offline."
+                                  : "Works offline."}
+                              </span>
+                            </p>
+                            {s.textOverlaySource === "custom" && (
+                              <textarea
+                                data-ui-control
+                                value={s.textOverlayCustomText}
+                                onChange={(e) => set({ textOverlayCustomText: e.target.value })}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                rows={4}
+                                spellCheck={false}
+                                placeholder="One phrase per line"
+                                aria-label="Your overlay text, one phrase per line"
+                                className="mt-2 w-full resize-y rounded-md border border-white/10 bg-black/40 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-white/85 placeholder:text-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70"
+                              />
+                            )}
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {(
-                              [
-                                ["bounce", "Bounce"],
-                                ["scroller", "Scroller"],
-                                ["stack", "Stack"],
-                                ["orbit", "Orbit"],
-                              ] as const
-                            ).map(([style, label]) => (
-                              <Bn
-                                key={style}
-                                active={s.textOverlayStyle === style}
-                                variant={s.textOverlayStyle === style ? "default" : "outline"}
-                                onClick={() => set({ textOverlayStyle: style })}
-                              >
-                                {label}
-                              </Bn>
-                            ))}
+                          <div>
+                            <Label className="text-[11px]">Whole-phrase styles</Label>
+                            <div className="mt-1.5 grid grid-cols-2 gap-2">
+                              {TEXT_STYLES.filter((style) => !style.perCharacter).map((style) => (
+                                <Bn
+                                  key={style.id}
+                                  active={s.textOverlayStyle === style.id}
+                                  variant={s.textOverlayStyle === style.id ? "default" : "outline"}
+                                  onClick={() => set({ textOverlayStyle: style.id })}
+                                >
+                                  {style.label}
+                                </Bn>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-[11px]">Per-character styles</Label>
+                            <div className="mt-1.5 grid grid-cols-2 gap-2">
+                              {TEXT_STYLES.filter((style) => style.perCharacter).map((style) => (
+                                <Bn
+                                  key={style.id}
+                                  active={s.textOverlayStyle === style.id}
+                                  variant={s.textOverlayStyle === style.id ? "default" : "outline"}
+                                  onClick={() => set({ textOverlayStyle: style.id })}
+                                >
+                                  {style.label}
+                                </Bn>
+                              ))}
+                            </div>
                           </div>
                           <S
                             label="Intensity"
@@ -1654,17 +1693,10 @@ export function ControlPanel() {
                               onCheckedChange={(v) => set({ textOverlayScramble: v })}
                             />
                           </div>
-                          <div className="rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
-                            <Label className="text-[11px]">Phrase source</Label>
-                            <p className="mt-1 text-[10px] leading-relaxed text-white/60">
-                              {s.textOverlaySource === "public-domain"
-                                ? "Curated public-domain snippets are bundled locally with author, work, rights, and provenance metadata."
-                                : "BOFH phrases come from bofh.bombeck.io in small batches and may require network; the fallback list stays available offline."}
-                            </p>
-                            <p className="mt-1 text-[10px] leading-relaxed text-white/45">
-                              Current snippet attribution appears in Stats for nerds.
-                            </p>
-                          </div>
+                          <p className="text-[10px] leading-relaxed text-white/45">
+                            Scramble applies to the whole-phrase styles. Credit for the phrase on
+                            screen is shown in Stats for nerds.
+                          </p>
                         </ToggleRow>
                       </FxSection>
                     </div>

@@ -86,6 +86,34 @@ Reported in `bands.timing.fftWindowMs`.
 
 Exponential across frames — effective attack slowed by `smoothingTimeConstant`.
 
+#### Display ballistics (Low-latency audio)
+
+Symmetric smoothing delays a rising level as much as a falling one. With
+**Low-latency audio** on, `AudioEngine` taps a second, unsmoothed
+`AnalyserNode` and runs `DisplayBallistics` (`engine/display-ballistics.ts`)
+over it: a rising bin takes 80% of the step on the frame it arrives, and a
+falling bin drops at the constant dB-per-frame slope that analyser smoothing
+gives the same slider value, \(-20\log_{10}\tau\) dB/frame. The result is
+exposed as `AudioBands.display` and substituted by `VisualResponse.apply`.
+
+This is presentation only. `BeatMatcher`, `BPMDetector` and `SongClock` keep
+reading the symmetric bands, so tempo and onset behaviour are unchanged.
+
+Measured through real `AnalyserNode`s (60 Hz + 110 Hz tone switched on, bass
+band, Smoothing 0.82, median of 6 trials, Chromium on Apple M5 Pro at 120 Hz):
+
+| Level                     | Rise to 90%: before → after | Rise to 50%: before → after |
+| ------------------------- | --------------------------- | --------------------------- |
+| Quiet (gain 0.002)        | 90 ms → 42 ms               | 50 ms → 42 ms               |
+| Moderate (gain 0.02)      | 34 ms → 30 ms               | 34 ms → 25 ms               |
+| Loud, clipping (gain 0.5) | 26 ms → 26 ms               | 26 ms → 26 ms               |
+
+The gain is largest for quiet material and nil for a signal that clips the dB
+window, because dB scaling already compresses a loud step into one frame.
+Release to 50% stayed within 14% of the analyser's own (117/171/284 ms against
+117/159/250 ms). These are spectrum-level timings, not a measurement of
+end-to-end device latency.
+
 ### 3. Audio output buffer
 
 Web Audio reports:

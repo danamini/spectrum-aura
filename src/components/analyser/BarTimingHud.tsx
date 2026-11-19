@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { HUD_GLASS, MINI_HUD_SURFACE } from "./theme";
 import { BEATS_PER_PHRASE, type BarTiming } from "@spectrum-aura/engine/bar-clock";
+import type { SectionEvent } from "@spectrum-aura/engine/live-tempo";
 import { useLiveTempoFrame } from "./hooks/useLiveTempoFrame";
 
 /**
@@ -110,6 +111,32 @@ function BeatDots({ timing }: { timing: BarTiming }) {
   );
 }
 
+/** How long a detected drop or breakdown stays marked in the grid. */
+const SECTION_MARKER_MS = 3000;
+
+/**
+ * Flashes when the engine detects a drop or a breakdown, so what it heard can
+ * be checked against the music by eye. Always mounted, so the HUD's height
+ * does not change when it appears.
+ */
+function SectionMarker({ event }: { event: SectionEvent | null | undefined }) {
+  const age = event ? performance.now() - event.atMs : Infinity;
+  const visible = age >= 0 && age < SECTION_MARKER_MS;
+  const drop = event?.kind === "drop";
+  return (
+    <div
+      className={`mt-1.5 text-center font-mono text-[9px] font-bold uppercase tracking-[0.2em] ${
+        drop ? "text-amber-200" : "text-sky-200"
+      } ${visible ? "" : "invisible"}`}
+      style={visible ? { opacity: Math.max(0.25, 1 - age / SECTION_MARKER_MS) } : undefined}
+      role="status"
+      aria-hidden={!visible}
+    >
+      {drop ? "▲ Drop" : "▼ Breakdown"}
+    </div>
+  );
+}
+
 export function BarTimingHud({
   compact = false,
   header,
@@ -121,6 +148,7 @@ export function BarTimingHud({
     barTiming: timing,
     bpmConfidence: confidence,
     beatHintFlash: hintFlash,
+    sectionEvent,
   } = useLiveTempoFrame();
   const glow = timing.synced ? Math.max(6, confidence * 16) : 4;
 
@@ -180,6 +208,7 @@ export function BarTimingHud({
           style={{ width: `${Math.max(0, Math.min(100, timing.phrasePhase * 100))}%` }}
         />
       </div>
+      <SectionMarker event={sectionEvent} />
       {/* Kept mounted (invisible when synced) so the HUD height never changes. */}
       <div
         className={`mt-1.5 text-center font-mono text-[8px] uppercase tracking-[0.16em] text-amber-200/65 ${

@@ -132,27 +132,36 @@ subdivisions count as *evidence for* the beat period instead of polluting it:
 
 Octave correction: double if \(<80\), halve if \(>180\), clamp \([60,200]\).
 
-### Autocorrelation tempogram
+### Periodicity estimate (`tempo-estimator.ts`)
 
-Resample envelope to 25 ms bins over 8 s. For each lag \(\ell\):
+Every `feedBands` call — not the 20 Hz peak history — adds the frame's
+rectified flux (\(\Delta b^+ + 0.55\,\Delta m^+ + 0.28\,\Delta h^+\)) to a
+10 ms grid covering 12 s, spread across the bins the frame spans so the result
+does not depend on frame rate.
 
-\[
-R(\ell) = \frac{1}{C}\sum_i e[i]\,e[i-\ell]
-\]
-
-Pick \(\ell^\*\) with parabolic refinement. Convert lag → BPM. Runs **every
-analysis pass** (it sees through subdivision noise by operating on the whole
-envelope) — both as an estimate and as a cross-check: when the peak and
-autocorrelation estimates agree within 5%, confidence is floored at
-\(\min(0.85,\; 0.55 + 0.5\cdot\text{autoStrength})\).
-
-### Blend and smooth
+The envelope is mean-removed and autocorrelated. Each candidate beat lag
+\(L\) (80–180 BPM, in quarter-bin steps) is scored on its multiples:
 
 \[
-\text{BPM} \leftarrow (1-\alpha)\,\text{BPM}_{\text{prev}} + \alpha\,\text{BPM}_{\text{blend}}
+S(L) = \frac{R(L) + 0.9\,R(2L) + 0.5\,R(3L) + 0.8\,R(4L)}{3.2}\;\cdot\;
+\exp\!\Bigl(-\tfrac12\bigl(\log_2(\text{BPM}/125)/0.8\bigr)^2\Bigr)
 \]
 
-with \(\alpha \approx 0.08\) (adaptive).
+A true beat period correlates at all four multiples; its 3:2 and 4:3 relatives
+line up at only one, which is what made interval-median timing wander on a
+kick-on-1-and-3 groove. The winner is refined against the autocorrelation peak
+nearest \(4L\) with parabolic interpolation, four times as precise as the
+beat lag itself. Strength combines how periodic the envelope is with how far
+the winner clears the best different-tempo rival.
+
+One analysis costs about 0.2 ms (measured, Node on Apple M5 Pro) and runs four
+times a second.
+
+### Choosing the candidate
+
+At strength ≥ 0.3 the periodicity estimate **is** the candidate. Below that
+the peak-interval estimate is used, blended and smoothed as before
+(\(\alpha \approx 0.08\)).
 
 ### Confidence
 
@@ -172,16 +181,21 @@ as "still locked" through silence or the gap between songs.
 
 ### Lock / unlock criteria (`applyBpmLock`)
 
-- **Lock** when either fires with a valid candidate:
+- **Lock** when either fires with a valid candidate, and the periodicity
+  estimate is trusted or 6 s of history exists (the first seconds of peak
+  intervals often settle on a 3:2 or 4:3 relative):
   - `highConfidenceStreak >= 4` (confidence > 0.62 on 4 consecutive passes), or
   - **stability lock**: 4 of the last 5 candidates within ±3.5% of each other
-    with confidence ≥ 0.3 — real music rarely sustains the streak, but the
-    estimate itself settles fast.
-- **While locked**: candidates within **4 BPM** blend into the lock
-  (97/3 EMA) and pin reported confidence ≥ 0.72; a clean 2x/0.5x octave match
-  (`isOctaveMismatch`, ±4%) corrects the lock in place after 6 consecutive
-  passes; anything else counts toward drift-reject.
-- **Unlock** only after 12 consecutive divergent passes with diff > **8 BPM**.
+    with confidence ≥ 0.3.
+- **While locked**: candidates within **4 BPM** blend into the lock (75/25
+  when the periodicity estimate is trusted, else 97/3) and pin reported
+  confidence ≥ 0.72; a clean 2x/0.5x octave match (`isOctaveMismatch`, ±4%)
+  corrects the lock in place after 6 consecutive passes.
+- **Re-lock**: a trusted candidate more than 4 BPM away that agrees with
+  itself (±3 BPM) for 6 passes moves the lock to it. Previously a candidate
+  4–8 BPM away was neither followed nor enough to unlock, so a slightly wrong
+  lock could hold for a whole track.
+- **Unlock** after 12 consecutive divergent passes with diff > **4 BPM**.
 
 ### Tap lock (`hintBeat`)
 

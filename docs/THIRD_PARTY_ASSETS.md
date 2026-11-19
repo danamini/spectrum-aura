@@ -35,6 +35,25 @@ Track every third-party asset used by the runtime visuals and post FX.
 | Fox (Wiki-Chroma actor, runtime fetch)        | Remote: fetched on first Wiki-Chroma activation; falls back to local `model-07.glb` | PixelMannen, tomkranis, AsoboStudio/scurest (via Khronos sample asset) | https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/Fox/glTF-Binary/Fox.glb                                   | CC BY 4.0 (plus CC0 parts) | Yes                  | Runtime only |
 | Wikimedia Commons overlay images (runtime fetch) | Remote: fetched only when the Commons overlay toggle is enabled | Per-image (Commons uploaders)                                   | https://commons.wikimedia.org (via `packages/engine/src/commons-overlay-source.ts`)                                    | Per-image (shown in Stats for nerds) | Per-image; credit line surfaced in Stats | Runtime only |
 
+## Runtime Data Sources
+
+Fetched by the browser when the Globe view is shown with **Country map** on.
+Nothing is bundled or redistributed, and turning the toggle off makes no
+requests. Source constants live in `packages/engine/src/views/globe-data.ts`.
+
+| Data                               | URL                                                                         | Author                                    | License                               | Attribution Required |
+| ---------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------- | -------------------- |
+| Country outlines (1:110m, TopoJSON) | `https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json`             | Natural Earth, packaged by `world-atlas`  | Public domain (data); ISC (packaging) | No                   |
+
+Text overlay sources that use the network (chosen under Post FX → Overlays →
+Demo-scene text overlay; the bundled sources make no requests):
+
+| Data                     | URL                                                        | Author                 | License                                              | Attribution Required |
+| ------------------------ | ---------------------------------------------------------- | ---------------------- | ---------------------------------------------------- | -------------------- |
+| Poetry lines             | `https://poetrydb.org/random/<n>`                          | PoetryDB               | Public-domain poems                                  | No (credited in Stats) |
+| Random article titles    | `https://en.wikipedia.org/w/api.php?action=query&list=random` | Wikipedia contributors | Titles only shown; article text is CC BY-SA 4.0      | No (linked in Stats) |
+| IT excuses               | `https://bofh.bombeck.io/v1/excuses/random`                | bofh.bombeck.io        | API content; verify before redistributing            | No (credited in Stats) |
+
 ## Replacement Checklist
 
 1. Download assets only from approved sources.

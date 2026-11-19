@@ -1,6 +1,7 @@
 import { BeatMatcher } from "./beat-matcher";
 import { BPMDetector } from "./bpm-detector";
 import { formatMediaError } from "./audio-support";
+import { DisplayBallistics } from "./display-ballistics";
 
 export type AudioTiming = {
   readCpuMs: number;
@@ -10,6 +11,19 @@ export type AudioTiming = {
   fftWindowMs: number;
   bassDelta: number;
   signalChangeAt: number;
+};
+
+/**
+ * Fast-attack copy of the spectrum for visuals. Tempo/onset detection never
+ * reads it: the top-level band fields stay the symmetric-smoothed source the
+ * detectors are tuned on.
+ */
+export type AudioDisplayBands = {
+  bass: number;
+  mid: number;
+  high: number;
+  centroid: number;
+  bins: Uint8Array;
 };
 
 export type AudioBands = {
@@ -32,6 +46,15 @@ export type AudioBands = {
   timing: AudioTiming;
   /** Monotonic timestamp (performance.now) when this frame's FFT data was read. */
   fftReadAt: number;
+  /**
+   * Level of the kick-drum range alone (about 30–180 Hz), 0–1 on the
+   * analyser's decibel scale. `bass` spans 0–1.9 kHz and barely moves when a
+   * kick drops out under vocals or synths; section and breakdown detection
+   * need this narrower band. Absent on synthetic sources.
+   */
+  kick?: number;
+  /** Present only while low-latency audio is on and a capture is running. */
+  display?: AudioDisplayBands | null;
 };
 
 const EMPTY_TIMING: AudioTiming = {
@@ -61,9 +84,14 @@ const EMPTY_BANDS: AudioBands = {
   fftReadAt: 0,
 };
 
+/** Kick-drum fundamental range. */
+const KICK_BAND_HZ = [30, 180] as const;
+
 export class AudioEngine {
   ctx: AudioContext | null = null;
   analyser: AnalyserNode | null = null;
+  /** Unsmoothed tap feeding the fast-attack display spectrum. */
+  displayAnalyser: AnalyserNode | null = null;
   source: MediaStreamAudioSourceNode | null = null;
   gain: GainNode | null = null;
   stream: MediaStream | null = null;
@@ -71,7 +99,16 @@ export class AudioEngine {
 
   private beatMatcher = new BeatMatcher();
   private bpmDetector = new BPMDetector();
-  private bandBounds = { n: 0, bassEnd: 0, midEnd: 0, bassDiv: 1, midDiv: 1, highDiv: 1 };
+  private bandBounds = {
+    n: 0,
+    bassEnd: 0,
+    midEnd: 0,
+    bassDiv: 1,
+    midDiv: 1,
+    highDiv: 1,
+    kickStart: 1,
+    kickEnd: 2,
+  };
   /** Previous frame's BPM tick result, fed into this frame's beat-matcher refractory gap. */
   private lastTickBpm = 0;
   private lastTickBpmConfident = false;
@@ -79,13 +116,33 @@ export class AudioEngine {
   private outTiming: AudioTiming = { ...EMPTY_TIMING };
   private outBands: AudioBands = { ...EMPTY_BANDS, timing: this.outTiming };
 
+  private displayRaw: Uint8Array = new Uint8Array(0);
+  private displayBallistics = new DisplayBallistics();
+  private outDisplay: AudioDisplayBands = {
+    bass: 0,
+    mid: 0,
+    high: 0,
+    centroid: 0,
+    bins: this.displayBallistics.bins,
+  };
+  private latencyOptimized = true;
+  private smoothing = 0.82;
+
   private captureRequest = 0;
 
   /** Resolves false when a newer source request or stop supersedes this capture. */
   async startMic(options?: { latencyOptimized?: boolean }) {
     const request = ++this.captureRequest;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Voice processing gates sustained music as "noise" and adds buffering;
+      // a visualiser wants the raw room signal. Auto-gain stays on so quiet
+      // rooms keep a usable level.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio:
+          (options?.latencyOptimized ?? true)
+            ? { echoCancellation: false, noiseSuppression: false }
+            : true,
+      });
       if (request !== this.captureRequest) {
         stream.getTracks().forEach((track) => track.stop());
         return false;
@@ -153,6 +210,7 @@ export class AudioEngine {
     this.stream = stream;
     try {
       const latencyOptimized = options?.latencyOptimized ?? true;
+      this.latencyOptimized = latencyOptimized;
       const ctx = new AudioContext({
         latencyHint: latencyOptimized ? "interactive" : "playback",
       });
@@ -164,9 +222,17 @@ export class AudioEngine {
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = latencyOptimized ? 0.45 : 0.82;
       source.connect(gain).connect(analyser);
+      const displayAnalyser = ctx.createAnalyser();
+      displayAnalyser.fftSize = 2048;
+      displayAnalyser.smoothingTimeConstant = 0;
+      gain.connect(displayAnalyser);
       this.source = source;
       this.gain = gain;
       this.analyser = analyser;
+      this.displayAnalyser = displayAnalyser;
+      this.smoothing = analyser.smoothingTimeConstant;
+      this.displayRaw = new Uint8Array(displayAnalyser.frequencyBinCount);
+      this.displayBallistics.reset();
       this.bins = new Uint8Array(analyser.frequencyBinCount);
       this.updateBandBounds(analyser.frequencyBinCount);
       void ctx.resume().catch(() => {
@@ -181,7 +247,14 @@ export class AudioEngine {
   private updateBandBounds(n: number) {
     const bassEnd = Math.floor(n * 0.08);
     const midEnd = Math.floor(n * 0.35);
+    // The kick band is set in hertz, not as a share of the bins, so it stays
+    // on the kick at any FFT size or sample rate.
+    const binHz = (this.ctx?.sampleRate ?? 48000) / (n * 2 || 1);
+    const kickStart = Math.max(1, Math.round(KICK_BAND_HZ[0] / binHz));
+    const kickEnd = Math.min(n, Math.max(kickStart + 1, Math.round(KICK_BAND_HZ[1] / binHz)));
     this.bandBounds = {
+      kickStart,
+      kickEnd,
       n,
       bassEnd,
       midEnd,
@@ -192,14 +265,56 @@ export class AudioEngine {
   }
 
   setSmoothing(v: number) {
+    this.smoothing = v;
     if (this.analyser) this.analyser.smoothingTimeConstant = v;
+  }
+  /** Toggles the fast-attack display spectrum live. The AudioContext latency
+   * hint is fixed at capture start and is not affected. */
+  setLatencyOptimized(v: boolean) {
+    if (this.latencyOptimized === v) return;
+    this.latencyOptimized = v;
+    this.displayBallistics.reset();
   }
   setFftSize(n: number) {
     if (this.analyser && this.analyser.fftSize !== n) {
       this.analyser.fftSize = n;
       this.bins = new Uint8Array(this.analyser.frequencyBinCount);
       this.updateBandBounds(this.analyser.frequencyBinCount);
+      if (this.displayAnalyser) {
+        this.displayAnalyser.fftSize = n;
+        this.displayRaw = new Uint8Array(this.displayAnalyser.frequencyBinCount);
+        this.displayBallistics.reset();
+      }
     }
+  }
+
+  /** Band energies from the fast-attack spectrum; mirrors the detector loop. */
+  private readDisplay(): AudioDisplayBands | null {
+    if (!this.latencyOptimized || !this.displayAnalyser) return null;
+    this.displayAnalyser.getByteFrequencyData(this.displayRaw as Uint8Array<ArrayBuffer>);
+    const bins = this.displayBallistics.process(this.displayRaw, this.smoothing);
+    const { bassEnd, midEnd, bassDiv, midDiv, highDiv } = this.bandBounds;
+    const n = Math.min(bins.length, this.bandBounds.n);
+    let bass = 0,
+      mid = 0,
+      high = 0,
+      weighted = 0,
+      total = 0;
+    for (let i = 0; i < n; i++) {
+      const v = bins[i]! / 255;
+      if (i < bassEnd) bass += v;
+      else if (i < midEnd) mid += v;
+      else high += v;
+      weighted += i * v;
+      total += v;
+    }
+    const out = this.outDisplay;
+    out.bass = bass / bassDiv;
+    out.mid = mid / midDiv;
+    out.high = high / highDiv;
+    out.centroid = total > 0 ? weighted / total / n : 0;
+    out.bins = bins;
+    return out;
   }
   setGain(v: number) {
     if (this.gain) this.gain.gain.value = v;
@@ -221,12 +336,15 @@ export class AudioEngine {
       out.bpmLocked = false;
       out.bins = this.bins;
       out.fftReadAt = 0;
+      out.kick = 0;
+      out.display = null;
       return out;
     }
 
     const t0 = performance.now();
     this.analyser.getByteFrequencyData(this.bins as Uint8Array<ArrayBuffer>);
     const fftReadAt = performance.now();
+    const display = this.readDisplay();
 
     const { bassEnd, midEnd, n, bassDiv, midDiv, highDiv } = this.bandBounds;
     const inv255 = 1 / 255;
@@ -248,6 +366,10 @@ export class AudioEngine {
     mid /= midDiv;
     high /= highDiv;
     const centroid = total > 0 ? weighted / total / n : 0;
+    let kick = 0;
+    const { kickStart, kickEnd } = this.bandBounds;
+    for (let i = kickStart; i < kickEnd; i++) kick += this.bins[i]!;
+    kick /= (kickEnd - kickStart) * 255;
 
     const match = this.beatMatcher.detect(
       bass,
@@ -297,6 +419,8 @@ export class AudioEngine {
     out.bpmLocked = bpmLocked;
     out.bins = this.bins;
     out.fftReadAt = fftReadAt;
+    out.kick = kick;
+    out.display = display;
     const timing = out.timing;
     timing.readCpuMs = readCpuMs;
     timing.audioToRenderMs = 0;
@@ -337,6 +461,7 @@ export class AudioEngine {
     }
     this.ctx = null;
     this.analyser = null;
+    this.displayAnalyser = null;
     this.source = null;
     this.gain = null;
     this.stream = null;

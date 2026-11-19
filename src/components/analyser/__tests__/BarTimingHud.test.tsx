@@ -1,7 +1,12 @@
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BpmLockIndicator } from "../BarTimingHud";
+import {
+  EMPTY_LIVE_TEMPO,
+  setLiveTempoFrame,
+  type LiveTempoState,
+} from "@spectrum-aura/engine/live-tempo";
+import { BarTimingHud, BpmLockIndicator } from "../BarTimingHud";
 
 describe("BpmLockIndicator", () => {
   let container: HTMLDivElement;
@@ -54,5 +59,53 @@ describe("BpmLockIndicator", () => {
       d.getAttribute("style")?.includes("bpm-lock-search"),
     );
     expect(spinner).toBeUndefined();
+  });
+});
+
+describe("BarTimingHud section marker", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    root.unmount();
+    container.remove();
+    setLiveTempoFrame(EMPTY_LIVE_TEMPO);
+  });
+
+  const marker = (sectionEvent: LiveTempoState["sectionEvent"]) => {
+    setLiveTempoFrame({ ...EMPTY_LIVE_TEMPO, sectionEvent });
+    flushSync(() => {
+      root.render(<BarTimingHud />);
+    });
+    return container.querySelector("[role='status']")!;
+  };
+
+  it("stays hidden, but mounted, until something is detected", () => {
+    const el = marker(null);
+    expect(el).not.toBeNull();
+    expect(el.className).toContain("invisible");
+    expect(el.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("names a drop and a breakdown when one has just been detected", () => {
+    const drop = marker({ kind: "drop", atMs: performance.now() });
+    expect(drop.textContent).toContain("Drop");
+    expect(drop.className).not.toContain("invisible");
+    root.unmount();
+    root = createRoot(container);
+    const breakdown = marker({ kind: "breakdown", atMs: performance.now() });
+    expect(breakdown.textContent).toContain("Breakdown");
+    expect(breakdown.className).not.toContain("invisible");
+  });
+
+  it("clears once the event is a few seconds old", () => {
+    const el = marker({ kind: "drop", atMs: performance.now() - 10_000 });
+    expect(el.className).toContain("invisible");
   });
 });

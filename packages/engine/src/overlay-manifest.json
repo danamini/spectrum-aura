@@ -176,6 +176,182 @@
       "creditLine": "Spectrum Aura local overlay",
       "license": "Internal placeholder",
       "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-hexagons.svg",
+      "label": "Nested hexagons",
+      "family": "angular",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-hexagons.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-triangles.svg",
+      "label": "Twisting triangles",
+      "family": "angular",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-triangles.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-squares.svg",
+      "label": "Twisted squares",
+      "family": "angular",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-squares.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-polystar.svg",
+      "label": "Star polygons",
+      "family": "burst",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-polystar.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-sunrays.svg",
+      "label": "Sun rays",
+      "family": "burst",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-sunrays.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-rose.svg",
+      "label": "Rose curve",
+      "family": "radial",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-rose.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-lissajous.svg",
+      "label": "Lissajous figure",
+      "family": "wave",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-lissajous.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-spirograph.svg",
+      "label": "Spirograph",
+      "family": "spiral",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-spirograph.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-orbit-dots.svg",
+      "label": "Orbiting dots",
+      "family": "radial",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-orbit-dots.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-reticle.svg",
+      "label": "Targeting reticle",
+      "family": "hud",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-reticle.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-arc-gauges.svg",
+      "label": "Arc gauges",
+      "family": "hud",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-arc-gauges.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-sine-stack.svg",
+      "label": "Stacked sines",
+      "family": "wave",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-sine-stack.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-diamond-lattice.svg",
+      "label": "Diamond lattice",
+      "family": "grid",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-diamond-lattice.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-iso-cubes.svg",
+      "label": "Isometric cubes",
+      "family": "grid",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-iso-cubes.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-constellation.svg",
+      "label": "Constellation",
+      "family": "noise",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-constellation.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
+    },
+    {
+      "path": "assets/animations/svg/shape-halftone-wave.svg",
+      "label": "Halftone wave",
+      "family": "halftone",
+      "source": "Local file",
+      "author": "Spectrum Aura",
+      "sourceUrl": "public/assets/animations/svg/shape-halftone-wave.svg",
+      "creditLine": "Spectrum Aura local overlay",
+      "license": "Internal placeholder",
+      "attributionRequired": false
     }
   ]
 }

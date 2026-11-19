@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <g fill="none" stroke="#9de7ff" stroke-opacity="0.24" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M-512 0 L0 512"/>
+    <path d="M-448 0 L64 512"/>
+    <path d="M-384 0 L128 512"/>
+    <path d="M-320 0 L192 512"/>
+    <path d="M-256 0 L256 512"/>
+    <path d="M-192 0 L320 512"/>
+    <path d="M-128 0 L384 512"/>
+    <path d="M-64 0 L448 512"/>
+    <path d="M0 0 L512 512"/>
+    <path d="M64 0 L576 512"/>
+    <path d="M128 0 L640 512"/>
+    <path d="M192 0 L704 512"/>
+    <path d="M256 0 L768 512"/>
+    <path d="M320 0 L832 512"/>
+    <path d="M384 0 L896 512"/>
+    <path d="M448 0 L960 512"/>
+    <path d="M512 0 L1024 512"/>
+    <path d="M0 0 L-512 512"/>
+    <path d="M64 0 L-448 512"/>
+    <path d="M128 0 L-384 512"/>
+    <path d="M192 0 L-320 512"/>
+    <path d="M256 0 L-256 512"/>
+    <path d="M320 0 L-192 512"/>
+    <path d="M384 0 L-128 512"/>
+    <path d="M448 0 L-64 512"/>
+    <path d="M512 0 L0 512"/>
+    <path d="M576 0 L64 512"/>
+    <path d="M640 0 L128 512"/>
+    <path d="M704 0 L192 512"/>
+    <path d="M768 0 L256 512"/>
+    <path d="M832 0 L320 512"/>
+    <path d="M896 0 L384 512"/>
+    <path d="M960 0 L448 512"/>
+    <path d="M1024 0 L512 512"/>
+  </g>
+</svg>

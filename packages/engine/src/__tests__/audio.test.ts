@@ -168,3 +168,37 @@ describe("AudioEngine capture requests", () => {
     engine.stop();
   });
 });
+
+describe("AudioEngine display spectrum", () => {
+  it("offers a fast-attack spectrum only while low-latency audio is on", () => {
+    const { stream } = setup();
+    const engine = new AudioEngine();
+    engine.startStream(stream, { latencyOptimized: true });
+    const bands = engine.read(1.5, 0);
+    expect(bands.display).toBeTruthy();
+    expect(bands.display!.bins).toHaveLength(1024);
+    // Detector fields still come from the symmetric analyser read.
+    expect(bands.bass).toBeCloseTo(128 / 255, 5);
+
+    engine.setLatencyOptimized(false);
+    expect(engine.read(1.5, 16).display).toBeNull();
+    engine.setLatencyOptimized(true);
+    expect(engine.read(1.5, 32).display).toBeTruthy();
+    engine.stop();
+    expect(engine.read(1.5, 48).display).toBeNull();
+  });
+
+  it("asks the microphone for unprocessed audio in low-latency mode only", async () => {
+    const { stream } = setup();
+    const getUserMedia = vi.fn(() => Promise.resolve(stream));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    const engine = new AudioEngine();
+    await engine.startMic({ latencyOptimized: true });
+    expect(getUserMedia).toHaveBeenLastCalledWith({
+      audio: { echoCancellation: false, noiseSuppression: false },
+    });
+    await engine.startMic({ latencyOptimized: false });
+    expect(getUserMedia).toHaveBeenLastCalledWith({ audio: true });
+    engine.stop();
+  });
+});

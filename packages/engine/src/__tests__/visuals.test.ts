@@ -27,6 +27,11 @@ describe("visual registry", () => {
       "assetflow",
       "wikichroma",
       "stagelights",
+      "outrun",
+      "globe",
+      "spectrotunnel",
+      "fractal",
+      "blackhole",
     ]);
     expect(DEFAULT_VISUAL_ID).toBe("combo");
     expect(getVisualDefinition("terrain")).toMatchObject({

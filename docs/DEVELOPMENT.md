@@ -111,7 +111,8 @@ physical-device compatibility; outstanding checks live in the
 
 **Three.js Scene** (`engine/scene.ts`):
 
-- **15 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow, stagelights
+- **21 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow, wikichroma, stagelights, outrun, globe, spectrotunnel, fractal, blackhole
+- **Lazy views** (`engine/views/`): outrun, globe, spectrotunnel, fractal and blackhole implement `LazyView` and are registered in `LAZY_VIEW_FACTORIES` in `scene.ts`. They are constructed on first activation and disposed after `LAZY_VIEW_IDLE_DISPOSE_SECONDS` off-screen. Prefer this for new views: `scene.ts` gains a registry entry and an empty `<id>Group` holder instead of build/update/dispose code
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
 - **Post-processing**: Bloom, chromatic aberration, glitch, god rays, lens flare, etc. via Composer
@@ -395,3 +396,22 @@ calibration preservation when loading saves.
 `StatsPanel.test.tsx` covers panel layout and persistence. `stats-history.test.ts`
 checks graph smoothing/ranges. Panel primitives must remain stable across live
 updates so focused controls and open tooltips are not remounted.
+
+## Testing with real audio
+
+Band-level simulations (`sync-benchmark.test.ts`) cannot show how the pipeline
+behaves on an actual signal — real kicks make levels spike on every hit, which
+flat test levels hide. To test end to end, play a WAV file into the app as the
+microphone:
+
+1. Launch Chromium with
+   `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream --use-file-for-fake-audio-capture=/path/track.wav%noloop`.
+2. Open the dev server and click **Use microphone**.
+3. Read state from the dev-only `window.__debug` seam (`useAnalyserEngine.ts`):
+   `audio`, `scene`, `clock`, `opts` and `director()`. Tempo and phrase position
+   come from `getLiveTempoFrame()` in `engine/live-tempo.ts`.
+
+The file starts when the capture opens, with a start-up delay that varies from
+under a second to several seconds, so compare event times against the first
+onset rather than against the click. A track with a known tempo and arrangement
+(groove, full section, breakdown, drop) makes the expected event times exact.

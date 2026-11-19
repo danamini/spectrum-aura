@@ -1,5 +1,9 @@
 import { EMPTY_BAR_TIMING, type BarTiming } from "./bar-clock";
 
+/** A structural moment the engine detected in the music. `atMs` is on the
+ * `performance.now()` clock, so a display can show it for a fixed time. */
+export type SectionEvent = { kind: "drop" | "breakdown"; atMs: number };
+
 export type LiveTempoState = {
   audioRunning: boolean;
   bpm: number;
@@ -7,6 +11,8 @@ export type LiveTempoState = {
   beat: boolean;
   barTiming: BarTiming;
   beatHintFlash: string | null;
+  /** The most recent drop or breakdown, kept until the next one. */
+  sectionEvent?: SectionEvent | null;
 };
 
 export const LIVE_TEMPO_EVENT = "spectrum-aura:live-tempo";

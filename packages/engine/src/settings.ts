@@ -1,3 +1,4 @@
+import type { TextSourceId, TextStyleId } from "./text-sources/registry";
 import { VISUAL_RESPONSE } from "./visual-response";
 import type { ViewMode } from "./visuals";
 import type { OverlayCommonsTopic } from "./overlay-manifest";
@@ -315,6 +316,39 @@ export type Settings = {
   stagelightsFixtureCount: number; // 3, 5, or 7 spotlights
   stagelightsLasers: boolean; // add a laser-show fan of thin upward beams
 
+  // outrun view (synthwave grid, spectrum mountains, striped sun)
+  outrunUsePalette: boolean; // off = the fixed magenta/violet/cyan triad
+  outrunAmplitude: number;
+  outrunSpeed: number;
+  outrunSun: boolean;
+
+  // globe view (bouncing country outlines)
+  globeUsePalette: boolean;
+  globeAmplitude: number;
+  globeSpinSpeed: number;
+  /** Loads the country map from a CDN. Off = no network requests; the globe
+   * falls back to its graticule. */
+  globeLiveData: boolean;
+
+  // spectro-tunnel view (spectrogram-textured tunnel)
+  spectrotunnelUsePalette: boolean;
+  spectrotunnelAmplitude: number;
+  spectrotunnelSpeed: number;
+  spectrotunnelTwist: number;
+
+  // fractal view (raymarched Mandelbulb)
+  fractalUsePalette: boolean;
+  fractalAmplitude: number;
+  fractalDetail: number; // raymarch step budget
+  fractalPower: number;
+
+  // black hole view (lensed accretion disk made of spectrogram)
+  blackholeUsePalette: boolean; // off = the fixed ember triad
+  blackholeAmplitude: number;
+  blackholeSpin: number;
+  blackholeTilt: number; // camera elevation above the disk plane, degrees
+  blackholeDetail: number; // ray integration step budget
+
   // 3D combo view
   comboSphereSize: number; // base sphere scale (1 = default)
   comboSphereSpinSpeed: number; // sphere rotation speed
@@ -428,8 +462,10 @@ export type Settings = {
    * the Wikimedia Commons overlay toggle, and the Wiki-Chroma visual's actor
    * models (fetched on first activation of that view). */
   textOverlayEnabled: boolean;
-  textOverlaySource: "public-domain" | "bofh";
-  textOverlayStyle: "bounce" | "scroller" | "stack" | "orbit";
+  textOverlaySource: TextSourceId;
+  textOverlayStyle: TextStyleId;
+  /** Lines for the "Your text" source, one phrase per line. */
+  textOverlayCustomText: string;
   textOverlayIntensity: number; // 0..2, jitter/reactivity amount
   textOverlayPhraseInterval: number; // seconds between phrase swaps
   textOverlayAllCaps: boolean;
@@ -616,6 +652,32 @@ export const DEFAULT_SETTINGS: Settings = {
   stagelightsSweepSpeed: 1,
   stagelightsFixtureCount: 3,
   stagelightsLasers: false,
+
+  outrunUsePalette: false,
+  outrunAmplitude: 1,
+  outrunSpeed: 1,
+  outrunSun: true,
+
+  globeUsePalette: true,
+  globeAmplitude: 1,
+  globeSpinSpeed: 1,
+  globeLiveData: true,
+
+  spectrotunnelUsePalette: true,
+  spectrotunnelAmplitude: 1,
+  spectrotunnelSpeed: 1,
+  spectrotunnelTwist: 1,
+
+  fractalUsePalette: true,
+  fractalAmplitude: 1,
+  fractalDetail: 64,
+  fractalPower: 8,
+
+  blackholeUsePalette: false,
+  blackholeAmplitude: 1,
+  blackholeSpin: 1,
+  blackholeTilt: 9,
+  blackholeDetail: 96,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,
@@ -729,6 +791,7 @@ export const DEFAULT_SETTINGS: Settings = {
   textOverlayEnabled: false,
   textOverlaySource: "public-domain",
   textOverlayStyle: "bounce",
+  textOverlayCustomText: "SPECTRUM AURA\nMAKE SOME NOISE\nTURN IT UP",
   textOverlayIntensity: 1,
   textOverlayPhraseInterval: 6,
   textOverlayAllCaps: true,

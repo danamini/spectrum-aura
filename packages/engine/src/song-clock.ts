@@ -21,8 +21,57 @@ const AUTO_BPM_MAX = 195;
 const MANUAL_AUDIO_CONFIDENCE = 0.55;
 const MANUAL_AUDIO_ONSET = 0.06;
 const MANUAL_ALIGN_WINDOW = 0.22;
-const PHRASE_CHANGE_THRESHOLD = 0.14;
-const PHRASE_ONSET_MIN = 0.08;
+/**
+ * Auto-mode phase lock. Each confident onset near a grid beat pulls the grid
+ * a fraction of the way onto it and corrects the tempo, so the grid sits on
+ * the beats the listener hears instead of wherever the tempo happened to lock.
+ */
+const AUTO_LOCK_ONSET_MIN = 0.06;
+/** Onsets further than this from a grid beat (in beats) are not beats. */
+const AUTO_LOCK_WINDOW = 0.25;
+const AUTO_LOCK_PHASE_GAIN = 0.22;
+/** Tempo correction per beat of phase error — the integral term that removes
+ * the steady lag a small tempo error would otherwise leave. */
+const AUTO_LOCK_TEMPO_GAIN = 0.03;
+/** Aligned onsets in a row before the clock trusts its own tempo over the
+ * detector's. From then on it is a flywheel: it holds tempo through passages
+ * with no beats (breakdowns), where the detector's estimate wanders. */
+const AUTO_LOCK_CONFIRM_STREAK = 6;
+/** Onsets in a row that fit neither the beat nor the off-beat: the tempo has
+ * really changed, so hand tempo back to the detector and re-anchor. */
+const AUTO_LOCK_LOST_STREAK = 8;
+/** A confirmed clock keeps running this long after the detector loses the
+ * tempo with no onset to confirm it, before giving up. */
+const AUTO_COAST_MS = 12000;
+/** A confirmed clock adopts the detector's tempo when it settles on double or
+ * half the clock's for this long — the detector correcting its own octave. */
+const AUTO_OCTAVE_SWITCH_MS = 1500;
+const AUTO_OCTAVE_TOLERANCE = 0.05;
+/** This many onsets in a row landing between grid beats means the grid
+ * locked onto the off-beats; shift it half a beat. */
+const AUTO_LOCK_OFFBEAT_STREAK = 6;
+const AUTO_LOCK_OFFBEAT_WINDOW = 0.12;
+
+/**
+ * Section-start ("drop") detection. A beat whose kick-band level is clearly
+ * above every one of the previous beats is the first beat of a new section,
+ * and its kick becomes bar 1, beat 1 of the phrase.
+ *
+ * Levels are on the analyser's decibel scale (0–1 spans 70 dB), so the test
+ * is a difference, not a ratio: 0.04 is about 3 dB. Calibrated on recorded
+ * tracks, where the kick band steps by 0.1–0.25 at a section start while the
+ * wide "bass" band (0–1.9 kHz) moves by 0.03 or less.
+ *
+ * The comparison is against the loudest recent beat, not the average: in a
+ * steady groove the kick beats already sit above the average of kick and
+ * snare beats, and an average-based test fired on them.
+ */
+const SECTION_HISTORY_BEATS = 8;
+const SECTION_MIN_HISTORY_BEATS = 6;
+const SECTION_KICK_RISE = 0.04;
+/** A single onset this far above every recent beat's peak is the hit itself. */
+const SECTION_ONSET_RISE = 0.04;
+const SECTION_COOLDOWN_BEATS = 8;
 /** After this long without a confirmed alignment to the tapped tempo, drop the
  * manual lock and let auto-detection try to reacquire from scratch. Covers both
  * "audio went silent" and "audio kept playing but the tempo diverged" — either
@@ -79,9 +128,9 @@ export type SongClockTickInput = {
   bass?: number;
   mid?: number;
   centroid?: number;
+  /** Kick-band level (`AudioBands.kick`); falls back to `bass` when absent. */
+  kick?: number;
 };
-
-type BarSignature = { bass: number; mid: number; centroid: number };
 
 function clampBpm(bpm: number): number {
   let v = bpm;
@@ -149,14 +198,6 @@ function timingFromBeatFloat(
   };
 }
 
-function signatureDistance(a: BarSignature, b: BarSignature): number {
-  return (
-    Math.abs(a.bass - b.bass) * 0.55 +
-    Math.abs(a.mid - b.mid) * 0.3 +
-    Math.abs(a.centroid - b.centroid) * 0.15
-  );
-}
-
 export class SongClock {
   private source: ClockSource = "idle";
   private externalRevision = -1;
@@ -176,8 +217,81 @@ export class SongClock {
   private lastAudioBeatMs = 0;
   private lastAlignedAt = 0;
   private manualReleasePending = false;
-  private barSampleSum = { bass: 0, mid: 0, centroid: 0, n: 0 };
-  private recentBars: BarSignature[] = [];
+  private beatSum = { kick: 0, peak: 0, n: 0, loudOnsetMs: -1 };
+  /** First loud onset of the beat before the one being summed, or -1. */
+  private prevBeatLoudOnsetMs = -1;
+  private beatKicks: number[] = [];
+  private beatPeaks: number[] = [];
+  private beatsSinceSection = SECTION_COOLDOWN_BEATS;
+  /** Last confident onset in any mode — used to start the auto grid on a beat. */
+  private lastOnsetMs = -Infinity;
+  private offbeatStreak = 0;
+  private alignedStreak = 0;
+  private lostStreak = 0;
+  private autoConfirmed = false;
+  private lastAlignedOnsetMs = 0;
+  private octaveSinceMs = -1;
+
+  /**
+   * Follows the detector to double or half tempo. The epoch is left where it
+   * is, so a phrase start stays at the same moment in time; only the number
+   * of beats counted since then changes.
+   */
+  private followOctave(estimatedBpm: number, now: number): void {
+    const ratio = estimatedBpm / this.clockBpm;
+    const factor =
+      Math.abs(ratio - 2) <= 2 * AUTO_OCTAVE_TOLERANCE
+        ? 2
+        : Math.abs(ratio - 0.5) <= 0.5 * AUTO_OCTAVE_TOLERANCE
+          ? 0.5
+          : 0;
+    if (factor === 0) {
+      this.octaveSinceMs = -1;
+      return;
+    }
+    if (this.octaveSinceMs < 0) this.octaveSinceMs = now;
+    if (now - this.octaveSinceMs < AUTO_OCTAVE_SWITCH_MS) return;
+    this.octaveSinceMs = -1;
+    this.clockBpm *= factor;
+    const beatFloat =
+      this.epochBeatNumber - 1 + Math.max(0, now - this.epochMs) / (60000 / this.clockBpm);
+    this.lastTotalBeats = Math.floor(beatFloat) + 1;
+    // The per-beat level history stays: levels are averages, so they mean the
+    // same at either beat length, and discarding them here blinded section
+    // detection for six beats — which is exactly when a drop tends to land.
+  }
+
+  private resetAutoLock(now: number): void {
+    this.octaveSinceMs = -1;
+    this.offbeatStreak = 0;
+    this.alignedStreak = 0;
+    this.lostStreak = 0;
+    this.autoConfirmed = false;
+    this.lastAlignedOnsetMs = now;
+  }
+
+  private resetSectionHistory(): void {
+    this.beatSum = { kick: 0, peak: 0, n: 0, loudOnsetMs: -1 };
+    this.prevBeatLoudOnsetMs = -1;
+    this.beatKicks = [];
+    this.beatPeaks = [];
+    this.beatsSinceSection = SECTION_COOLDOWN_BEATS;
+  }
+
+  /**
+   * Changes the tempo without moving the beat position: the epoch is
+   * re-anchored so the current beat count is the same before and after.
+   * Without this a tempo correction slid the whole grid, by more the longer
+   * the clock had been running.
+   */
+  private setClockBpm(bpm: number, now: number): void {
+    if (bpm <= 0 || bpm === this.clockBpm) return;
+    if (this.clockBpm > 0 && this.epochSet) {
+      const beatsSinceEpoch = Math.max(0, now - this.epochMs) / (60000 / this.clockBpm);
+      this.epochMs = now - beatsSinceEpoch * (60000 / bpm);
+    }
+    this.clockBpm = bpm;
+  }
 
   reset(): void {
     this.externalRevision = -1;
@@ -198,8 +312,9 @@ export class SongClock {
     this.lastAudioBeatMs = 0;
     this.lastAlignedAt = 0;
     this.manualReleasePending = false;
-    this.barSampleSum = { bass: 0, mid: 0, centroid: 0, n: 0 };
-    this.recentBars = [];
+    this.resetSectionHistory();
+    this.lastOnsetMs = -Infinity;
+    this.resetAutoLock(0);
   }
 
   /**
@@ -245,8 +360,7 @@ export class SongClock {
     this.manualTapComplete = this.clockBpm > 0;
     this.audioAlignStreak = 0;
     this.lastAlignedAt = now;
-    this.barSampleSum = { bass: 0, mid: 0, centroid: 0, n: 0 };
-    this.recentBars = [];
+    this.resetSectionHistory();
   }
 
   /** T — align current instant to a beat; learn BPM from tap spacing. */
@@ -302,6 +416,9 @@ export class SongClock {
       mid = 0,
       centroid = 0,
     } = input;
+    const kick = input.kick ?? bass;
+
+    if (audioBeat && onsetStrength >= AUTO_LOCK_ONSET_MIN) this.lastOnsetMs = now;
 
     if (this.source === "manual") {
       return this.tickManual(now, bpmLocked, {
@@ -312,6 +429,7 @@ export class SongClock {
         bass,
         mid,
         centroid,
+        kick,
       });
     }
 
@@ -326,24 +444,35 @@ export class SongClock {
         if (this.autoConfidenceStreak >= 4 || bpmLocked) {
           this.source = "auto";
           this.clockBpm = estimatedBpm;
-          this.epochMs = now;
+          // Start counting from the last beat actually heard, not from the
+          // moment the tempo estimate happened to settle.
+          const periodMs = 60000 / estimatedBpm;
+          const sinceOnset = now - this.lastOnsetMs;
+          this.epochMs = sinceOnset >= 0 && sinceOnset < periodMs ? this.lastOnsetMs : now;
           this.epochBeatNumber = 1;
           this.epochSet = true;
           this.lastTotalBeats = 0;
           this.framesSinceAutoEntry = 0;
+          this.resetAutoLock(now);
+          this.resetSectionHistory();
         }
-      } else if (this.source === "auto") {
+      } else if (this.source === "auto" && !this.autoConfirmed) {
+        // Until onsets have confirmed the grid, tempo follows the detector.
+        // After that the phase lock owns it (see applyAutoPhaseLock).
         if (!bpmLocked) {
           const alpha = autoBpmBlendAlpha(this.framesSinceAutoEntry);
-          this.clockBpm = this.clockBpm * (1 - alpha) + estimatedBpm * alpha;
+          this.setClockBpm(this.clockBpm * (1 - alpha) + estimatedBpm * alpha, now);
           this.framesSinceAutoEntry += 1;
         } else {
-          this.clockBpm = estimatedBpm;
+          this.setClockBpm(estimatedBpm, now);
         }
+      } else if (this.source === "auto" && bpmLocked) {
+        this.followOctave(estimatedBpm, now);
       }
     } else {
       this.autoConfidenceStreak = 0;
-      if (this.source === "auto" && !bpmLocked) {
+      const coasting = this.autoConfirmed && now - this.lastAlignedOnsetMs < AUTO_COAST_MS;
+      if (this.source === "auto" && !bpmLocked && !coasting) {
         this.source = "idle";
         this.clockBpm = 0;
         return { ...EMPTY_BAR_TIMING, bpmLocked };
@@ -352,11 +481,13 @@ export class SongClock {
 
     if (this.source === "auto" && this.clockBpm > 0) {
       return this.tickRunning(now, "auto", bpmLocked, {
+        estimatedBpm: bpmValid ? estimatedBpm : 0,
         audioBeat,
         onsetStrength,
         bass,
         mid,
         centroid,
+        kick,
       });
     }
 
@@ -407,6 +538,7 @@ export class SongClock {
       bass: number;
       mid: number;
       centroid: number;
+      kick?: number;
     },
   ): BarTiming {
     if (
@@ -500,13 +632,16 @@ export class SongClock {
     source: ClockSource,
     bpmLocked: boolean,
     audio: {
+      estimatedBpm?: number;
       audioBeat: boolean;
       onsetStrength: number;
       bass: number;
       mid: number;
       centroid: number;
+      kick?: number;
     } = { audioBeat: false, onsetStrength: 0, bass: 0, mid: 0, centroid: 0 },
   ): BarTiming {
+    if (source === "auto") this.applyAutoPhaseLock(now, audio);
     const periodMs = 60000 / this.clockBpm;
     const elapsed = Math.max(0, now - this.epochMs);
     const beatFloat = this.epochBeatNumber - 1 + elapsed / periodMs;
@@ -522,7 +657,7 @@ export class SongClock {
     );
 
     let phraseChangeDetected = false;
-    if (this.maybeDetectPhraseChange(timing, now, audio)) {
+    if (this.detectSectionStart(timing, now)) {
       phraseChangeDetected = true;
       const elapsed2 = Math.max(0, now - this.epochMs);
       const beatFloat2 = this.epochBeatNumber - 1 + elapsed2 / periodMs;
@@ -536,75 +671,129 @@ export class SongClock {
       );
     }
 
+    const kickLevel = audio.kick ?? audio.bass;
     if (audio.bass + audio.mid > 0) {
-      this.barSampleSum.bass += audio.bass;
-      this.barSampleSum.mid += audio.mid;
-      this.barSampleSum.centroid += audio.centroid;
-      this.barSampleSum.n += 1;
+      this.beatSum.kick += kickLevel;
+      this.beatSum.peak = Math.max(this.beatSum.peak, kickLevel);
+      this.beatSum.n += 1;
+    }
+    // Remember where in the beat a section-sized hit landed, so a detected
+    // section can be anchored to the kick itself rather than to a grid line.
+    if (
+      this.beatSum.loudOnsetMs < 0 &&
+      audio.audioBeat &&
+      this.beatPeaks.length >= SECTION_MIN_HISTORY_BEATS &&
+      kickLevel >= Math.max(...this.beatPeaks) + SECTION_ONSET_RISE
+    ) {
+      this.beatSum.loudOnsetMs = now;
     }
 
-    this.lastTotalBeats = timing.totalBeats;
+    // A phase nudge can step the grid back across a boundary it has just
+    // crossed; holding the count monotonic stops that beat ticking twice.
+    this.lastTotalBeats =
+      phraseChangeDetected || latch
+        ? timing.totalBeats
+        : Math.max(this.lastTotalBeats, timing.totalBeats);
     this.downbeatLatch = false;
     return phraseChangeDetected ? { ...timing, phraseChangeDetected } : timing;
   }
 
-  /** At bar line: compare the bar that just ended to recent bars; realign on strong change. */
-  private maybeDetectPhraseChange(
-    timing: BarTiming,
+  /** Pulls the auto grid onto confident onsets and corrects its tempo — see AUTO_LOCK_*. */
+  private applyAutoPhaseLock(
     now: number,
-    audio: { audioBeat: boolean; onsetStrength: number },
-  ): boolean {
-    if (!timing.beatJustTicked || timing.beatInBar !== 1 || this.barSampleSum.n === 0) {
-      return false;
+    audio: { audioBeat: boolean; onsetStrength: number; estimatedBpm?: number },
+  ): void {
+    if (!audio.audioBeat || audio.onsetStrength < AUTO_LOCK_ONSET_MIN || this.clockBpm <= 0) return;
+    const periodMs = 60000 / this.clockBpm;
+    const beatFloat = (now - this.epochMs) / periodMs;
+    // Positive: the onset came after the grid beat, so the grid is early.
+    const error = beatFloat - Math.round(beatFloat);
+    if (Math.abs(error) <= AUTO_LOCK_WINDOW) {
+      this.epochMs += error * periodMs * AUTO_LOCK_PHASE_GAIN;
+      this.alignedStreak += 1;
+      this.lostStreak = 0;
+      this.offbeatStreak = 0;
+      this.lastAlignedOnsetMs = now;
+      if (this.alignedStreak >= AUTO_LOCK_CONFIRM_STREAK) this.autoConfirmed = true;
+      if (this.autoConfirmed) {
+        // Onsets arriving late mean the grid runs fast: slow the tempo.
+        const corrected = this.clockBpm * (1 - error * AUTO_LOCK_TEMPO_GAIN);
+        this.setClockBpm(Math.max(AUTO_BPM_MIN, Math.min(AUTO_BPM_MAX, corrected)), now);
+      }
+    } else if (Math.abs(Math.abs(error) - 0.5) <= AUTO_LOCK_OFFBEAT_WINDOW) {
+      this.offbeatStreak += 1;
+      if (this.offbeatStreak >= AUTO_LOCK_OFFBEAT_STREAK) {
+        this.epochMs += periodMs / 2;
+        this.offbeatStreak = 0;
+      }
+    } else {
+      this.offbeatStreak = Math.max(0, this.offbeatStreak - 1);
+      this.alignedStreak = Math.max(0, this.alignedStreak - 1);
+      this.lostStreak += 1;
+      if (this.autoConfirmed && this.lostStreak >= AUTO_LOCK_LOST_STREAK) {
+        // The music no longer fits this grid at all: take the detector's
+        // tempo again and put this onset on a beat, keeping the beat count.
+        this.resetAutoLock(now);
+        if (audio.estimatedBpm && isValidBpm(audio.estimatedBpm)) {
+          this.setClockBpm(audio.estimatedBpm, now);
+        }
+        const period = 60000 / this.clockBpm;
+        const position = (now - this.epochMs) / period;
+        this.epochMs += (position - Math.round(position)) * period;
+      }
     }
-
-    const completed: BarSignature = {
-      bass: this.barSampleSum.bass / this.barSampleSum.n,
-      mid: this.barSampleSum.mid / this.barSampleSum.n,
-      centroid: this.barSampleSum.centroid / this.barSampleSum.n,
-    };
-
-    let change = 0;
-    if (this.recentBars.length >= 2) {
-      const baseline = this.recentBars.reduce(
-        (acc, bar) => ({
-          bass: acc.bass + bar.bass,
-          mid: acc.mid + bar.mid,
-          centroid: acc.centroid + bar.centroid,
-        }),
-        { bass: 0, mid: 0, centroid: 0 },
-      );
-      const mean: BarSignature = {
-        bass: baseline.bass / this.recentBars.length,
-        mid: baseline.mid / this.recentBars.length,
-        centroid: baseline.centroid / this.recentBars.length,
-      };
-      change = signatureDistance(completed, mean);
-    }
-
-    this.recentBars.push(completed);
-    if (this.recentBars.length > 4) this.recentBars.shift();
-    this.barSampleSum = { bass: 0, mid: 0, centroid: 0, n: 0 };
-
-    if (
-      this.recentBars.length >= 4 &&
-      timing.totalBeats > BEATS_PER_BAR &&
-      change >= PHRASE_CHANGE_THRESHOLD &&
-      audio.audioBeat &&
-      audio.onsetStrength >= PHRASE_ONSET_MIN
-    ) {
-      this.alignPhraseDownbeat(now);
-      return true;
-    }
-    return false;
   }
 
-  private alignPhraseDownbeat(now: number): void {
-    this.epochMs = now;
+  /**
+   * At each beat line, closes the beat that just ended and tests it against
+   * the beats before it. A beat whose kick band is above all of them marks the start of a
+   * new section, and the grid is re-anchored so that beat's kick is bar 1,
+   * beat 1.
+   *
+   * Working per beat rather than per bar is what puts bar 1 on the drop: the
+   * earlier per-bar comparison noticed a change a full bar after it happened
+   * and anchored the phrase there, one bar late.
+   */
+  private detectSectionStart(timing: BarTiming, now: number): boolean {
+    if (!timing.beatJustTicked || this.beatSum.n === 0) return false;
+    const kick = this.beatSum.kick / this.beatSum.n;
+    const peak = this.beatSum.peak;
+    const loudOnsetMs = this.beatSum.loudOnsetMs;
+    const earlierLoudOnsetMs = this.prevBeatLoudOnsetMs;
+    this.beatSum = { kick: 0, peak: 0, n: 0, loudOnsetMs: -1 };
+    this.prevBeatLoudOnsetMs = loudOnsetMs;
+
+    const started =
+      this.beatKicks.length >= SECTION_MIN_HISTORY_BEATS &&
+      this.beatsSinceSection >= SECTION_COOLDOWN_BEATS &&
+      kick >= Math.max(...this.beatKicks) + SECTION_KICK_RISE;
+    this.beatKicks.push(kick);
+    this.beatPeaks.push(peak);
+    if (this.beatKicks.length > SECTION_HISTORY_BEATS) {
+      this.beatKicks.shift();
+      this.beatPeaks.shift();
+    }
+    this.beatsSinceSection += 1;
+    if (!started) return false;
+
+    // Beat 1 is the hit itself. If the grid had drifted, the hit may have
+    // landed late in the beat before this one; prefer that earlier onset.
+    const periodMs = 60000 / this.clockBpm;
+    const beatFloat = this.epochBeatNumber - 1 + Math.max(0, now - this.epochMs) / periodMs;
+    const beatStartMs = now - (beatFloat - Math.floor(beatFloat)) * periodMs - periodMs;
+    const recent = (ms: number) => ms >= 0 && now - ms < periodMs * 2.2;
+    const anchorMs = recent(earlierLoudOnsetMs)
+      ? earlierLoudOnsetMs
+      : recent(loudOnsetMs)
+        ? loudOnsetMs
+        : beatStartMs;
+    this.epochMs = anchorMs;
     this.epochBeatNumber = 1;
     this.downbeatLatch = true;
-    this.lastTotalBeats = 0;
-    this.recentBars = [];
+    this.lastTotalBeats = Math.floor(Math.max(0, now - anchorMs) / periodMs);
+    this.beatsSinceSection = 0;
+    this.prevBeatLoudOnsetMs = -1;
+    return true;
   }
 
   private recordTap(now: number): void {

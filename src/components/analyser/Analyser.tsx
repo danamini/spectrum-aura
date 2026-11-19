@@ -158,6 +158,9 @@ export function Analyser() {
     audioRef.current?.setFftSize(settings.fftSize);
   }, [settings.fftSize]);
   useEffect(() => {
+    audioRef.current?.setLatencyOptimized(settings.latencyOptimized);
+  }, [settings.latencyOptimized]);
+  useEffect(() => {
     audioRef.current?.setGain(settings.gain);
   }, [settings.gain]);
 

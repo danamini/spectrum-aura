@@ -55,6 +55,26 @@ export const EVOLUTION_TARGETS: Partial<Record<ViewMode, EvolutionTarget[]>> = {
     { key: "orbitSpeed", min: 0, max: 1.6 },
     { key: "stagelightsSweepSpeed", min: 0.2, max: 3 },
   ],
+  outrun: [
+    { key: "outrunAmplitude", min: 0.3, max: 2.5 },
+    { key: "outrunSpeed", min: 0.4, max: 2.5 },
+  ],
+  globe: [
+    { key: "globeAmplitude", min: 0.3, max: 2.5 },
+    { key: "globeSpinSpeed", min: 0.2, max: 3 },
+  ],
+  spectrotunnel: [
+    { key: "spectrotunnelTwist", min: -3, max: 3 },
+    { key: "spectrotunnelSpeed", min: 0.4, max: 2.5 },
+  ],
+  blackhole: [
+    { key: "blackholeTilt", min: 3, max: 28 },
+    { key: "blackholeSpin", min: 0.4, max: 2.2 },
+  ],
+  fractal: [
+    { key: "fractalPower", min: 5, max: 10 },
+    { key: "fractalAmplitude", min: 0.3, max: 2 },
+  ],
 };
 
 /** New waypoint picked every this many phrases (4 bars each) — a slow "progressive slide". */
@@ -93,11 +113,25 @@ export class ViewEvolutionEngine {
   private phraseCounter = 0;
   private msSincePhrase = 0;
   private states = new Map<string, TargetState>();
+  private nudgeBoost = 0;
 
   reset(): void {
     this.phraseCounter = 0;
     this.msSincePhrase = 0;
+    this.nudgeBoost = 0;
     this.states.clear();
+  }
+
+  /**
+   * Jumps straight to a new waypoint and eases to it quickly — called when
+   * the music changes (drop, new section) so the drift lands with the change
+   * instead of whenever the three-phrase counter next rolls over.
+   */
+  nudge(): void {
+    this.phraseCounter =
+      (Math.floor(this.phraseCounter / PHRASES_PER_WAYPOINT) + 1) * PHRASES_PER_WAYPOINT;
+    this.msSincePhrase = 0;
+    this.nudgeBoost = 1;
   }
 
   tick(
@@ -117,7 +151,8 @@ export class ViewEvolutionEngine {
     }
     const waypointIndex = Math.floor(this.phraseCounter / PHRASES_PER_WAYPOINT);
     const boundedAmount = Math.max(0, Math.min(1, amount));
-    const ease = Math.min(1, dt * EASE_PER_SEC);
+    const ease = Math.min(1, dt * (EASE_PER_SEC + this.nudgeBoost * 3));
+    this.nudgeBoost = Math.max(0, this.nudgeBoost - dt * 0.5);
     const numericOpts = opts as unknown as Record<string, number>;
 
     let keyIndex = 0;

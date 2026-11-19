@@ -18,7 +18,19 @@ import {
   PUBLIC_DOMAIN_FALLBACK_SNIPPETS,
   publicDomainTextSource,
 } from "./text-sources/public-domain-source";
-import type { TextSnippet } from "./text-sources/types";
+import type { TextSnippet, TextSource } from "./text-sources/types";
+import { greetsTextSource, GREETS_SNIPPETS } from "./text-sources/greets-source";
+import { poetryTextSource } from "./text-sources/poetry-source";
+import { wikipediaTextSource } from "./text-sources/wikipedia-source";
+import { customSnippets, telemetrySnippet } from "./text-sources/live-sources";
+import { TEXT_SOURCES, TEXT_STYLES, type TextSourceId } from "./text-sources/registry";
+import { GlyphField } from "./text-glyphs";
+import { displayLevel, logBin, type LazyView, type ViewFrame } from "./views/types";
+import { OutrunView } from "./views/outrun-view";
+import { GlobeView } from "./views/globe-view";
+import { SpectroTunnelView } from "./views/spectrotunnel-view";
+import { FractalView } from "./views/fractal-view";
+import { BlackHoleView } from "./views/blackhole-view";
 
 const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
 
@@ -38,7 +50,10 @@ const TEXT_OVERLAY_VIEW_ANCHOR: Partial<Record<ViewMode, { distance: number; sca
  * field initializer and `setTextSource` both read this, so fallback list and
  * cache key can never drift between the two construction paths. Cache keys are
  * versioned per payload shape (v2 = TextSnippet objects, v1 was raw strings). */
-const TEXT_OVERLAY_SOURCES = {
+const TEXT_OVERLAY_SOURCES: Record<
+  Exclude<TextSourceId, "custom" | "telemetry">,
+  { source: TextSource; fallback: readonly TextSnippet[]; cacheKey: string }
+> = {
   "public-domain": {
     source: publicDomainTextSource,
     fallback: PUBLIC_DOMAIN_FALLBACK_SNIPPETS,
@@ -49,7 +64,31 @@ const TEXT_OVERLAY_SOURCES = {
     fallback: BOFH_FALLBACK_EXCUSES,
     cacheKey: "spectrum-aura:text-overlay-bofh-v2",
   },
-} as const;
+  // Offline, the two live literary sources fall back to the bundled quotations.
+  poetry: {
+    source: poetryTextSource,
+    fallback: PUBLIC_DOMAIN_FALLBACK_SNIPPETS,
+    cacheKey: "spectrum-aura:text-overlay-poetry-v1",
+  },
+  wikipedia: {
+    source: wikipediaTextSource,
+    fallback: GREETS_SNIPPETS,
+    cacheKey: "spectrum-aura:text-overlay-wikipedia-v1",
+  },
+  greets: {
+    source: greetsTextSource,
+    fallback: GREETS_SNIPPETS,
+    cacheKey: "spectrum-aura:text-overlay-greets-v1",
+  },
+};
+/** Shown for "Your text" until something is typed. */
+const CUSTOM_TEXT_PLACEHOLDER = customSnippets("Type your own lines in Settings");
+const TEXT_SOURCE_LABELS = Object.fromEntries(
+  TEXT_SOURCES.map((source) => [source.id, source.label]),
+) as Record<TextSourceId, string>;
+const PER_CHARACTER_TEXT_STYLES: ReadonlySet<string> = new Set(
+  TEXT_STYLES.filter((style) => style.perCharacter).map((style) => style.id),
+);
 
 export type WikichromaDebugState = {
   active: boolean;
@@ -65,7 +104,7 @@ export type WikichromaDebugState = {
 
 export type TextOverlayDebugState = {
   enabled: boolean;
-  sourceId: "public-domain" | "bofh";
+  sourceId: TextSourceId;
   sourceLabel: string;
   currentText: string;
   author: string;
@@ -202,6 +241,22 @@ type StagelightsLaserFixture = {
 
 export type Palette = [string, string, string];
 
+/**
+ * Views built on first activation instead of in the Scene constructor. Adding
+ * one is a registry entry here plus its `<id>Group` holder on Scene — nothing
+ * is allocated, compiled or fetched until the view is first shown.
+ */
+const LAZY_VIEW_FACTORIES: Record<string, () => LazyView> = {
+  outrun: () => new OutrunView(),
+  globe: () => new GlobeView(),
+  spectrotunnel: () => new SpectroTunnelView(),
+  fractal: () => new FractalView(),
+  blackhole: () => new BlackHoleView(),
+};
+/** A lazy view left off-screen this long is disposed; long enough that
+ * music-reactive view cycling returning within a few phrases reuses it. */
+export const LAZY_VIEW_IDLE_DISPOSE_SECONDS = 90;
+
 export class Scene {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
@@ -221,6 +276,14 @@ export class Scene {
   assetflowGroup = new THREE.Group();
   wikichromaGroup = new THREE.Group();
   stagelightsGroup = new THREE.Group();
+  // Empty holders for lazily built views (see LAZY_VIEW_FACTORIES).
+  outrunGroup = new THREE.Group();
+  globeGroup = new THREE.Group();
+  spectrotunnelGroup = new THREE.Group();
+  fractalGroup = new THREE.Group();
+  blackholeGroup = new THREE.Group();
+  private lazyViews = new Map<string, { view: LazyView; idleSeconds: number }>();
+  private lazyFrame?: ViewFrame;
   private xrControllerInputs: Array<{
     controller: THREE.Object3D;
     handedness: XRHandedness | "";
@@ -254,8 +317,12 @@ export class Scene {
   // demo-scene text overlay (global — applies on top of any view)
   textOverlayGroup = new THREE.Group();
   private textPlanes: TextPlaneEntry[] = [];
-  private textSourceId: "public-domain" | "bofh" = "bofh";
-  private textSourceLabel = bofhTextSource.label;
+  private textSourceId: TextSourceId = "bofh";
+  private textSourceLabel = TEXT_SOURCE_LABELS.bofh;
+  private textCustomText = "";
+  private textTelemetryIndex = 0;
+  private textGlyphs?: GlyphField;
+  private readonly textGlyphColorAt = (t: number, out: THREE.Color) => this.colorAtInto(t, out);
   private textBuffer = new TextBuffer(
     TEXT_OVERLAY_SOURCES.bofh.source,
     TEXT_OVERLAY_SOURCES.bofh.fallback,
@@ -274,16 +341,36 @@ export class Scene {
   private textOverlayCameraQuat = new THREE.Quaternion();
   private textOverlayForward = new THREE.Vector3();
 
-  private setTextSource(sourceId: "public-domain" | "bofh") {
-    if (sourceId === this.textSourceId) return;
-    const config = TEXT_OVERLAY_SOURCES[sourceId];
+  private setTextSource(sourceId: TextSourceId, customText: string) {
+    if (sourceId === this.textSourceId && customText === this.textCustomText) return;
     this.textSourceId = sourceId;
-    this.textSourceLabel = config.source.label;
-    this.textBuffer = new TextBuffer(config.source, config.fallback, config.cacheKey);
+    this.textCustomText = customText;
+    this.textSourceLabel = TEXT_SOURCE_LABELS[sourceId];
+    if (sourceId === "custom") {
+      // Bundled-style buffer over the typed lines; nothing is fetched or cached.
+      const lines = customSnippets(customText);
+      this.textBuffer = new TextBuffer(
+        greetsTextSource,
+        lines.length > 0 ? lines : CUSTOM_TEXT_PLACEHOLDER,
+        "spectrum-aura:text-overlay-custom-unsaved",
+      );
+    } else if (sourceId !== "telemetry") {
+      const config = TEXT_OVERLAY_SOURCES[sourceId];
+      this.textBuffer = new TextBuffer(config.source, config.fallback, config.cacheKey);
+    }
     this.textCurrentItem = null;
     this.textHistory = [];
     this.textLastSwapAt = -999;
     this.textLastRefillCheckAt = -999;
+  }
+
+  /** The next phrase: read live from the audio for the readout source,
+   * otherwise taken from the buffered source. */
+  private nextTextSnippet(audio: AudioBands): TextSnippet | null {
+    if (this.textSourceId === "telemetry") {
+      return telemetrySnippet(audio, this.textTelemetryIndex++);
+    }
+    return this.textBuffer.next();
   }
 
   getTextOverlayDebugState(): TextOverlayDebugState {
@@ -322,6 +409,7 @@ export class Scene {
   private stagelightsGlowTex?: THREE.Texture;
   private rippleColorScratch = new THREE.Color();
   private lastSceneBgColor = "";
+  private lastFogColor = "";
   private white = new THREE.Color(1, 1, 1);
   private dsColorA = new THREE.Color("#7fd9ff");
   private dsColorB = new THREE.Color("#d4ffff");
@@ -394,14 +482,16 @@ export class Scene {
   private mandalaRibbonCount = 12;
 
   // terrain view
-  terrain?: THREE.Mesh;
+  terrain?: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private terrainGeo?: THREE.PlaneGeometry;
-  private terrainHistory?: Float32Array;
-  private terrainColors?: Float32Array;
+  private terrainHistory?: Uint8Array;
+  private terrainHistoryTex?: THREE.DataTexture;
   private terrainRows = 96;
   private terrainCols = 128;
-  private readonly terrainWidth = 18;
-  private readonly terrainDepth = 26;
+  private terrainScroll = 0;
+  private terrainFlash = 0;
+  private readonly terrainWidth = 24;
+  private readonly terrainDepth = 32;
 
   // obsidian shard view
   private obsidianShards: Array<{
@@ -412,6 +502,7 @@ export class Scene {
     rotSpeed: number;
   }> = [];
   private obsidianFloor?: THREE.Mesh;
+  private readonly obsidianTargetScratch = new THREE.Vector3();
   private obsidianCore?: THREE.PointLight;
   private obsidianDetail = 1;
 
@@ -488,6 +579,8 @@ export class Scene {
   private assetflowTextures: THREE.Texture[] = [];
   private assetflowBaseDisk?: THREE.Mesh;
   private assetflowLight?: THREE.PointLight;
+  private readonly assetflowTintScratch = new THREE.Color();
+  private readonly assetflowTintHighScratch = new THREE.Color();
   private assetflowAssetsRequested = false;
   private assetflowBuildToken = 0;
   /** Which model template all actors share this build — re-rolled per build. */
@@ -610,6 +703,12 @@ export class Scene {
     this.xrSceneRoot.add(this.assetflowGroup);
     this.xrSceneRoot.add(this.wikichromaGroup);
     this.xrSceneRoot.add(this.stagelightsGroup);
+    for (const id of Object.keys(LAZY_VIEW_FACTORIES)) {
+      const holder = this.getSceneObjectForView(id);
+      if (!holder) continue;
+      holder.visible = false;
+      this.xrSceneRoot.add(holder);
+    }
     this.xrSceneRoot.add(this.textOverlayGroup);
     this.scene.add(this.xrSceneRoot);
     this.buildXrHud();
@@ -714,6 +813,72 @@ export class Scene {
     }
   }
 
+  /** Ids of lazy views currently holding resources (built and not yet evicted). */
+  getBuiltLazyViews(): string[] {
+    return [...this.lazyViews.keys()];
+  }
+
+  private updateLazyView(
+    dt: number,
+    time: number,
+    audio: AudioBands,
+    opts: SceneUpdateOpts,
+    state: { kick: number; beatPhase: number; bpmConfident: boolean; drift: number },
+  ) {
+    const factory = LAZY_VIEW_FACTORIES[opts.view];
+    if (!factory) return false;
+    let entry = this.lazyViews.get(opts.view);
+    if (!entry) {
+      entry = { view: factory(), idleSeconds: 0 };
+      this.lazyViews.set(opts.view, entry);
+      this.getSceneObjectForView(opts.view)?.add(entry.view.group);
+      entry.view.resize?.(this.viewportWidth, this.viewportHeight);
+    }
+    entry.idleSeconds = 0;
+    const frame = (this.lazyFrame ??= {
+      dt,
+      time,
+      audio,
+      opts,
+      camera: this.camera,
+      palette: this.paletteThree,
+      kick: 0,
+      beatPhase: 0,
+      bpmConfident: false,
+      xrMode: false,
+      mouseYaw: 0,
+      mousePitch: 0,
+      mouseZoom: 0,
+      drift: 0,
+    });
+    frame.dt = dt;
+    frame.time = time;
+    frame.audio = audio;
+    frame.opts = opts;
+    frame.kick = state.kick;
+    frame.beatPhase = state.beatPhase;
+    frame.bpmConfident = state.bpmConfident;
+    frame.xrMode = Boolean(opts.xrMode);
+    frame.mouseYaw = this.mouseYaw;
+    frame.mousePitch = this.mousePitch;
+    frame.mouseZoom = this.mouseZoom;
+    frame.drift = state.drift;
+    entry.view.update(frame);
+    return true;
+  }
+
+  /** Releases lazy views that have been off-screen past the idle window. */
+  private evictIdleLazyViews(dt: number, activeView: string) {
+    for (const [id, entry] of this.lazyViews) {
+      if (id === activeView) continue;
+      entry.idleSeconds += dt;
+      if (entry.idleSeconds < LAZY_VIEW_IDLE_DISPOSE_SECONDS) continue;
+      entry.view.group.removeFromParent();
+      entry.view.dispose();
+      this.lazyViews.delete(id);
+    }
+  }
+
   private getSceneObjectForView(view: string) {
     const visual = getVisualDefinition(view);
     if (!visual?.sceneGroupKey) return null;
@@ -803,25 +968,6 @@ export class Scene {
         const lineMat = this.mandalaRibbons[i]!.material;
         lineMat.color.copy(this.colorAt(i / n));
       }
-    }
-
-    // refresh terrain colors
-    if (this.terrainGeo && this.terrainColors) {
-      const rows = this.terrainRows;
-      const cols = this.terrainCols;
-      const arr = this.terrainColors;
-      for (let r = 0; r < rows; r++) {
-        const rowFade = 0.82 + 0.18 * (1 - r / Math.max(1, rows - 1));
-        for (let c = 0; c < cols; c++) {
-          const i = r * cols + c;
-          const freqT = cols <= 1 ? 0 : c / (cols - 1);
-          const col = this.colorAt(freqT);
-          arr[i * 3] = col.r * rowFade;
-          arr[i * 3 + 1] = col.g * rowFade;
-          arr[i * 3 + 2] = col.b * rowFade;
-        }
-      }
-      (this.terrainGeo.attributes.color as THREE.BufferAttribute).needsUpdate = true;
     }
 
     // refresh nebula palette uniforms
@@ -1487,6 +1633,50 @@ export class Scene {
     this.nebulaMat.wireframe = opts.nebulaWireframe;
   }
 
+  /**
+   * Shapes a column material's emission instead of letting it glow evenly:
+   * a lit cap and corner edges over a dark body, hotter on taller columns.
+   * A uniform emissive made every column the same flat colour and, with
+   * bloom, washed the whole grid out. Instance colours tint the glow.
+   */
+  private injectColumnGlow(mat: THREE.MeshStandardMaterial, halfWidth: number, refHeight: number) {
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uColHalf = { value: halfWidth };
+      shader.uniforms.uColRef = { value: refHeight };
+      shader.vertexShader =
+        "varying vec3 vColLocal;\nvarying float vColH;\n" +
+        shader.vertexShader.replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+           vColLocal = position;
+           #ifdef USE_INSTANCING
+             vColH = length(instanceMatrix[1].xyz);
+           #else
+             vColH = 1.0;
+           #endif`,
+        );
+      shader.fragmentShader =
+        "varying vec3 vColLocal;\nvarying float vColH;\nuniform float uColHalf;\nuniform float uColRef;\n" +
+        shader.fragmentShader.replace(
+          "#include <emissivemap_fragment>",
+          `#include <emissivemap_fragment>
+           {
+             float tall = clamp(vColH / uColRef, 0.12, 1.0);
+             // Cap band keeps a fixed thickness whatever the column's height.
+             float cap = smoothstep(vColH - 0.4, vColH - 0.06, vColLocal.y * vColH);
+             vec2 e = abs(vColLocal.xz) / uColHalf;
+             float edge = smoothstep(0.82, 0.97, min(e.x, e.y));
+             vec3 tint = vec3(1.0);
+             #ifdef USE_COLOR
+               tint = vColor.rgb;
+             #endif
+             totalEmissiveRadiance *= tint * (0.04 + cap * (0.12 + tall * 1.15) + edge * 0.5 * tall);
+           }`,
+        );
+    };
+    mat.needsUpdate = true;
+  }
+
   buildMonolith(gridSize: number = this.monolithGrid) {
     if (this.monolith) {
       this.monolithGroup.remove(this.monolith);
@@ -1508,8 +1698,11 @@ export class Scene {
       emissiveIntensity: 0.18,
       metalness: 0.45,
       roughness: 0.4,
-      vertexColors: true,
+      // Not vertexColors: the box has no colour attribute, so enabling it
+      // multiplied every column's instance colour by zero. Instance colours
+      // apply on their own.
     });
+    this.injectColumnGlow(mat, 0.4, 9);
     const mesh = new THREE.InstancedMesh(geo, mat, count);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const colors = new Float32Array(count * 3);
@@ -1738,103 +1931,173 @@ export class Scene {
     this.postFxBoost.glitch = midSpike;
   }
 
+  /**
+   * Spectrum waterfall landscape: frequency across, time receding. The mesh is
+   * static and displaced in the vertex shader from a history texture, so each
+   * audio slice is one row upload instead of a CPU pass over every vertex, and
+   * the scroll rate no longer depends on the display's refresh rate.
+   */
   buildTerrain(cols: number = this.terrainCols) {
     if (this.terrain && this.terrainGeo) {
       this.terrainGroup.remove(this.terrain);
       this.terrainGeo.dispose();
-      (this.terrain.material as THREE.Material).dispose();
+      this.terrain.material.dispose();
+      this.terrainHistoryTex?.dispose();
     }
     const rows = this.terrainRows;
     cols = Math.max(16, Math.round(cols));
     this.terrainCols = cols;
-    this.terrainHistory = new Float32Array(rows * cols);
-    this.terrainColors = new Float32Array(rows * cols * 3);
+    this.terrainScroll = 0;
+    this.terrainHistory = new Uint8Array(rows * cols);
+    const tex = new THREE.DataTexture(this.terrainHistory, cols, rows, THREE.RedFormat);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    // Row width is the Columns setting, which need not be a multiple of 4.
+    tex.unpackAlignment = 1;
+    tex.needsUpdate = true;
+    this.terrainHistoryTex = tex;
+
     const geo = new THREE.PlaneGeometry(this.terrainWidth, this.terrainDepth, cols - 1, rows - 1);
-    geo.rotateX(-Math.PI / 2.25);
-    for (let r = 0; r < rows; r++) {
-      const rowFade = 0.82 + 0.18 * (1 - r / Math.max(1, rows - 1));
-      for (let c = 0; c < cols; c++) {
-        const i = r * cols + c;
-        const freqT = cols <= 1 ? 0 : c / (cols - 1);
-        const col = this.colorAt(freqT);
-        this.terrainColors[i * 3] = col.r * rowFade;
-        this.terrainColors[i * 3 + 1] = col.g * rowFade;
-        this.terrainColors[i * 3 + 2] = col.b * rowFade;
-      }
-    }
-    geo.setAttribute("color", new THREE.BufferAttribute(this.terrainColors, 3));
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      wireframe: true,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.9,
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.ShaderMaterial({
+      side: THREE.DoubleSide,
+      uniforms: {
+        tHistory: { value: tex },
+        uGrid: { value: new THREE.Vector2(cols - 1, rows - 1) },
+        uScroll: { value: 0 },
+        uAmp: { value: 1 },
+        uWire: { value: 1 },
+        uFlash: { value: 0 },
+        uBass: { value: 0 },
+        uColorA: { value: new THREE.Color() },
+        uColorB: { value: new THREE.Color() },
+        uColorC: { value: new THREE.Color() },
+        uFog: { value: new THREE.Color() },
+      },
+      vertexShader: /* glsl */ `
+        uniform sampler2D tHistory;
+        uniform vec2 uGrid;
+        uniform float uScroll;
+        uniform float uAmp;
+        varying vec2 vGrid;
+        varying float vLevel;
+        varying vec3 vWorld;
+        void main() {
+          // depth 0 = far edge, where the newest slice enters.
+          float depth = 1.0 - uv.y;
+          float row = depth - uScroll / (uGrid.y + 1.0);
+          float level = texture2D(tHistory, vec2(uv.x, clamp(row, 0.0, 1.0))).r;
+          // Ease the slab's rim down so it does not end in a cliff.
+          float rim = smoothstep(0.0, 0.06, uv.x) * smoothstep(1.0, 0.94, uv.x)
+                    * smoothstep(0.0, 0.08, depth) * smoothstep(1.0, 0.95, depth);
+          vec3 p = position;
+          p.y += level * rim * 3.6 * uAmp;
+          vLevel = level * rim;
+          vGrid = vec2(uv.x * uGrid.x, depth * uGrid.y - uScroll);
+          vec4 world = modelMatrix * vec4(p, 1.0);
+          vWorld = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec2 uGrid;
+        uniform float uScroll;
+        uniform float uWire;
+        uniform float uFlash;
+        uniform float uBass;
+        uniform vec3 uColorA;
+        uniform vec3 uColorB;
+        uniform vec3 uColorC;
+        uniform vec3 uFog;
+        varying vec2 vGrid;
+        varying float vLevel;
+        varying vec3 vWorld;
+        void main() {
+          float u = vGrid.x / uGrid.x;
+          float depth = (vGrid.y + uScroll) / uGrid.y;
+          // Low → mid → high across the width.
+          vec3 ramp = mix(uColorA, uColorB, smoothstep(0.0, 0.5, u));
+          ramp = mix(ramp, uColorC, smoothstep(0.5, 1.0, u));
+          // Quad grid lines, anti-aliased, thinned where cells shrink below a pixel.
+          vec2 g = abs(fract(vGrid - 0.5) - 0.5) / fwidth(vGrid);
+          float line = 1.0 - min(min(g.x, g.y), 1.0);
+          vec2 fw = fwidth(vGrid);
+          line *= clamp(1.0 - max(fw.x, fw.y) * 1.1, 0.12, 1.0);
+          // Facet normal from screen-space derivatives: no normal attribute to maintain.
+          vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+          n *= sign(n.y + 1e-5);
+          float diffuse = max(dot(n, normalize(vec3(-0.35, 0.8, 0.5))), 0.0);
+          float slope = 1.0 - n.y;
+          // A bright band rolls from the far edge to the near edge on each beat.
+          float wave = exp(-pow((depth - (1.0 - uFlash)) * 8.0, 2.0)) * uFlash;
+          vec3 hot = mix(ramp, vec3(1.0), smoothstep(0.55, 1.0, vLevel) * 0.55);
+          vec3 wire = ramp * (0.03 + vLevel * 0.2 + slope * 0.1)
+                    + hot * line * (0.5 + vLevel * 1.5 + uBass * 0.5 + wave * 1.6);
+          vec3 solid = ramp * (0.07 + diffuse * 0.5) * (0.35 + vLevel * 1.1)
+                     + hot * (slope * slope * 0.9 + line * 0.14 + wave * 0.5)
+                     + hot * smoothstep(0.6, 1.0, vLevel) * 0.45;
+          vec3 col = mix(solid, wire, uWire);
+          // Dissolve the slab's edges into the background.
+          float edge = smoothstep(0.0, 0.05, u) * smoothstep(1.0, 0.95, u)
+                     * smoothstep(0.0, 0.14, depth) * smoothstep(1.0, 0.93, depth);
+          gl_FragColor = vec4(mix(uFog, col, edge), 1.0);
+        }
+      `,
     });
     this.terrainGeo = geo;
     this.terrain = new THREE.Mesh(geo, mat);
+    // Displaced vertices leave the flat plane's bounds.
+    this.terrain.frustumCulled = false;
     this.terrain.position.set(0, -2, 4);
     this.terrainGroup.add(this.terrain);
   }
 
   private updateTerrain(
+    dt: number,
     audio: AudioBands,
-    time: number,
     opts: { terrainAmplitude: number; terrainUsePalette: boolean; terrainWireframe: boolean },
   ) {
     const amp = Math.max(0.05, opts.terrainAmplitude);
-    if (!this.terrainGeo || !this.terrainHistory || !this.terrain) return;
+    if (!this.terrainHistory || !this.terrain || !this.terrainHistoryTex) return;
     const rows = this.terrainRows;
     const cols = this.terrainCols;
     const bins = audio.bins;
-    const activeBinCount = Math.max(1, Math.floor(bins.length * 0.55));
-    for (let r = rows - 1; r > 0; r--) {
-      this.terrainHistory.copyWithin(r * cols, (r - 1) * cols, r * cols);
-    }
-    for (let c = 0; c < cols; c++) {
-      const idx = Math.floor((c / cols) * activeBinCount);
-      const v = bins[idx] ? bins[idx]! / 255 : 0;
-      this.terrainHistory[c] = normalizedBand(v) * 3.6 * amp;
-    }
-    const pos = this.terrainGeo.attributes.position as THREE.BufferAttribute;
-    for (let r = 0; r < rows; r++) {
+    const bass = normalizedBand(audio.bass);
+
+    // Slices per second, not per frame; follows the tempo once it is known.
+    const tempo = audio.bpm > 0 && audio.bpmConfidence > 0.45 ? audio.bpm / 120 : 1;
+    this.terrainScroll += Math.min(dt, 0.1) * 34 * tempo;
+    let pushed = false;
+    while (this.terrainScroll >= 1) {
+      this.terrainScroll -= 1;
+      this.terrainHistory.copyWithin(cols, 0, cols * (rows - 1));
       for (let c = 0; c < cols; c++) {
-        const i = r * cols + c;
-        pos.setY(i, this.terrainHistory[i]!);
+        const byte = bins.length > 0 ? bins[logBin(c, cols, bins.length)]! : 0;
+        this.terrainHistory[c] = Math.round(displayLevel(byte) * 255);
       }
+      pushed = true;
     }
-    pos.needsUpdate = true;
-    const colAttr = this.terrainGeo.attributes.color as THREE.BufferAttribute;
-    const colArr = this.terrainColors;
-    if (colArr) {
-      for (let r = 0; r < rows; r++) {
-        const rowFade = 0.76 + 0.24 * (1 - r / Math.max(1, rows - 1));
-        for (let c = 0; c < cols; c++) {
-          const i = r * cols + c;
-          const heightNorm = Math.min(1, (this.terrainHistory[i] ?? 0) / (3.6 * amp + 0.001));
-          if (opts.terrainUsePalette) {
-            const freqT = cols <= 1 ? 0 : c / (cols - 1);
-            const col = this.colorAtInto(freqT, this.tmpColor).lerp(this.white, heightNorm * 0.22);
-            colArr[i * 3] = col.r * rowFade;
-            colArr[i * 3 + 1] = col.g * rowFade;
-            colArr[i * 3 + 2] = col.b * rowFade;
-          } else {
-            const col = this.tmpColor
-              .copy(this.terrainColorA)
-              .lerp(this.terrainColorB, heightNorm * 0.45);
-            colArr[i * 3] = col.r * rowFade;
-            colArr[i * 3 + 1] = col.g * rowFade;
-            colArr[i * 3 + 2] = col.b * rowFade;
-          }
-        }
-      }
-      colAttr.needsUpdate = true;
+    if (pushed) this.terrainHistoryTex.needsUpdate = true;
+
+    if (audio.beat) this.terrainFlash = 1;
+    this.terrainFlash = Math.max(0, this.terrainFlash - dt * 1.7);
+
+    const u = this.terrain.material.uniforms;
+    u.uScroll!.value = this.terrainScroll;
+    u.uAmp!.value = amp;
+    u.uWire!.value = opts.terrainWireframe ? 1 : 0;
+    u.uFlash!.value = this.terrainFlash;
+    u.uBass!.value = bass;
+    if (opts.terrainUsePalette) {
+      u.uColorA!.value.copy(this.paletteThree[0]);
+      u.uColorB!.value.copy(this.paletteThree[1]);
+      u.uColorC!.value.copy(this.paletteThree[2]);
+    } else {
+      u.uColorA!.value.copy(this.terrainColorA).multiplyScalar(0.55);
+      u.uColorB!.value.copy(this.terrainColorA);
+      u.uColorC!.value.copy(this.terrainColorB);
     }
-    // Terrain uses MeshBasicMaterial, so normal recomputation is unnecessary per frame.
-    this.terrain.position.z = 4 + Math.sin(performance.now() * 0.00035) * 0.15;
-    const terrainMat = this.terrain.material as THREE.MeshBasicMaterial;
-    terrainMat.color.setRGB(1, 1, 1);
-    terrainMat.opacity = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(time * 0.7));
-    terrainMat.wireframe = opts.terrainWireframe;
+    if (this.scene.fog instanceof THREE.FogExp2) u.uFog!.value.copy(this.scene.fog.color);
   }
 
   // ─── Obsidian Shard ────────────────────────────────────────────────────────
@@ -1965,8 +2228,11 @@ export class Scene {
       const binVal = normalizedBand((bins[binIdx] ?? 0) / 255);
 
       // Explode outward
-      const dir = s.basePos.clone().normalize();
-      const targetPos = s.basePos.clone().add(dir.multiplyScalar(explodeDist + binVal * 1.2 * amp));
+      // basePos + its unit direction * push, without per-shard temporaries.
+      const baseLen = s.basePos.length() || 1;
+      const targetPos = this.obsidianTargetScratch
+        .copy(s.basePos)
+        .multiplyScalar(1 + (explodeDist + binVal * 1.2 * amp) / baseLen);
       s.mesh.position.lerp(targetPos, Math.min(1, dt * 8));
 
       // Rotation speed locked to high-end
@@ -2252,10 +2518,11 @@ export class Scene {
 
       if (colArr) {
         if (opts.torusUsePalette) {
-          const c = this.colorAtInto(freqT, this.tmpColor).lerp(
-            this.white,
-            0.05 + binVal * 0.15 + bass * 0.04,
-          );
+          // Brightness follows each particle's own band, so the ring lights
+          // up where the spectrum is, instead of an even dim haze.
+          const c = this.colorAtInto(freqT, this.tmpColor)
+            .lerp(this.white, 0.05 + binVal * 0.15 + bass * 0.04)
+            .multiplyScalar(0.3 + Math.sqrt(binVal) * 2.1 + bass * 0.35);
           colArr[i * 3] = c.r;
           colArr[i * 3 + 1] = c.g;
           colArr[i * 3 + 2] = c.b;
@@ -2305,15 +2572,17 @@ export class Scene {
     const count = 2 * C * R;
     const geo = new THREE.BoxGeometry(0.55, 1, 0.55);
     geo.translate(0, 0.5, 0);
+    // Mirror-finish metal needs an environment map to reflect; without one it
+    // rendered black, so the pillars are brushed steel the scene lights can shade.
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      metalness: 1.0,
-      roughness: 0.03,
+      color: 0x33363f,
+      metalness: 0.55,
+      roughness: 0.32,
       emissive: this.paletteThree[0].clone(),
-      emissiveIntensity: 0.1,
-      envMapIntensity: 1.0,
+      emissiveIntensity: 0.6,
       vertexColors: false,
     });
+    this.injectColumnGlow(mat, 0.275, 7);
     this.soundwallMat = mat;
     const mesh = new THREE.InstancedMesh(geo, mat, count);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -2404,13 +2673,13 @@ export class Scene {
     this.soundwallPillars.instanceMatrix.needsUpdate = true;
 
     // Material: chrome tint + mid-spike emissive flare
-    this.soundwallMat.color.setRGB(1, 1, 1);
+    // Intensity feeds the cap/edge glow (see injectColumnGlow), not an even wash.
     if (opts.soundwallUsePalette) {
       this.soundwallMat.emissive.copy(this.paletteThree[1]).lerp(this.paletteThree[2], mid);
-      this.soundwallMat.emissiveIntensity = (0.08 + mid * 0.7 + bass * 0.3) * amp;
+      this.soundwallMat.emissiveIntensity = (0.9 + mid * 1.6 + bass * 0.8) * amp;
     } else {
       this.soundwallMat.emissive.setRGB(0.5, 0.6, 0.8);
-      this.soundwallMat.emissiveIntensity = 0.1 + mid * 0.5;
+      this.soundwallMat.emissiveIntensity = 0.9 + mid * 1.2;
     }
 
     // FOV distortion on mid-spikes is applied by the caller (update opts)
@@ -2893,7 +3162,9 @@ export class Scene {
         (this.scene.background as THREE.Color).set(opts.bgColor);
       }
     }
-    if (this.scene.fog instanceof THREE.FogExp2) {
+    if (opts.bgColor !== this.lastFogColor && this.scene.fog instanceof THREE.FogExp2) {
+      // Parsing the CSS colour every frame allocated a regex match per frame.
+      this.lastFogColor = opts.bgColor;
       this.scene.fog.color.set(opts.bgColor);
     }
     // BPM phase — authoritative song clock beat phase when synced, else 0
@@ -2945,9 +3216,25 @@ export class Scene {
     const beat = opts.cameraBeat ? opts.cameraBeatAmount : 0;
 
     // mouse smoothing (always run so it works in any view)
-    this.mouseYaw += (this.targetYaw - this.mouseYaw) * Math.min(1, dt * 12);
-    this.mousePitch += (this.targetPitch - this.mousePitch) * Math.min(1, dt * 12);
-    this.mouseZoom += (this.targetZoom - this.mouseZoom) * Math.min(1, dt * 8);
+    // Dynamic Mode moves the camera as offsets on the user's own position, so
+    // it works in mouse-camera mode (the default) where the automatic orbit
+    // is not used, and eases back to exactly where the user left it when off.
+    if (opts.dynamicYawRate !== 0) {
+      this.dynamicYaw += dt * opts.dynamicYawRate;
+    } else if (this.dynamicYaw !== 0) {
+      // Unwind by the short way round.
+      this.dynamicYaw = Math.atan2(Math.sin(this.dynamicYaw), Math.cos(this.dynamicYaw));
+      this.dynamicYaw *= Math.max(0, 1 - dt * 1.5);
+      if (Math.abs(this.dynamicYaw) < 1e-4) this.dynamicYaw = 0;
+    }
+    this.dynamicPitch += (opts.dynamicPitch - this.dynamicPitch) * Math.min(1, dt * 1.5);
+    this.dynamicZoom += (opts.dynamicZoom - this.dynamicZoom) * Math.min(1, dt * 3);
+    const yawGoal = this.targetYaw + this.dynamicYaw;
+    const pitchGoal = Math.max(-1.2, Math.min(1.4, this.targetPitch + this.dynamicPitch));
+    const zoomGoal = Math.max(4, Math.min(30, this.targetZoom * this.dynamicZoom));
+    this.mouseYaw += (yawGoal - this.mouseYaw) * Math.min(1, dt * 12);
+    this.mousePitch += (pitchGoal - this.mousePitch) * Math.min(1, dt * 12);
+    this.mouseZoom += (zoomGoal - this.mouseZoom) * Math.min(1, dt * 8);
     this.setXrMode(xrMode);
     this.updateXrSceneTransform(dt);
 
@@ -2968,6 +3255,8 @@ export class Scene {
         Math.sin(time * 0.2) * a * 0.65 +
         Math.cos(time * 0.31) * a * 0.3;
     };
+
+    if (this.lazyViews.size > 0) this.evictIdleLazyViews(dt, opts.view);
 
     // Global overlay — runs unconditionally (before the per-view branches,
     // some of which `return` early for xrMode) so it applies to any visual.
@@ -3286,7 +3575,7 @@ export class Scene {
       this.postFxBoost.glitch = 0;
       const cols = Math.max(16, Math.round(opts.terrainColumns));
       if (cols !== this.terrainCols) this.buildTerrain(cols);
-      this.updateTerrain(audio, time, {
+      this.updateTerrain(dt, audio, {
         terrainAmplitude: opts.terrainAmplitude,
         terrainUsePalette: opts.terrainUsePalette,
         terrainWireframe: opts.terrainWireframe,
@@ -3296,11 +3585,11 @@ export class Scene {
       if (opts.terrainFullscreen) {
         const follow = Math.min(1, dt * 8);
         this.camera.position.x += (0 - this.camera.position.x) * follow;
-        this.camera.position.y += (18 - this.camera.position.y) * follow;
+        this.camera.position.y += (26 - this.camera.position.y) * follow;
         this.camera.position.z += (10 - this.camera.position.z) * follow;
         this.camera.fov += (42 - this.camera.fov) * Math.min(1, dt * 10);
         this.camera.updateProjectionMatrix();
-        this.camera.lookAt(0, -1.5, 7);
+        this.camera.lookAt(0, -1.5, 5);
         return;
       }
       if (opts.cameraMouse) {
@@ -3312,10 +3601,15 @@ export class Scene {
         );
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.45 + 0.02);
-        this.camera.position.set(Math.sin(this.orbitAngle) * 15, 7, Math.cos(this.orbitAngle) * 15);
+        // Pulled back with the larger slab so its far edge and silhouette stay in frame.
+        this.camera.position.set(
+          Math.sin(this.orbitAngle) * 23,
+          9,
+          4 + Math.cos(this.orbitAngle) * 23,
+        );
       }
       applyCameraDrift(2.8);
-      this.camera.lookAt(0, -1.5, 7);
+      this.camera.lookAt(0, -1, 4);
       return;
     }
 
@@ -3697,6 +3991,17 @@ export class Scene {
     this.postFxBoost.bloom = 1;
     this.postFxBoost.glitch = 0;
 
+    if (
+      this.updateLazyView(dt, time, audio, opts, {
+        kick: this.kick * beat,
+        beatPhase: bpmPhase,
+        bpmConfident,
+        drift,
+      })
+    ) {
+      return;
+    }
+
     // bars
     this.comboBarMat.wireframe = opts.comboWireframe;
     this.sphereMat.wireframe = opts.comboWireframe;
@@ -3848,6 +4153,9 @@ export class Scene {
   targetYaw = 0;
   targetPitch = 0.25;
   targetZoom = 12;
+  private dynamicYaw = 0;
+  private dynamicPitch = 0;
+  private dynamicZoom = 1;
 
   setMouseDelta(dx: number, dy: number) {
     this.targetYaw -= dx * 0.005;
@@ -4415,7 +4723,11 @@ export class Scene {
       const placeholderMat = actor.placeholder.material;
       if (Array.isArray(placeholderMat)) placeholderMat.forEach((m) => m.dispose());
       else placeholderMat.dispose();
+      if (actor.model) this.disposeAssetflowModel(actor.model, false);
       actor.root.clear();
+    }
+    for (const template of this.assetflowModelTemplates) {
+      if (template) this.disposeAssetflowModel(template, true);
     }
     for (const layer of this.assetflowSprites) {
       layer.sprite.material.dispose();
@@ -4535,23 +4847,34 @@ export class Scene {
     const baseUrl = (import.meta.env.BASE_URL || "/").replace(/\/*$/, "/");
     const toPublicUrl = (path: string) => `${baseUrl}${path.replace(/^\/+/, "")}`;
     this.assetflowModelTemplates = new Array(ASSETFLOW_MODEL_PATHS.length);
+    // Every actor shares one model per build, so only that model is fetched.
+    // The set is ~71 MB of GLB; loading all twelve to display one cost the
+    // whole download plus a parse spike. A missing file falls through to the
+    // next path so optional third-party models can still be absent.
     const gltfLoader = new GLTFLoader();
-    ASSETFLOW_MODEL_PATHS.forEach((path, idx) => {
+    const loadModel = (idx: number, attemptsLeft: number) => {
       gltfLoader.load(
-        toPublicUrl(path),
+        toPublicUrl(ASSETFLOW_MODEL_PATHS[idx]!),
         (gltf) => {
-          if (buildToken !== this.assetflowBuildToken) return;
           const model = gltf.scene;
+          if (buildToken !== this.assetflowBuildToken) {
+            this.disposeAssetflowModel(model, true);
+            return;
+          }
           this.normalizeAssetModel(model, 1.6);
           this.assetflowModelTemplates[idx] = model;
+          this.assetflowModelChoice = idx;
           this.applyAssetflowModelsToActors();
         },
         undefined,
         () => {
-          // Keep fallback meshes when optional third-party GLB files are missing.
+          // Keep fallback meshes when every optional GLB file is missing.
+          if (buildToken !== this.assetflowBuildToken || attemptsLeft <= 0) return;
+          loadModel((idx + 1) % ASSETFLOW_MODEL_PATHS.length, attemptsLeft - 1);
         },
       );
-    });
+    };
+    loadModel(this.assetflowModelChoice, ASSETFLOW_MODEL_PATHS.length - 1);
 
     const spriteImagePaths = [
       "assets/animations/svg/layer-wave.svg",
@@ -4663,6 +4986,27 @@ export class Scene {
     return model;
   }
 
+  /** Frees a model's materials, and with `shared` its geometry and textures
+   * too. Actor clones share the template's geometry/textures, so only the
+   * template is disposed with `shared`. */
+  private disposeAssetflowModel(model: THREE.Object3D, shared: boolean) {
+    model.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (shared) mesh.geometry?.dispose();
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        if (!material) continue;
+        if (shared) {
+          for (const value of Object.values(material)) {
+            if (value instanceof THREE.Texture) value.dispose();
+          }
+        }
+        material.dispose();
+      }
+    });
+  }
+
   private applyAssetflowModelsToActors() {
     const templates = this.assetflowModelTemplates.filter((model): model is THREE.Object3D =>
       Boolean(model),
@@ -4679,6 +5023,7 @@ export class Scene {
       const actor = this.assetflowActors[i]!;
       if (actor.model) {
         actor.root.remove(actor.model);
+        this.disposeAssetflowModel(actor.model, false);
       }
       const model = this.cloneAssetflowModel(template);
       actor.model = model;
@@ -4901,9 +5246,15 @@ export class Scene {
       actor.root.scale.setScalar(Number.isFinite(actorScale) ? actorScale : actor.baseScale);
 
       const tint = opts.assetflowUsePalette
-        ? this.colorAt(i / Math.max(1, this.assetflowActors.length - 1))
+        ? this.colorAtInto(
+            i / Math.max(1, this.assetflowActors.length - 1),
+            this.assetflowTintScratch,
+          )
         : this.white;
-      const tintHigh = this.colorAt((i + 0.35) / Math.max(1, this.assetflowActors.length));
+      const tintHigh = this.colorAtInto(
+        (i + 0.35) / Math.max(1, this.assetflowActors.length),
+        this.assetflowTintHighScratch,
+      );
       actor.root.traverse((obj) => {
         const mesh = obj as THREE.Mesh;
         if (!mesh.isMesh || !mesh.material) return;
@@ -4954,7 +5305,9 @@ export class Scene {
         0,
         1,
       );
-      const spriteTint = opts.assetflowUsePalette ? this.colorAt(bin) : this.paletteThree[0];
+      const spriteTint = opts.assetflowUsePalette
+        ? this.colorAtInto(bin, this.assetflowTintScratch)
+        : this.paletteThree[0];
       mat.color.copy(spriteTint).multiplyScalar(0.95 + audio.mid * 0.25);
       if (mat.map) {
         mat.map.offset.x = (time * 0.018 * (1 + audio.centroid)) % 1;
@@ -5924,6 +6277,8 @@ export class Scene {
         scrambleStartedAt: -999,
       });
     }
+    this.textGlyphs = new GlyphField();
+    this.textOverlayGroup.add(this.textGlyphs.mesh);
     this.textOverlayGroup.visible = false;
   }
 
@@ -5954,19 +6309,39 @@ export class Scene {
             )
             .join("");
 
-    const hex = `#${this.colorAt(colorT).getHexString()}`;
+    const hex = `#${this.colorAtInto(colorT, this.tmpColor).getHexString()}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = hex;
-    ctx.shadowColor = hex;
-    ctx.shadowBlur = 26;
     let fontSize = 96;
     ctx.font = `700 ${fontSize}px "Courier New", monospace`;
     while (ctx.measureText(shown).width > width * 0.92 && fontSize > 28) {
       fontSize -= 4;
       ctx.font = `700 ${fontSize}px "Courier New", monospace`;
     }
+    // Misregistered colour ghosts either side, as on an out-of-convergence CRT.
+    const ghost = Math.max(2, fontSize * 0.045);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = `#${this.paletteThree[0].getHexString()}`;
+    ctx.fillText(shown, width / 2 - ghost, height / 2);
+    ctx.fillStyle = `#${this.paletteThree[2].getHexString()}`;
+    ctx.fillText(shown, width / 2 + ghost, height / 2);
+    ctx.globalAlpha = 1;
+    // Main pass: a palette gradient down the letters with a soft glow.
+    const gradient = ctx.createLinearGradient(
+      0,
+      height / 2 - fontSize / 2,
+      0,
+      height / 2 + fontSize / 2,
+    );
+    gradient.addColorStop(0, "#ffffff");
+    gradient.addColorStop(0.45, hex);
+    gradient.addColorStop(1, `#${this.paletteThree[1].getHexString()}`);
+    ctx.fillStyle = gradient;
+    ctx.shadowColor = hex;
+    ctx.shadowBlur = 22;
     ctx.fillText(shown, width / 2, height / 2);
+    ctx.shadowBlur = 0;
     entry.texture.needsUpdate = true;
   }
 
@@ -6169,7 +6544,7 @@ export class Scene {
    * is active. Called unconditionally from `update()` (not gated by
    * `opts.view`); must stay cheap when disabled. */
   private updateTextOverlay(dt: number, time: number, audio: AudioBands, opts: SceneUpdateOpts) {
-    if (opts.textOverlaySource !== this.textSourceId) this.setTextSource(opts.textOverlaySource);
+    this.setTextSource(opts.textOverlaySource, opts.textOverlayCustomText);
     if (!opts.textOverlayEnabled) {
       if (this.textOverlayGroup.visible) this.textOverlayGroup.visible = false;
       return;
@@ -6178,13 +6553,13 @@ export class Scene {
 
     // Opportunistic, cooldown-gated refill — TextBuffer.maybeRefill() never
     // blocks or throws into the render loop.
-    if (time - this.textLastRefillCheckAt > 5) {
+    if (this.textSourceId !== "telemetry" && time - this.textLastRefillCheckAt > 5) {
       this.textLastRefillCheckAt = time;
       void this.textBuffer.maybeRefill();
     }
 
     if (!this.textCurrentItem) {
-      this.textCurrentItem = this.textBuffer.next();
+      this.textCurrentItem = this.nextTextSnippet(audio);
       if (this.textCurrentItem) this.textHistory.unshift(this.textCurrentItem);
     }
 
@@ -6204,7 +6579,7 @@ export class Scene {
     }
     if (swap) {
       this.textLastSwapAt = time;
-      this.textCurrentItem = this.textBuffer.next();
+      this.textCurrentItem = this.nextTextSnippet(audio);
       if (this.textCurrentItem) this.textHistory.unshift(this.textCurrentItem);
       if (this.textHistory.length > 5) this.textHistory.length = 5;
     }
@@ -6214,6 +6589,24 @@ export class Scene {
 
     const intensity = Math.max(0, opts.textOverlayIntensity);
     const displayText = (raw: string) => (opts.textOverlayAllCaps ? raw.toUpperCase() : raw);
+
+    if (PER_CHARACTER_TEXT_STYLES.has(opts.textOverlayStyle)) {
+      this.hideTextPlanesFrom(0);
+      this.textGlyphs?.update(
+        opts.textOverlayStyle,
+        displayText(this.textCurrentItem?.text ?? ""),
+        {
+          dt,
+          time,
+          audio,
+          intensity,
+          scale: anchor.scale,
+          colorAt: this.textGlyphColorAt,
+        },
+      );
+      return;
+    }
+    this.textGlyphs?.hide();
 
     switch (opts.textOverlayStyle) {
       case "scroller":
@@ -6231,7 +6624,13 @@ export class Scene {
     }
   }
 
+  private viewportWidth = 1;
+  private viewportHeight = 1;
+
   resize(w: number, h: number) {
+    this.viewportWidth = w;
+    this.viewportHeight = h;
+    for (const entry of this.lazyViews.values()) entry.view.resize?.(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     for (const ribbon of this.mandalaRibbons) {
@@ -6244,6 +6643,11 @@ export class Scene {
 
   dispose() {
     this.detachWebXrControllers();
+    for (const entry of this.lazyViews.values()) {
+      entry.view.group.removeFromParent();
+      entry.view.dispose();
+    }
+    this.lazyViews.clear();
     this.scene.traverse((object) => {
       if (object instanceof THREE.InstancedMesh) object.dispose();
     });
@@ -6267,6 +6671,7 @@ export class Scene {
       entry.texture.dispose();
     }
     this.textPlanes = [];
+    this.textGlyphs?.dispose();
     this.bars.geometry.dispose();
     (this.bars.material as THREE.Material).dispose();
     this.sphere.geometry.dispose();
@@ -6297,7 +6702,8 @@ export class Scene {
     }
     this.mandalaRibbons = [];
     if (this.terrainGeo) this.terrainGeo.dispose();
-    if (this.terrain) (this.terrain.material as THREE.Material).dispose();
+    if (this.terrain) this.terrain.material.dispose();
+    this.terrainHistoryTex?.dispose();
     // obsidian
     for (const s of this.obsidianShards) {
       s.mesh.geometry.dispose();
@@ -6353,6 +6759,11 @@ export class Scene {
       layer.sprite.material.dispose();
     }
     for (const texture of this.assetflowTextures) texture.dispose();
+    this.assetflowBuildToken += 1;
+    for (const template of this.assetflowModelTemplates) {
+      if (template) this.disposeAssetflowModel(template, true);
+    }
+    this.assetflowModelTemplates = [];
     // wiki-chroma — invalidate in-flight GLTF callbacks first so a model
     // resolving after teardown can't re-clone actors onto the disposed scene.
     this.wikichromaBuildToken += 1;

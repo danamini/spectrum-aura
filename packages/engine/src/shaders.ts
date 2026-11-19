@@ -1057,7 +1057,13 @@ export const AssetOverlayShader = {
         layerCOut,
         0.35 + wobble * 0.2
       );
-      overlay *= 0.5 + pulse * 1.05;
+      // Kept low and only gently beat-driven: the overlay is texture behind
+      // the visual, not a second subject flashing over it.
+      overlay *= 0.3 + pulse * 0.42;
+      // Ease off over bright parts of the scene so lines never cut across
+      // the visual's own highlights.
+      float lum = dot(base.rgb, vec3(0.2126, 0.7152, 0.0722));
+      overlay *= 1.0 - smoothstep(0.25, 0.9, lum) * 0.7;
       vec3 color = screenBlend(base.rgb, overlay * amount);
       gl_FragColor = vec4(color, base.a);
     }

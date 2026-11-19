@@ -984,6 +984,189 @@ export function ViewSettings({ s, set }: { s: Settings; set: (patch: Partial<Set
           </div>
         </>
       )}
+      {s.view === "outrun" && (
+        <>
+          <S
+            label="Mountain height"
+            value={s.outrunAmplitude}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ outrunAmplitude: v })}
+          />
+          <S
+            label="Cruise speed"
+            value={s.outrunSpeed}
+            min={0.1}
+            max={4}
+            step={0.05}
+            onChange={(v) => set({ outrunSpeed: v })}
+          />
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Sun</Label>
+            <Sw checked={s.outrunSun} onCheckedChange={(v) => set({ outrunSun: v })} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Use selected palette</Label>
+            <Sw
+              checked={s.outrunUsePalette}
+              onCheckedChange={(v) => set({ outrunUsePalette: v })}
+            />
+          </div>
+        </>
+      )}
+      {s.view === "globe" && (
+        <>
+          <S
+            label="Amplitude"
+            value={s.globeAmplitude}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ globeAmplitude: v })}
+          />
+          <S
+            label="Spin speed"
+            value={s.globeSpinSpeed}
+            min={0}
+            max={4}
+            step={0.05}
+            onChange={(v) => set({ globeSpinSpeed: v })}
+          />
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Country map</Label>
+            <Sw checked={s.globeLiveData} onCheckedChange={(v) => set({ globeLiveData: v })} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Use selected palette</Label>
+            <Sw checked={s.globeUsePalette} onCheckedChange={(v) => set({ globeUsePalette: v })} />
+          </div>
+          <p className="text-[10px] leading-snug text-white/45">
+            The country map is Natural Earth outlines loaded from jsDelivr. Off makes no network
+            requests and shows the plain globe.
+          </p>
+        </>
+      )}
+      {s.view === "spectrotunnel" && (
+        <>
+          <S
+            label="Amplitude"
+            value={s.spectrotunnelAmplitude}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ spectrotunnelAmplitude: v })}
+          />
+          <S
+            label="Speed"
+            value={s.spectrotunnelSpeed}
+            min={0.1}
+            max={4}
+            step={0.05}
+            onChange={(v) => set({ spectrotunnelSpeed: v })}
+          />
+          <S
+            label="Twist"
+            value={s.spectrotunnelTwist}
+            min={-4}
+            max={4}
+            step={0.05}
+            onChange={(v) => set({ spectrotunnelTwist: v })}
+          />
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Use selected palette</Label>
+            <Sw
+              checked={s.spectrotunnelUsePalette}
+              onCheckedChange={(v) => set({ spectrotunnelUsePalette: v })}
+            />
+          </div>
+        </>
+      )}
+      {s.view === "fractal" && (
+        <>
+          <S
+            label="Amplitude"
+            value={s.fractalAmplitude}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ fractalAmplitude: v })}
+          />
+          <S
+            label="Power"
+            value={s.fractalPower}
+            min={2}
+            max={12}
+            step={0.1}
+            onChange={(v) => set({ fractalPower: v })}
+          />
+          <S
+            label="Detail"
+            value={s.fractalDetail}
+            min={24}
+            max={128}
+            step={4}
+            onChange={(v) => set({ fractalDetail: Math.round(v) })}
+          />
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Use selected palette</Label>
+            <Sw
+              checked={s.fractalUsePalette}
+              onCheckedChange={(v) => set({ fractalUsePalette: v })}
+            />
+          </div>
+          <p className="text-[10px] leading-snug text-white/45">
+            Detail is the per-pixel march budget — lower it if the frame rate drops. Performance
+            Mode halves it.
+          </p>
+        </>
+      )}
+      {s.view === "blackhole" && (
+        <>
+          <S
+            label="Amplitude"
+            value={s.blackholeAmplitude}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={(v) => set({ blackholeAmplitude: v })}
+          />
+          <S
+            label="Disk spin"
+            value={s.blackholeSpin}
+            min={0.05}
+            max={4}
+            step={0.05}
+            onChange={(v) => set({ blackholeSpin: v })}
+          />
+          <S
+            label="Camera tilt"
+            value={s.blackholeTilt}
+            min={1}
+            max={60}
+            step={1}
+            onChange={(v) => set({ blackholeTilt: v })}
+          />
+          <S
+            label="Detail"
+            value={s.blackholeDetail}
+            min={40}
+            max={120}
+            step={4}
+            onChange={(v) => set({ blackholeDetail: Math.round(v) })}
+          />
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px]">Use selected palette</Label>
+            <Sw
+              checked={s.blackholeUsePalette}
+              onCheckedChange={(v) => set({ blackholeUsePalette: v })}
+            />
+          </div>
+          <p className="text-[10px] leading-snug text-white/45">
+            Detail is the per-pixel light-bending budget — lower it if the frame rate drops.
+          </p>
+        </>
+      )}
     </div>
   );
 }

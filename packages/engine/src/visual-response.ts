@@ -14,15 +14,23 @@ export class VisualResponse {
 
   apply(source: AudioBands, target: AudioBands, response: number): void {
     Object.assign(target, source);
+    // Visuals follow the fast-attack spectrum when the engine provides one;
+    // the detector-facing fields on `source` are left untouched.
+    const shown = source.display ?? source;
+    target.bass = shown.bass;
+    target.mid = shown.mid;
+    target.high = shown.high;
+    target.centroid = shown.centroid;
+    target.bins = shown.bins;
     const gain = normalizeVisualResponse(response);
     if (gain === 1) return;
-    target.bass = Math.min(1, source.bass * gain);
-    target.mid = Math.min(1, source.mid * gain);
-    target.high = Math.min(1, source.high * gain);
+    target.bass = Math.min(1, shown.bass * gain);
+    target.mid = Math.min(1, shown.mid * gain);
+    target.high = Math.min(1, shown.high * gain);
     target.onsetStrength = Math.min(1, source.onsetStrength * gain);
-    if (this.bins.length !== source.bins.length) this.bins = new Uint8Array(source.bins.length);
-    for (let i = 0; i < source.bins.length; i++) {
-      this.bins[i] = Math.min(255, Math.round(source.bins[i] * gain));
+    if (this.bins.length !== shown.bins.length) this.bins = new Uint8Array(shown.bins.length);
+    for (let i = 0; i < shown.bins.length; i++) {
+      this.bins[i] = Math.min(255, Math.round(shown.bins[i] * gain));
     }
     target.bins = this.bins;
   }

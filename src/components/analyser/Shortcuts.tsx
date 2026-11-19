@@ -1097,7 +1097,7 @@ export function Shortcuts() {
                 </div>
               )}
               {is3DMode && !xrActive && (
-                <div className="rounded-full border border-white/5 bg-black/35 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/45 backdrop-blur opacity-70">
+                <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
                   3D: drag mouse to move camera
                 </div>
               )}

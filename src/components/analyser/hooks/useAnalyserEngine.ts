@@ -9,12 +9,22 @@ import { Composer, computeQualityTier } from "@spectrum-aura/engine/composer";
 import { AudioEngine } from "@spectrum-aura/engine/audio";
 import { ViewCycleController } from "@spectrum-aura/engine/view-cycle-controller";
 import { SongClock } from "@spectrum-aura/engine/song-clock";
-import { dispatchLiveTempo, setLiveTempoFrame } from "@spectrum-aura/engine/live-tempo";
+import {
+  dispatchLiveTempo,
+  setLiveTempoFrame,
+  type SectionEvent,
+} from "@spectrum-aura/engine/live-tempo";
 import {
   createSceneUpdateOpts,
   syncSceneUpdateOpts,
 } from "@spectrum-aura/engine/scene-update-opts";
 import { ViewEvolutionEngine } from "@spectrum-aura/engine/evolution";
+import {
+  MusicDirector,
+  applyDirectorToPostFx,
+  applyDirectorToScene,
+  type DirectorState,
+} from "@spectrum-aura/engine/music-director";
 import {
   measureFrameLatency,
   smoothLatency,
@@ -107,6 +117,11 @@ export function useAnalyserEngine(params: {
     audioRef.current = audio;
     const viewCycleController = new ViewCycleController();
     const viewEvolutionEngine = new ViewEvolutionEngine();
+    const musicDirector = new MusicDirector();
+    const dynamicPostFx = { ...settingsStore.get() };
+    let directorState: DirectorState | null = null;
+    let lastPaletteShift = 0;
+    let lastSectionEvent: SectionEvent | null = null;
 
     let raf = 0;
     let last = performance.now();
@@ -245,6 +260,18 @@ export function useAnalyserEngine(params: {
       renderer.setAnimationLoop(null);
       if (!raf) raf = requestAnimationFrame(desktopLoop);
     };
+
+    // Dev-only: lets a test driver read live sync and Dynamic Mode state while
+    // real audio plays (see docs/DEVELOPMENT.md, "Testing with real audio").
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__debug = {
+        audio,
+        scene,
+        clock: songClockRef,
+        opts: sceneOpts,
+        director: () => directorState,
+      };
+    }
 
     const xrRuntime = new WebXrRuntime(renderer, scene, (state) => {
       dispatchWebXrState(state);
@@ -420,6 +447,7 @@ export function useAnalyserEngine(params: {
         bass: bands.bass,
         mid: bands.mid,
         centroid: bands.centroid,
+        kick: bands.kick,
       });
       if (songClockRef.current.consumeManualReleaseSignal()) {
         // Manual lock went stale (silence or the track's tempo diverged) —
@@ -488,6 +516,23 @@ export function useAnalyserEngine(params: {
       radialKickEnv = (externalSync ? barTimingFrame.beatJustTicked : bands.beat)
         ? 1
         : Math.max(0, radialKickEnv - dt * 5);
+      // The director listens all the time so the BPM grid can mark drops and
+      // breakdowns; Dynamic Mode decides separately whether to act on them.
+      // Detector-side bands: it hears the track, not the response-scaled
+      // presentation copy.
+      const watched = musicDirector.tick({
+        dt,
+        bass: bands.bass,
+        mid: bands.mid,
+        high: bands.high,
+        centroid: bands.centroid,
+        kick: bands.kick,
+        barJustStarted: barTimingFrame.barJustStarted,
+        phraseJustStarted: barTimingFrame.phraseJustStarted,
+        synced: barTimingFrame.synced || externalSync,
+        sectionStart: Boolean(barTimingFrame.phraseChangeDetected),
+      });
+      if (watched.event) lastSectionEvent = { kind: watched.event, atMs: now };
       const tempoFrame = {
         audioRunning: audio.isRunning() || ambientActive || externalSync,
         beat: externalSync ? barTimingFrame.beatJustTicked : bands.beat,
@@ -495,21 +540,36 @@ export function useAnalyserEngine(params: {
         bpmConfidence: externalSync ? (barTimingFrame.bpmLocked ? 1 : 0) : bands.bpmConfidence,
         barTiming: barTimingFrame,
         beatHintFlash: beatHintFlashRef.current,
+        sectionEvent: lastSectionEvent,
       };
       setLiveTempoFrame(tempoFrame);
       if (now - lastLiveTempoCommitAt >= 120) {
         lastLiveTempoCommitAt = now;
         dispatchLiveTempo(tempoFrame);
       }
-      if (s.paletteIndex !== lastPaletteIndex) {
-        lastPaletteIndex = s.paletteIndex;
-        scene.setPalette(PALETTES[s.paletteIndex]?.colors ?? PALETTES[0].colors);
-      }
       syncSceneUpdateOpts(sceneOpts, s, displayedView, xrRuntime.active, xrBackgroundHidden);
       if (s.evolveEnabled) {
+        directorState = watched;
+        if (watched.event === "drop") {
+          viewEvolutionEngine.nudge();
+        }
         viewEvolutionEngine.tick(sceneOpts, displayedView, barTimingFrame, dt, s.evolveAmount);
+        applyDirectorToScene(sceneOpts, displayedView, directorState, s.evolveAmount);
       } else {
+        // Detection keeps running for the HUD marker; only its effects are off.
+        // The palette walk restarts from the user's palette when re-enabled.
+        watched.paletteShift = 0;
+        directorState = null;
         viewEvolutionEngine.reset();
+      }
+      // The palette steps on each drop at stronger amounts;
+      // the user's chosen palette is where the walk starts and returns to.
+      const paletteShift = directorState && s.evolveAmount >= 0.5 ? directorState.paletteShift : 0;
+      if (s.paletteIndex !== lastPaletteIndex || paletteShift !== lastPaletteShift) {
+        lastPaletteIndex = s.paletteIndex;
+        lastPaletteShift = paletteShift;
+        const index = (s.paletteIndex + paletteShift) % PALETTES.length;
+        scene.setPalette(PALETTES[index]?.colors ?? PALETTES[0].colors);
       }
       scene.update(dt, t, bandsForScene, sceneOpts);
 
@@ -542,6 +602,14 @@ export function useAnalyserEngine(params: {
           mandalaPostFx.glitch = s.glitch || scene.postFxBoost.glitch > 0.45;
           mandalaPostFx.glitchWild = s.glitchWild || scene.postFxBoost.glitch > 0.75;
           postFxSettings = mandalaPostFx;
+        }
+        if (directorState) {
+          postFxSettings = applyDirectorToPostFx(
+            dynamicPostFx,
+            postFxSettings,
+            directorState,
+            s.evolveAmount,
+          );
         }
         postFxReactive.bass = bandsForScene.bass;
         postFxReactive.mid = bandsForScene.mid;
@@ -771,6 +839,7 @@ export function useAnalyserEngine(params: {
       renderer.dispose();
       if (import.meta.env.DEV) {
         delete (window as unknown as Record<string, unknown>).__composer;
+        delete (window as unknown as Record<string, unknown>).__debug;
       }
       if (renderer.domElement.parentElement === container) {
         container.removeChild(renderer.domElement);

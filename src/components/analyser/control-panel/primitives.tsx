@@ -229,15 +229,19 @@ export function FxSection({
           >
             {count > 0 ? `${count} on` : "off"}
           </span>
-          {pinned > 0 && (
-            <span
-              title={`${pinned} pinned — locked against Randomize, presets, saves, and view cycling`}
-              className="flex items-center gap-0.5 rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] tracking-wider text-amber-300"
-            >
-              <Pin className="h-2.5 w-2.5 fill-current" />
-              {pinned}
-            </span>
-          )}
+          <span
+            title={
+              pinned > 0
+                ? `${pinned} locked against Randomize, presets, saves, and view cycling`
+                : "No effects locked — pin an effect to keep it through Randomize, presets, saves, and view cycling"
+            }
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] tracking-wider ${
+              pinned > 0 ? "bg-amber-400/15 text-amber-300" : "bg-white/5 text-white/30"
+            }`}
+          >
+            <Pin className={`h-2.5 w-2.5 ${pinned > 0 ? "fill-current" : ""}`} />
+            {pinned} locked
+          </span>
         </span>
         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

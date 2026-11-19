@@ -10,6 +10,8 @@
  * 6. Exposes beat phase for downbeat-synced visuals
  */
 
+import { TempoEstimator } from "./tempo-estimator";
+
 export type BPMTickResult = {
   bpm: number;
   confidence: number;
@@ -86,6 +88,19 @@ function filterIntervalsAroundMedian(sortedIntervals: number[]): number[] {
   return filtered.length >= 2 ? filtered : sortedIntervals;
 }
 
+/** Periodicity strength at or above which the tempo estimator's answer is used as-is. */
+const PERIODICITY_TRUST_STRENGTH = 0.3;
+/** How fast a lock follows an agreeing periodicity estimate, per analysis pass. */
+const LOCK_FOLLOW_TRUSTED = 0.25;
+/** Analysis passes a clear periodicity result must disagree with the lock,
+ * while agreeing with itself, before the lock moves to it. */
+const RELOCK_STREAK = 6;
+const RELOCK_SELF_AGREEMENT_BPM = 3;
+/** Without a trusted periodicity result, wait for this much history before
+ * locking: the first seconds of peak intervals often settle on a 3:2 or 4:3
+ * relative of the real tempo. */
+const EARLY_LOCK_HISTORY_MS = 6000;
+
 /** Candidate-BPM history window used by the stability lock — see applyBpmLock. */
 const STABILITY_WINDOW = 5;
 /** Lock when this many recent candidates agree within STABILITY_TOLERANCE. */
@@ -132,6 +147,13 @@ export class BPMDetector {
   private octaveMismatchStreak = 0;
   /** Recent unlocked candidate BPMs, for the stability-based lock path. */
   private recentCandidates: number[] = [];
+  private periodicityTrusted = false;
+  private relockCandidate = 0;
+  /** Periodicity estimator, fed at the caller's full rate (not the 20 Hz peak history). */
+  private tempo = new TempoEstimator();
+  private tempoLastBass = 0;
+  private tempoLastMid = 0;
+  private tempoLastHigh = 0;
 
   private static clampBpm(bpm: number): number {
     let v = bpm;
@@ -145,6 +167,17 @@ export class BPMDetector {
   }
 
   feedBands(bands: BPMBandSample, time: number): void {
+    // Every frame's onset goes to the tempo estimator; throttling it to the
+    // peak history's 20 Hz would quantise beat times to 50 ms.
+    const flux =
+      Math.max(0, bands.bass - this.tempoLastBass) +
+      Math.max(0, bands.mid - this.tempoLastMid) * 0.55 +
+      Math.max(0, bands.high - this.tempoLastHigh) * 0.28;
+    this.tempoLastBass = bands.bass;
+    this.tempoLastMid = bands.mid;
+    this.tempoLastHigh = bands.high;
+    this.tempo.feed(flux, time);
+
     if (time - this.lastFeedAt < this.feedIntervalMs) return;
     this.lastFeedAt = time;
     this.lastFeedTime = time;
@@ -330,6 +363,10 @@ export class BPMDetector {
     this.driftRejectStreak = 0;
     this.octaveMismatchStreak = 0;
     this.recentCandidates.length = 0;
+    this.tempo.reset();
+    this.tempoLastBass = 0;
+    this.tempoLastMid = 0;
+    this.tempoLastHigh = 0;
   }
 
   private analyzeIfNeeded(time: number, force = false): void {
@@ -344,7 +381,13 @@ export class BPMDetector {
     // post-lock tracking on peak intervals alone let a biased peak stream walk
     // the lock into the drift-reject unlock path on real music).
     const { bpm: autoBpm, strength: autoStrength } = this.computeAutocorrelationBpm(time);
-    const candidateBpm = this.blendBpmEstimates(peakBpm, autoBpm, autoStrength);
+    // A clear periodicity result is the tempo outright — its window already
+    // averages 12 s, so smoothing it against the jittery peak estimate only
+    // made it slower and less accurate. Peaks decide when periodicity is weak.
+    this.periodicityTrusted = autoBpm > 0 && autoStrength >= PERIODICITY_TRUST_STRENGTH;
+    const candidateBpm = this.periodicityTrusted
+      ? autoBpm
+      : this.blendBpmEstimates(peakBpm, autoBpm, autoStrength);
     this.cachedConfidence = this.computeConfidenceFromPeaks(this.cachedPeaks, autoStrength);
     // Two independent estimators (peak intervals vs autocorrelation) agreeing on
     // the same tempo is strong evidence even when either one alone is noisy.
@@ -414,7 +457,9 @@ export class BPMDetector {
         }
       }
 
-      if ((this.highConfidenceStreak >= 4 || stable) && candidateBpm > 0) {
+      const enoughEvidence =
+        this.periodicityTrusted || this.tempo.historyMs() >= EARLY_LOCK_HISTORY_MS;
+      if ((this.highConfidenceStreak >= 4 || stable) && candidateBpm > 0 && enoughEvidence) {
         this.bpmLocked = true;
         this.lockedBpm = candidateBpm;
         this.recentCandidates.length = 0;
@@ -436,7 +481,8 @@ export class BPMDetector {
     if (diff <= 4) {
       this.driftRejectStreak = 0;
       this.octaveMismatchStreak = 0;
-      this.lockedBpm = locked * 0.97 + candidateBpm * 0.03;
+      const follow = this.periodicityTrusted ? LOCK_FOLLOW_TRUSTED : 0.03;
+      this.lockedBpm = locked * (1 - follow) + candidateBpm * follow;
       this.lastBPM = this.lockedBpm;
       // Fresh evidence agreeing with the lock — keep reported confidence up so
       // the HUD reads "locked and tracking" instead of drifting toward zero on
@@ -462,8 +508,23 @@ export class BPMDetector {
     }
     this.octaveMismatchStreak = 0;
 
+    // A clear periodicity result that keeps pointing at one different tempo is
+    // a real tempo, not drift: move the lock to it. Before this, a candidate
+    // 4–8 BPM from the lock was neither followed nor enough to unlock, so a
+    // slightly wrong lock (133 on a 140 track) held for the whole song.
+    if (Math.abs(candidateBpm - this.relockCandidate) > RELOCK_SELF_AGREEMENT_BPM) {
+      this.relockCandidate = candidateBpm;
+      this.driftRejectStreak = 0;
+    }
     this.driftRejectStreak += 1;
-    if (this.driftRejectStreak >= 12 && diff > 8) {
+    if (this.periodicityTrusted && this.driftRejectStreak >= RELOCK_STREAK) {
+      this.lockedBpm = candidateBpm;
+      this.lastBPM = candidateBpm;
+      this.driftRejectStreak = 0;
+      this.octaveMismatchStreak = 0;
+      return this.lockedBpm;
+    }
+    if (this.driftRejectStreak >= 12 && diff > 4) {
       this.bpmLocked = false;
       this.lockedBpm = 0;
       this.highConfidenceStreak = 0;
@@ -506,68 +567,10 @@ export class BPMDetector {
     return this.lastBPM * (1 - alpha) + blended * alpha;
   }
 
-  private computeAutocorrelationBpm(time: number): { bpm: number; strength: number } {
-    if (this.energyHistory.length < 12) return { bpm: 0, strength: 0 };
-
-    const binMs = 25;
-    const binCount = Math.floor(this.windowSizeMs / binMs);
-    const envelope = new Float32Array(binCount);
-    const startTime = time - this.windowSizeMs;
-
-    for (const sample of this.energyHistory) {
-      const idx = Math.floor((sample.time - startTime) / binMs);
-      if (idx >= 0 && idx < binCount) {
-        envelope[idx] = Math.max(envelope[idx]!, sample.energy);
-      }
-    }
-
-    const minLag = Math.max(2, Math.floor(60000 / 200 / binMs));
-    const maxLag = Math.min(binCount - 2, Math.ceil(60000 / 60 / binMs));
-    let bestLag = 0;
-    let bestScore = 0;
-    let secondScore = 0;
-    const scores: number[] = [];
-
-    for (let lag = minLag; lag <= maxLag; lag++) {
-      let sum = 0;
-      let count = 0;
-      for (let i = lag; i < binCount; i++) {
-        sum += envelope[i]! * envelope[i - lag]!;
-        count++;
-      }
-      const score = count > 0 ? sum / count : 0;
-      scores.push(score);
-      if (score > bestScore) {
-        secondScore = bestScore;
-        bestScore = score;
-        bestLag = lag;
-      } else if (score > secondScore) {
-        secondScore = score;
-      }
-    }
-
-    if (bestLag <= 0 || bestScore <= 0) return { bpm: 0, strength: 0 };
-
-    const lagIdx = bestLag - minLag;
-    let refinedLag = bestLag;
-    if (lagIdx > 0 && lagIdx < scores.length - 1) {
-      const y0 = scores[lagIdx - 1]!;
-      const y1 = scores[lagIdx]!;
-      const y2 = scores[lagIdx + 1]!;
-      const denom = y0 - 2 * y1 + y2;
-      if (Math.abs(denom) > 1e-9) {
-        refinedLag = bestLag + (0.5 * (y0 - y2)) / denom;
-      }
-    }
-
-    const intervalMs = refinedLag * binMs;
-    let bpm = 60000 / intervalMs;
-    if (bpm < 80) bpm *= 2;
-    if (bpm > 180) bpm *= 0.5;
-    bpm = Math.max(60, Math.min(200, bpm));
-
-    const strength = secondScore > 0 ? (bestScore - secondScore) / bestScore : bestScore;
-    return { bpm, strength: Math.max(0, Math.min(1, strength)) };
+  private computeAutocorrelationBpm(_time: number): { bpm: number; strength: number } {
+    const { bpm, strength } = this.tempo.estimate();
+    if (bpm <= 0) return { bpm: 0, strength: 0 };
+    return { bpm: BPMDetector.clampBpm(bpm), strength };
   }
 
   private computeBeatPhase(time: number): number {

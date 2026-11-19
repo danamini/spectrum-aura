@@ -13,7 +13,7 @@
 
 <img src="docs/readme-hero.svg" alt="Animated spectrum bars — Spectrum Aura" width="900"/>
 
-<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=16+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="16 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
+<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=21+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="21 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
 
 **[Open live demo](https://spectrumaura.org/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [MIDI setup](docs/midi.md) · [Docs](docs/README.md)
 
@@ -44,7 +44,7 @@ Depending on your hardware you may need to tune performance via the options in s
 - Browser-native real-time rendering with animated 3D scenes and post-processing.
 - Designed for live sessions: quick mode switching, keyboard-first controls, and preset slots.
 - **Musical sync:** experimental BPM detection, a 4/4 bar grid, manual beat/downbeat taps, and phrase-aware view cycling.
-- Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, Asset-Flow, Wiki-Chroma, and Stage Lights.
+- Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, Asset-Flow, Wiki-Chroma, Stage Lights, Outrun, Globe, Spectro-Tunnel, Fractal, and Black Hole.
 - Beat-aware motion and camera behavior that reacts to energy and musical phase, not just raw levels.
 - Works with microphone input or shared tab/system audio (whole-screen share with "Also share system audio" gives the best signal).
 - **Retro hardware emulation**: re-render any visual under a classic machine's real video limits — ZX Spectrum (genuine ROM font + attribute clash), Commodore 64, Game Boy, NES, CGA, Amstrad CPC, Amiga 500, MS-DOS EGA, VGA, Hercules, and Apple II — each with hi-res, system-font text, and low-res block-graphics modes, hardware borders, and matching scene palettes.
@@ -125,6 +125,11 @@ metadata are not implemented; external sync currently uses a 4/4 grid.
 - Asset-Flow: music-reactive 3D model choreography over drifting layered 2D backgrounds.
 - Wiki-Chroma: animated glTF actors (soldier/robot/fox packs) running in formation across orbit, cog, and runner motion modes, with beat-locked animation loops.
 - Stage Lights: sweeping spotlight rig (3/5/7 fixtures, LOW/MID/HIGH-aligned) with an optional laser-fan accent.
+- Outrun: synthwave drive — tempo-locked neon grid, spectrum-history wireframe mountains, striped sun.
+- Globe: vector Earth whose countries bounce — each rides its own slice of the spectrum on a spring and jumps on the beat.
+- Spectro-Tunnel: demoscene tunnel whose walls are a live spectrogram receding into the distance.
+- Fractal: raymarched Mandelbulb that bends with the bass.
+- Black Hole: gravitationally lensed accretion disk made of live spectrogram, with a lensed starfield.
 
 ### Beat, bars, and musical sync
 
