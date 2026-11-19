@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildTrack,
   clockBeatInPhraseAt,
@@ -16,6 +16,11 @@ import {
  * detection (same harness, 19 November 2026): tempo error 0.15–3.35%, beat
  * alignment 0.11–0.43 of a beat (chance is 0.25), 0 of 20 drops anchored.
  */
+// Each case simulates up to a minute of audio frame by frame, and the drop
+// suite runs forty of them. That is seconds locally but exceeded the default
+// 5 s on a CI runner, so the limit is set for the work rather than the machine.
+vi.setConfig({ testTimeout: 120_000 });
+
 const arrangement = (pattern: Array<[Section, number]>) =>
   pattern.flatMap(([section, bars]) => Array.from({ length: bars }, () => section));
 const barsFor = (bpm: number, seconds: number) => Math.ceil((seconds * bpm) / 240);
