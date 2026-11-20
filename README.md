@@ -13,7 +13,7 @@
 
 <img src="docs/readme-hero.svg" alt="Animated spectrum bars — Spectrum Aura" width="900"/>
 
-<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=21+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="21 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
+<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&weight=500&size=18&duration=2800&pause=900&color=34D399&center=true&vCenter=true&width=780&lines=29+visuals%2C+unlimited+variation.;Tap+T+on+beats%2C+%E2%87%A7T+on+downbeat+%C2%B7+auto+beat+detection;No+install.+No+backend.+Just+visuals." alt="27 visuals, unlimited variation. — Tap T on beats, ⇧T on downbeat · auto beat detection — No install. No backend. Just visuals."/>
 
 **[Open live demo](https://spectrumaura.org/)** · [Releases](https://github.com/danamini/spectrum-aura/releases) · [Changelog](CHANGELOG.md) · [MIDI setup](docs/midi.md) · [Docs](docs/README.md)
 
@@ -44,14 +44,14 @@ Depending on your hardware you may need to tune performance via the options in s
 - Browser-native real-time rendering with animated 3D scenes and post-processing.
 - Designed for live sessions: quick mode switching, keyboard-first controls, and preset slots.
 - **Musical sync:** experimental BPM detection, a 4/4 bar grid, manual beat/downbeat taps, and phrase-aware view cycling.
-- Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, Asset-Flow, Wiki-Chroma, Stage Lights, Outrun, Globe, Spectro-Tunnel, Fractal, and Black Hole.
+- Multiple visual personalities in one app: Combo, Classic, Ripple, Cyberpunk Data-Stream, Ethereal Nebula, Brutalist Monolith, Symmetric Mandala, Audio-Reactive Terrain, Obsidian Shard, Hyper-Torus Accelerator, Brutalist Sound-Wall, Floating Geometry Nebula, On-rails Tube, Asset-Flow, Wiki-Chroma, Stage Lights, Outrun, Globe, Spectro-Tunnel, Fractal, Black Hole, Neon City, Ocean, Night Wood, Desert, Station, Aurora, Hi-Fi, and Signal Lab.
 - Beat-aware motion and camera behavior that reacts to energy and musical phase, not just raw levels.
 - Works with microphone input or shared tab/system audio (whole-screen share with "Also share system audio" gives the best signal).
 - **Retro hardware emulation**: re-render any visual under a classic machine's real video limits — ZX Spectrum (genuine ROM font + attribute clash), Commodore 64, Game Boy, NES, CGA, Amstrad CPC, Amiga 500, MS-DOS EGA, VGA, Hercules, and Apple II — each with hi-res, system-font text, and low-res block-graphics modes, hardware borders, and matching scene palettes.
 - Classic CRT scanline and projector-film artifact passes, a **user-reorderable post-FX pipeline** (e.g. CRT scanlines over the emulated retro screen), and per-effect pins that protect a look from Randomize.
 - Movable overlay panels: drag the command bar, BPM grid, latency HUD, and stats panel anywhere; double-click to reset.
 - **Ambient mode** — no music needed: a synthetic, musically-structured groove (beat grid, builds, breakdowns) drives every visual, so the app works as a standalone screen background.
-- **MIDI input and mapping:** learn pads, knobs and sliders, combine multiple devices, monitor incoming values, and save mappings separately from visual looks.
+- **MIDI input and mapping:** learn pads, knobs and sliders, combine multiple devices, monitor incoming values, and save mappings separately from visual presets.
 - **External MIDI sync:** follow tempo, start/stop, continue and song position from one selected MIDI port. [Controller and Ableton setup](docs/midi.md).
 
 ## WebXR (Alpha)
@@ -71,6 +71,63 @@ Depending on your hardware you may need to tune performance via the options in s
 	<tr>
 		<td><img src="docs/screenshots/spectrum-aura-classic.png" alt="Spectrum Aura classic view" width="100%" /></td>
 		<td><img src="docs/screenshots/spectrum-auro-ripples.png" alt="Spectrum Aura ripple view" width="100%" /></td>
+	</tr>
+</table>
+
+### Scenes
+
+Captured from the app with music playing. Each of these ships as a preset, and a first visit plays through them, starting with Signal Lab, Hi-Fi and Tape Deck.
+
+<table>
+	<tr>
+		<td align="center"><img src="docs/screenshots/scene-signal-lab.jpg" alt="Spectrum Aura Signal Lab scene" width="100%" /><br /><sub>Signal Lab</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-hi-fi-rack.jpg" alt="Spectrum Aura Hi-Fi scene" width="100%" /><br /><sub>Hi-Fi</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-tape-deck.jpg" alt="Spectrum Aura Tape Deck scene" width="100%" /><br /><sub>Tape Deck</sub></td>
+	</tr>
+	<tr>
+		<td align="center"><img src="docs/screenshots/scene-outrun-sunset.jpg" alt="Spectrum Aura Outrun scene" width="100%" /><br /><sub>Outrun</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-neon-city.jpg" alt="Spectrum Aura Neon City scene" width="100%" /><br /><sub>Neon City</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-black-hole.jpg" alt="Spectrum Aura Black Hole scene" width="100%" /><br /><sub>Black Hole</sub></td>
+	</tr>
+	<tr>
+		<td align="center"><img src="docs/screenshots/scene-night-wood.jpg" alt="Spectrum Aura Night Wood scene" width="100%" /><br /><sub>Night Wood</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-space-station.jpg" alt="Spectrum Aura Station scene" width="100%" /><br /><sub>Station</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-spectro-tunnel.jpg" alt="Spectrum Aura Spectro-Tunnel scene" width="100%" /><br /><sub>Spectro-Tunnel</sub></td>
+	</tr>
+	<tr>
+		<td align="center"><img src="docs/screenshots/scene-fractal.jpg" alt="Spectrum Aura Fractal scene" width="100%" /><br /><sub>Fractal</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-globe.jpg" alt="Spectrum Aura Globe scene" width="100%" /><br /><sub>Globe</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-ocean-dusk.jpg" alt="Spectrum Aura Ocean scene" width="100%" /><br /><sub>Ocean</sub></td>
+	</tr>
+</table>
+
+The original views now sit in a world of their own (a starfield, a lit grid floor or falling data) instead of a black void:
+
+<table>
+	<tr>
+		<td align="center"><img src="docs/screenshots/scene-classic-bars.jpg" alt="Spectrum Aura Classic view" width="100%" /><br /><sub>Classic</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-mandala-bloom.jpg" alt="Spectrum Aura Mandala view" width="100%" /><br /><sub>Mandala</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-stage-lights.jpg" alt="Spectrum Aura Stage Lights view" width="100%" /><br /><sub>Stage Lights</sub></td>
+	</tr>
+	<tr>
+		<td align="center"><img src="docs/screenshots/scene-monolith-city.jpg" alt="Spectrum Aura Monolith view" width="100%" /><br /><sub>Monolith</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-nebula.jpg" alt="Spectrum Aura Nebula view" width="100%" /><br /><sub>Nebula</sub></td>
+		<td align="center"><img src="docs/screenshots/scene-torus.jpg" alt="Spectrum Aura Torus view" width="100%" /><br /><sub>Torus</sub></td>
+	</tr>
+</table>
+
+### Controls
+
+One settings panel beside the scene, presets as thumbnails, and search for everything else.
+
+<table>
+	<tr>
+		<td align="center"><img src="docs/screenshots/ui-settings-view.jpg" alt="Spectrum Aura settings panel open on the View section beside the Tape Deck scene" width="100%" /><br /><sub>Settings: view picker and this view's controls</sub></td>
+		<td align="center"><img src="docs/screenshots/ui-presets.jpg" alt="Spectrum Aura presets shown as a grid of thumbnails" width="100%" /><br /><sub>Presets: click a thumbnail to switch</sub></td>
+	</tr>
+	<tr>
+		<td align="center"><img src="docs/screenshots/ui-search.jpg" alt="Spectrum Aura search palette finding the Tape Deck view" width="100%" /><br /><sub>Search (<code>/</code>): views, presets, effects, settings</sub></td>
+		<td align="center"><img src="docs/screenshots/ui-keys.jpg" alt="Spectrum Aura keyboard shortcut sheet" width="100%" /><br /><sub>Keys (<code>?</code>): every shortcut on one sheet</sub></td>
 	</tr>
 </table>
 
@@ -96,10 +153,10 @@ incoming values. Learned controls remember their device and MIDI channel, so
 several controllers can work together without identical CC numbers colliding.
 
 - Sweep through scenes with a touch strip, or adjust bloom, hue and other FX.
-- Map pads to saved looks, beat/downbeat taps and randomisation. Use a **Load save**
-  destination when a pad should always recall a particular look.
+- Map pads to presets, beat/downbeat taps and randomisation. Use a **Load preset**
+  destination when a pad should always recall a particular preset.
 - Narrow or reverse a control's range. Enable **Pick-up** to avoid a slider
-  jumping to its physical position after loading a different look.
+  jumping to its physical position after loading a different preset.
 - Select **Tempo & transport source** to follow an external MIDI clock through
   Aura's existing SongClock. Live clips can also send notes and CC automation.
 
@@ -130,6 +187,15 @@ metadata are not implemented; external sync currently uses a 4/4 grid.
 - Spectro-Tunnel: demoscene tunnel whose walls are a live spectrogram receding into the distance.
 - Fractal: raymarched Mandelbulb that bends with the bass.
 - Black Hole: gravitationally lensed accretion disk made of live spectrogram, with a lensed starfield.
+- Neon City: night drive down an avenue of towers whose windows light as equalisers.
+- Ocean: dusk sea with spectrum-driven waves and a sun glitter path.
+- Night Wood: a night walk among procedurally grown trees with glowing canopies, fireflies and mist.
+- Desert: sundown road between spectrum-shaped dunes.
+- Station: space-station corridor of level-meter bays with beat-chasing lights.
+- Aurora: northern lights over a mountain lake, reflected in the water.
+- Hi-Fi: left and right needle VU meters, a 14-band segment spectrum analyser and a tempo tuner dial.
+- Tape Deck: a black cassette deck with a lit window onto turning silver reels and left/right bar meters, on a power amp with two large blue-lit watt meters.
+- Signal Lab: spectrum graph with named peaks, oscilloscope, spectrogram and live readouts.
 
 ### Beat, bars, and musical sync
 
@@ -184,33 +250,31 @@ Technical deep dive: [Song clock and sync](docs/song-clock-and-sync.md).
 
 ### Live controls
 
-- `−` / `+` calmer / punchier visual response (`=` also increases it)
-- `R` randomize look
-- `←` / `→` prev / next visual (`B` / `V` aliases)
-- `[` / `]` (or `⇧←` / `⇧→`) prev / next saved look
-- `A` play saved looks in rotation
-- `F` toggle fullscreen
-- `S` toggle settings panel
-- `X` open Input Source, stopping any current audio capture
-- `N` toggle stats panel; `Shift+N` toggle full-page stats
-- `G` show/hide shortcut bar (restores via `G` or the bottom pill)
-- `T` beat tap (learn tempo + lock grid)
-- `⇧T` downbeat tap (reset phrase to beat 1/16)
-- `M` toggle BPM & bar sync grid
-- `L` toggle latency HUD
-- `C` toggle music-reactive view cycle (every 4-bar phrase)
+- `←` / `→` previous / next view
+- `↑` / `↓` previous / next preset
+- `Space` play or pause the presets
+- `1`–`9` load a preset; `⇧1`–`⇧9` save over it
+- `R` randomize the look; `⇧R` jump to a random preset
+- `C` cycle views with the music; `D` Dynamic mode
+- `−` / `+` calmer / punchier
+- `T` tap the beat; `⇧T` tap bar 1
+- `F` fullscreen; `H` hide or show the controls; `P` effects on or off
+- `M` tempo and bar display; `L` latency display; `N` stats (`⇧N` full page)
+- `/` or `⌘K` search everything; `S` settings; `I` input source; `?` show all shortcuts
 
-Bottom shortcut rail:
+Older keys still work: `B` / `V`, `[` / `]`, `⇧←` / `⇧→`, `\`, `A`, `G`, `X`, `=`.
 
-- Visual cluster shows the active visual and whether it is in `3D` or `2D`.
-- `inc` toggles whether randomize touches view settings in addition to post FX.
-- `fx` toggles the post-processing pipeline.
-- Save controls are grouped like a transport cluster: previous, play saves, next, random, save, delete.
-- Panel cluster: Post FX, Scene, Settings, BPM Grid and Latency.
-- Utility cluster: Input Source, Fullscreen, Stats, FPS readout, Beat Tap and Hide Controls (`G`).
-- Styled tooltips stay open while live readouts update. Auto balance explains its behavior and current correction.
-- Save becomes **Saved** and disables when the displayed look already matches a save. Delete only applies to a matching saved look. Play Saves requires at least two saves.
-- Button groups, mini panels and Stats share the same translucent blur fill.
+On-screen toolbar:
+
+- **Visuals:** previous, randomize, next. The title opens the view picker.
+- **Presets:** previous, play or pause, next, save. The title opens the presets.
+- **Response:** the Calm–Punchy slider and Auto balance.
+- **More:** Settings, Search, Fullscreen, Displays (tempo grid, latency, stats, frame rate), Keys and Hide.
+- **Input Source** appears only while nothing is playing, and **Beat Tap** only while a source is playing and the tempo has not locked.
+
+Settings panel: one panel on the right with six sections (View, Effects, Scene, Audio, Presets, MIDI), a filter box for the open section, and the scene still visible beside it. Each view shows its first four controls with the rest under "More controls". Effects lists only the effects that are on, with an "Add an effect" list below; "Show every effect" restores the full list.
+
+Search (`/` or `⌘K`) finds any view, preset, effect, on/off setting, settings section or action by name.
 
 ### Response and automatic balance
 
@@ -221,7 +285,7 @@ This changes visual sensitivity without changing audio volume or beat detection.
 **Auto balance is on by default.** It watches the rendered scene and gradually
 adjusts brightness or boosts visual response after sustained low activity.
 The slider remains your baseline. Toggle Auto balance off to use manual control;
-your choice and Response survive reloads and switching saved looks.
+your choice and Response survive reloads and switching presets.
 
 Auto balance pauses in Performance Mode and VR. It reduces sampling frequency
 or pauses if canvas reads become costly. Corrections are bounded, so it cannot
@@ -235,11 +299,11 @@ light smoothing and adaptive ranges; numerical readings remain unchanged.
 Control panel additions:
 
 - Global `Wireframe` toggle in the View section that maps to the active view's wireframe setting (where supported).
-- `Post FX pipeline` master toggle in Post FX that bypasses all post-processing without changing individual effect settings.
-- `Randomize view settings` toggle in Post FX that keeps randomize constrained to post FX unless you explicitly enable view geometry changes.
+- `All effects` master toggle in Effects that bypasses all post-processing without changing individual effect settings.
+- `Randomize view settings` toggle in Effects that keeps randomize constrained to post FX unless you explicitly enable view geometry changes.
 - `Monolith Brightness` slider in Monolith view settings for direct lighting/visibility control.
 - `Dynamic Mode` toggle + drift amount: a few impactful settings per view slowly drift over musical phrases, bounded around your own values.
-- Dedicated `Saves` tab listing every saved look with focus/load/overwrite/delete controls.
+- Dedicated `Presets` section: a thumbnail grid of every preset. Click to switch; replace and delete appear on hover.
 - Asset-Flow controls for `Movement intensity`, `2D background amount`, and `2D background drift`.
 - Asset-Flow model motion is tuned for smoother 3D bounce with minimal lateral drift to avoid left/right flicker.
 - Asset-Flow layered 2D overlays now crossfade smoothly and bias transition timing toward detected beat intervals when BPM confidence is high.
@@ -258,7 +322,7 @@ Asset sources and licensing:
 - Post FX master pipeline bypass toggle
 - View-specific wireframe controls, plus a global wireframe toggle bound to the current view
 - Dedicated monolith brightness control
-- **Show BPM & bar grid** and **Show latency HUD** in Settings → Audio
+- **Tempo and bar display** and **Latency display** in Settings → Audio
 
 ## Presets
 
@@ -343,19 +407,19 @@ For a fuller local gate before pushing, run `npm run format` and `npm run build`
   - `TempoReadout.tsx` + `theme.ts`: Shared BPM display and design tokens
   - `store.ts`: Settings state management
   - `BarTimingHud.tsx`: BPM / bar grid HUD
-  - `ControlPanel.tsx`: Settings sheet and flyout tabs
+  - `ControlPanel.tsx`: Settings panel and its sections
   - `visuals.ts`: Canonical visual registry
   - `__tests__/`: Store, shortcuts, regression, preset/theme tests
   - `engine/`: Audio, SongClock, scene, post-processing
   - `engine/__tests__/`: Engine and sync invariant tests
-- `src/components/ui/`: Minimal shadcn surface (`label`, `sheet`, `slider`, `switch`)
+- `src/components/ui/`: Minimal shadcn surface (`label`, `slider`, `switch`)
 - `AGENTS.md`: Guide for Cursor / Claude coding agents
 - `docs/`: Technical documentation (see [docs/README.md](docs/README.md))
 - `docs/DEVELOPMENT.md`: Architecture and contribution guide
 
 ## Releases
 
-- Current version: **0.0.1** (see [`CHANGELOG.md`](CHANGELOG.md)).
+- The current version is on the release badge at the top of this page; changes are listed in [`CHANGELOG.md`](CHANGELOG.md).
 - Versioning follows [Semantic Versioning](https://semver.org/); each release is a Git tag `v<version>`.
 - A push of a `v*` tag triggers the **Release** workflow, which runs checks, builds, and publishes a GitHub Release (with notes from the changelog and a packaged `dist`).
 - Full process and commands: [`docs/RELEASING.md`](docs/RELEASING.md).

@@ -27,7 +27,7 @@ export const MIDI_TARGETS = [
   { id: "randomFx", label: "Randomize FX", continuous: false, note: MIDI_NOTE_RANDOMIZE_FX },
   ...Array.from({ length: MIDI_SLOT_COUNT }, (_, i) => ({
     id: `slot${i}`,
-    label: `Load save ${i + 1}`,
+    label: `Load preset ${i + 1}`,
     continuous: false,
     note: MIDI_NOTE_SLOT_BASE + i,
   })),

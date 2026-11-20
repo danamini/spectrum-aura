@@ -59,6 +59,25 @@ describe("visual response", () => {
     response.apply(input, target, 2);
     expect(target.bins).toHaveLength(8);
   });
+  it("drops the waveform when the next source has none", () => {
+    const response = new VisualResponse();
+    const target = source();
+    const live = { ...source(), wave: new Uint8Array(4), kick: 0.5 };
+    response.apply(
+      { ...live, stereo: { left: new Uint8Array(4), right: new Uint8Array(4) } },
+      target,
+      1,
+    );
+    expect(target.wave).toBe(live.wave);
+    expect(target.stereo).toBeDefined();
+
+    // The synthetic ambient source carries no waveform at all.
+    response.apply(source(), target, 1);
+    expect(target.wave).toBeUndefined();
+    expect(target.stereo).toBeUndefined();
+    expect(target.kick).toBeUndefined();
+  });
+
   it("normalizes corrupt persisted values", () => {
     expect(normalizeVisualResponse(NaN)).toBe(1);
     expect(normalizeVisualResponse(Infinity)).toBe(1);

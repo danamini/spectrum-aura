@@ -14,6 +14,13 @@ export class VisualResponse {
 
   apply(source: AudioBands, target: AudioBands, response: number): void {
     Object.assign(target, source);
+    // Optional fields a source may not carry at all (the ambient source has
+    // no waveform): copy them explicitly so a stale buffer is never left over
+    // from the previous source.
+    target.kick = source.kick;
+    target.wave = source.wave;
+    target.stereo = source.stereo;
+    target.display = source.display;
     // Visuals follow the fast-attack spectrum when the engine provides one;
     // the detector-facing fields on `source` are left untouched.
     const shown = source.display ?? source;

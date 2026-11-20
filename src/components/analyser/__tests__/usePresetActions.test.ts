@@ -41,9 +41,10 @@ describe("usePresetActions store integration", () => {
     vi.resetModules();
     installStorageMock();
     localStorage.setItem("analyser-slots-v1", "[]");
+    localStorage.setItem("analyser-default-saves-version", "3");
   });
 
-  it("saveNew appends Save N slots in order", async () => {
+  it("appends a new preset after the existing ones", async () => {
     const { settingsStore } = await import("../store");
 
     settingsStore.saveSlot(0, "First");
@@ -52,7 +53,7 @@ describe("usePresetActions store integration", () => {
 
     const slots = settingsStore.getSlots();
     expect(slots).toHaveLength(2);
-    expect(slots[1]?.name).toBe("Save 2");
+    expect(slots[1]?.name).toBe(`Save ${index + 1}`);
   });
 
   it("clearSlot clamps cursor like deleteFocused", async () => {

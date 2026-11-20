@@ -11,6 +11,164 @@ presets) may change between minor versions.
 
 _Nothing yet._
 
+## [0.6.0] - 2026-11-20
+
+### Added
+
+- Three instrument scenes (30 visuals):
+  - **Hi-Fi** — a rack of seventies separates: two moving-coil VU meters whose
+    needles swing with real weight, a 14-band fluorescent spectrum analyser
+    with falling peak-hold segments, and a tuner whose dial pointer finds the
+    tempo.
+  - **Signal Lab** — a bench of test instruments: a log-frequency spectrum
+    with its strongest peaks named by frequency and note, a triggered
+    oscilloscope, a scrolling spectrogram, each band drawn as a travelling
+    wave with its wavelength in air, and readouts for tempo, dominant pitch,
+    level and crest factor.
+  - **Tape Deck** — a second hi-fi stack, in black. A cassette deck laid out
+    like a late-eighties front-loader: a dark door with a lit window onto the
+    cassette's turning silver reels, an orange tape counter, left and right
+    bar level meters, soft-touch transport keys and a large record-level
+    knob. The reels turn while there is signal, the tape pack moving from one
+    hub to the other and reversing at the end of the side; the transport
+    pauses in silence. Under the deck sits a power amplifier with left and
+    right pale-blue dials on a watts scale.
+- **Stereo meters.** Hi-Fi's two VU needles and Tape Deck's bars and dials are
+  left and right channel meters. A stereo source (shared system or tab
+  audio, or a stereo input device) drives each side separately; a mono
+  source moves both together. Hi-Fi's needles share one slowly adapting
+  reference, so music swings them toward 0 VU at any input level while the
+  difference between the channels is kept.
+- Hi-Fi, Tape Deck and Signal Lab measure the spectrum as captured, before
+  Dynamic contrast reshapes it for drawing, so a held note stays on the
+  analyser and keeps its pitch readout.
+- `AudioBands.stereo`: left and right time-domain samples from two extra
+  analyser taps, for stereo meters. Presentation only, and absent until the
+  right channel has carried signal. The microphone is now asked for two
+  channels where the device has them.
+- **Scene backdrop** (Settings → Scene, default 0.8): the sixteen original
+  views no longer float in a black void. Each sits in a starfield with
+  drifting nebula, on a lit grid floor running to a horizon with a ring of
+  light crossing it on the beat, or inside falling data. Set to 0 for the
+  plain background.
+- Bundled presets rebuilt as 35 named presets with thumbnails: one for each of the
+  14 newer scenes, a clean preset for each of 11 original views, and the 10
+  best of the older saves. A first visit plays through them, starting with
+  Signal Lab, Hi-Fi and Tape Deck, until a preset is chosen by hand. People with an existing saved list
+  keep it and get the new presets appended once.
+- `npm run capture:looks -- track.wav` regenerates the preset thumbnails and
+  docs screenshots from the running app (needs a Chromium-based browser).
+- Six new scenes:
+  - **Night Wood** — a walk through a wood at night, its trees grown by the
+    same species recursion as the forest-world-builder project. Each canopy
+    glows with its own slice of the spectrum, with wind, fireflies and mist
+    following the mids, highs and bass, and a head-bob on the beat.
+  - **Desert** — a road at sundown between dunes shaped by the spectrum, with
+    telegraph poles ticking past and a sun that swells on the kick.
+  - **Station** — a flight down a space-station corridor whose wall bays are
+    level meters, with a chaser of light thrown down the ceiling each beat.
+  - **Aurora** — northern lights over a mountain lake, the curtains'
+    brightness following the spectrum across the sky and mirrored in the water.
+  - **Neon City** — a night drive down an avenue where every tower is an
+    equaliser, its windows lighting floor by floor with its own slice of the
+    spectrum. The city scrolls at the track's tempo and a wave of light climbs
+    the towers on each beat.
+  - **Ocean** — a sea at dusk: swell, waves and chop follow bass, mids and
+    highs, ripples of recent spectrum roll in from the horizon, and the sun's
+    glitter path brightens with the kick.
+
+### Changed: controls
+
+- **One settings panel** instead of two. View, Effects, Scene, Audio, Presets
+  and MIDI are sections of a single panel on the right, narrow enough that
+  the scene stays visible while you tune it. `S` reopens the last section.
+- **Slimmer toolbar:** 20 buttons down to 13 in four groups (Visuals, Presets,
+  Response, More). Tempo grid, latency, stats and frame rate sit behind one
+  Displays button. Input Source shows only while nothing is playing, and Beat
+  Tap only while the tempo has not locked.
+- **Search everything** (`/` or `⌘K`): find any view, preset, effect,
+  on/off setting, settings section or action by name.
+- **Keys you can guess**, with every old key still working: `←` `→` views,
+  `↑` `↓` presets, `Space` play or pause, `1`–`9` presets, `H` hide, `I` input,
+  `D` Dynamic mode, `P` effects. `?` shows them all on one sheet.
+- **Context-sensitive settings:** each view shows its four main controls with
+  the rest under "More controls"; Effects lists only what is on, with an
+  "Add an effect" list; a filter box narrows the open section.
+- **Reactivity** group under Audio gathers the four controls that decide how
+  much the picture moves, with a line on what each is for.
+- **Stats for nerds** opens with four verdicts (frame rate, input, added
+  delay, tempo) that say whether anything is wrong and what to do about it.
+  It gains a Tempo & sync section, readable units (levels in percent,
+  brightness in Hz), hover explanations, folding sections that remember their
+  state, and a button that copies the readings as text for a bug report.
+  Overlay credits appear only while an overlay effect is on.
+- **Real 3D controls on Hi-Fi and Tape Deck.** In 3D mode the knobs, transport
+  keys, push buttons and sockets are raised geometry standing off the
+  faceplate, lit from the upper left, so they show depth as the camera leans.
+  2D mode stays a flat printed panel.
+- **Hi-Fi, Tape Deck and Signal Lab have a 2D mode** that holds the panel still and
+  square to the screen; 3D keeps the slight drift and mouse lean.
+- **Changed settings are marked.** A slider or switch moved off its default
+  shows an amber dot; clicking the dot returns it to the default. "Reset this
+  view" appears under a view's settings when any have changed, and resets
+  exactly the controls that view shows.
+- **The settings filter spans every section** and matches switches as well as
+  sliders. From the search palette, "Find … in settings" hands the query over.
+- **Touch screens** get a toolbar without key caps or the shortcut sheet,
+  and a phone, upright or on its side, gets a single row of six buttons
+  (seven until an input is chosen).
+- Combo and Ripple lead with their most useful controls.
+- **Saved looks are now called presets** everywhere (toolbar, panel tab, keys,
+  search). A new preset is named for what it
+  shows ("Outrun", "Outrun · Kaleidoscope", then "Outrun 2"), saving over one
+  keeps its name, and deleting one no longer renumbers the rest.
+- **Presets are a grid of thumbnails.** Click one to switch to it; replace and
+  delete appear on hover. The separate "focus" step, the three focus buttons
+  and "Overwrite focused" are gone.
+- Shortcuts respect keyboard layouts: a typed digit always loads a preset, and
+  where Shift+7 types `/` it opens search instead of saving over preset 7.
+- Nothing changes behind the search palette or the key sheet while either is
+  open, and Esc closes them wherever the focus is.
+- A first visit stops playing through the presets as soon as the visitor
+  changes the picture, so the change is not undone a few seconds later.
+- A first visit shows one line pointing at `?` and `/`, which goes away once
+  dismissed or once either is used.
+- "Randomize effects on each switch" now sits inside "Cycle views with the
+  music", since it only applies while cycling.
+- View order: Signal Lab first, then the other scenes, then the original views.
+
+### Changed: visuals
+
+- **Dynamic contrast** (Settings → Audio, default 0.55): every view now
+  shows each band relative to its own recent range. Mastered music keeps the
+  spectrum at 60–90% with a few percent of movement, which pinned most views
+  near maximum; a kick now reads as a full-height hit on loud and quiet tracks
+  alike. It fades out on quiet input, so room noise is not stretched into
+  full-height movement, and the meter-style scenes (Station, Neon City,
+  Ocean, Desert, Aurora) read from the noise floor, so a quiet room looks
+  quiet. Set to 0 for the previous raw levels.
+- **Mandala** draws mirrored petals in two tiers with full radial symmetry,
+  instead of a spray of spokes. Its "lines" setting now counts petals.
+- **Stage Lights** opens with seven fixtures and the laser fan on.
+- **Ripple** is framed closer and lit by its wave: crests glow and troughs
+  fall dark, where it used to blow out to white.
+- Original views reviewed against a real track:
+  - **Geo Nebula** no longer washes out to white at real levels.
+  - **Mandala** faces the camera; it was drawn edge-on, as a line.
+  - **Monolith** towers are shorter, coloured by the palette across the
+    spectrum, and viewed from outside the grid in the default camera.
+  - **Torus** has a visible glowing wire body.
+  - **Nebula** is larger and swells with the bass; **Stage Lights** beams are
+    brighter; **Asset-Flow**'s base disk and background layers no longer
+    drown the models.
+
+### Fixed
+
+- Bundled presets showed "no img": they shipped without thumbnails. Every
+  bundled preset now has one, and presets already in a stored list pick theirs up.
+- The input-source prompt highlighted the recommended option in the same green
+  as the active one. Green now marks only the source that is running.
+
 ## [0.5.0] - 2026-11-19
 
 ### Added
@@ -386,7 +544,8 @@ Three.js, and Vite — no backend, no upload flow.
 - `npm run check` runs typecheck + lint + tests; strict TypeScript
   (`noUnusedLocals` / `noUnusedParameters`) enabled.
 
-[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/danamini/spectrum-aura/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/danamini/spectrum-aura/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danamini/spectrum-aura/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/danamini/spectrum-aura/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/danamini/spectrum-aura/compare/v0.2.0...v0.3.0

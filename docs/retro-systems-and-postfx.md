@@ -12,19 +12,19 @@ in `src/components/analyser/ControlPanel.tsx` and
 machine's video constraints. It runs near the end of the chain (before ASCII
 by default) so every other effect feeds its virtual framebuffer.
 
-| Mode | System       | Native grid | Colour rules                                                        |
-| ---- | ------------ | ----------- | ------------------------------------------------------------------- |
-| 0    | ZX Spectrum  | 256×192     | 15 colours; 8×8 attribute cells → 1 ink + 1 paper sharing BRIGHT    |
-| 1    | Commodore 64 | 160×200¹    | Pepto 16-colour palette; 4×8 cells limited to 4 colours (multicolor)|
-| 2    | Game Boy     | 160×144     | 4 DMG greens by luminance                                           |
-| 3    | NES          | 256×240     | 12 hues × 4 value tiers + greys (PPU-structure approximation)       |
-| 4    | CGA PC       | 320×200     | Palette 1 high intensity: black/cyan/magenta/white                  |
-| 5    | Amstrad CPC  | 160×200¹    | 27-colour master palette (3 levels per channel)                     |
-| 6    | Amiga 500    | 320×256     | Fixed 32-entry Deluxe-Paint-style palette (OCS "32 from 4096")      |
-| 7    | MS-DOS EGA   | 320×200     | Standard EGA 16 (0xAA primaries, brown exception, brights)          |
-| 8    | VGA 256      | 320×200     | Default mode-13h structure: 16 greys + 24 hues × 3 sat × 3 value    |
-| 9    | Hercules     | 720×348     | 1-bit green phosphor, ordered-dither halftone                       |
-| 10   | Apple II     | 280×192     | Black, white + 4 NTSC artifact colours                              |
+| Mode | System       | Native grid | Colour rules                                                         |
+| ---- | ------------ | ----------- | -------------------------------------------------------------------- |
+| 0    | ZX Spectrum  | 256×192     | 15 colours; 8×8 attribute cells → 1 ink + 1 paper sharing BRIGHT     |
+| 1    | Commodore 64 | 160×200¹    | Pepto 16-colour palette; 4×8 cells limited to 4 colours (multicolor) |
+| 2    | Game Boy     | 160×144     | 4 DMG greens by luminance                                            |
+| 3    | NES          | 256×240     | 12 hues × 4 value tiers + greys (PPU-structure approximation)        |
+| 4    | CGA PC       | 320×200     | Palette 1 high intensity: black/cyan/magenta/white                   |
+| 5    | Amstrad CPC  | 160×200¹    | 27-colour master palette (3 levels per channel)                      |
+| 6    | Amiga 500    | 320×256     | Fixed 32-entry Deluxe-Paint-style palette (OCS "32 from 4096")       |
+| 7    | MS-DOS EGA   | 320×200     | Standard EGA 16 (0xAA primaries, brown exception, brights)           |
+| 8    | VGA 256      | 320×200     | Default mode-13h structure: 16 greys + 24 hues × 3 sat × 3 value     |
+| 9    | Hercules     | 720×348     | 1-bit green phosphor, ordered-dither halftone                        |
+| 10   | Apple II     | 280×192     | Black, white + 4 NTSC artifact colours                               |
 
 ¹ fat multicolor pixels — authentic for those machines.
 
@@ -62,7 +62,7 @@ pixel against the cell's ink and paper; ordered (Bayer) dither only engages
 near the decision boundary, scaled by the user's dither setting. Solid areas
 must stay solid — full-field dithering reads as noise, not clash. Near-black
 paper snaps to true black (dark scenes are ink-on-black on real hardware).
-The composer drives a *gentle* beat gain (±0.12) — larger swings re-flip
+The composer drives a _gentle_ beat gain (±0.12) — larger swings re-flip
 quantization thresholds every kick and look like sparkle noise.
 
 ## Post-FX pipeline order

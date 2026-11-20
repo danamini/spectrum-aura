@@ -43,10 +43,11 @@ describe("analyser store slot bootstrap", () => {
     const slots = settingsStore.getSlots();
 
     expect(slots).toHaveLength(SLOT_COUNT);
-    expect(slots[0]?.name).toBe("Slot 1");
-    expect(slots[1]?.name).toBe("Slot 2");
-    expect(slots[2]?.name).toBe("Slot 3");
-    expect(slots[3]?.name).toBe("Save 1");
+    // Every bundled look has a real, unique name; none is an auto-numbered save.
+    expect(slots[0]?.name).toBe("Signal Lab");
+    const names = slots.map((slot) => slot.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names.some((name) => /^(Slot|Save)\s+\d+$/.test(name))).toBe(false);
   });
 
   it("uses localStorage slots when present", async () => {
@@ -54,6 +55,7 @@ describe("analyser store slot bootstrap", () => {
       SLOTS_KEY,
       JSON.stringify([{ name: "My Override", settings: { view: "classic", barCount: 72 } }, null]),
     );
+    localStorage.setItem("analyser-default-saves-version", "3");
 
     const { settingsStore } = await import("../store");
 
@@ -313,7 +315,11 @@ describe("analyser store utility functions", () => {
     const state = settingsStore.get();
 
     expect(state.view).not.toBe("classic");
-    expect(state.assetOverlayBias).toBe("organic");
+    // Whichever view the cycle lands on, its own bias is applied.
+    const { VISUALS } = await import("@spectrum-aura/engine/visuals");
+    const next = VISUALS.find((visual) => visual.id === state.view)!;
+    expect(next.overlayBiasDefault).toBeTruthy();
+    expect(state.assetOverlayBias).toBe(next.overlayBiasDefault);
 
     randomSpy.mockRestore();
   });

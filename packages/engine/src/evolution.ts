@@ -67,6 +67,33 @@ export const EVOLUTION_TARGETS: Partial<Record<ViewMode, EvolutionTarget[]>> = {
     { key: "spectrotunnelTwist", min: -3, max: 3 },
     { key: "spectrotunnelSpeed", min: 0.4, max: 2.5 },
   ],
+  neoncity: [
+    { key: "neoncitySpeed", min: 0.4, max: 2.2 },
+    { key: "neoncityDensity", min: 0.3, max: 0.95 },
+  ],
+  ocean: [
+    { key: "oceanAmplitude", min: 0.4, max: 2 },
+    { key: "oceanSpeed", min: 0.4, max: 2 },
+  ],
+  nightwood: [
+    { key: "nightwoodAmplitude", min: 0.4, max: 2 },
+    { key: "nightwoodFireflies", min: 0.3, max: 1 },
+  ],
+  desert: [
+    { key: "desertAmplitude", min: 0.4, max: 2.2 },
+    { key: "desertSpeed", min: 0.4, max: 2.2 },
+  ],
+  station: [
+    { key: "stationSpeed", min: 0.4, max: 2.4 },
+    { key: "stationAmplitude", min: 0.5, max: 1.8 },
+  ],
+  hifi: [{ key: "hifiAmplitude", min: 0.7, max: 1.5 }],
+  lab: [{ key: "labAmplitude", min: 0.7, max: 1.6 }],
+  tapedeck: [{ key: "tapedeckAmplitude", min: 0.7, max: 1.5 }],
+  aurora: [
+    { key: "auroraRays", min: 0.2, max: 1 },
+    { key: "auroraAmplitude", min: 0.5, max: 2 },
+  ],
   blackhole: [
     { key: "blackholeTilt", min: 3, max: 28 },
     { key: "blackholeSpin", min: 0.4, max: 2.2 },

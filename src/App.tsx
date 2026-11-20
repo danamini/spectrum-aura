@@ -1,3 +1,5 @@
+import { CommandPalette } from "./components/analyser/CommandPalette";
+import { CheatSheet } from "./components/analyser/CheatSheet";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { APP_BACKGROUND } from "@/components/analyser/theme";
 
@@ -26,6 +28,8 @@ export function App() {
           <Analyser />
           <ControlPanel />
           <Shortcuts />
+          <CommandPalette />
+          <CheatSheet />
         </Suspense>
       )}
     </main>

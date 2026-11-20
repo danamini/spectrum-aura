@@ -16,6 +16,9 @@ const SESSION_KEYS = [
   "visualResponse",
   "autoBalanceEnabled",
 ] as const satisfies readonly (keyof Settings)[];
+const sessionKeys = new Set<string>(SESSION_KEYS);
+/** True for controls that are about the session, not the picture on screen. */
+export const isSessionKey = (key: string) => sessionKeys.has(key);
 const ignoredKeys = new Set<keyof Settings>([...SESSION_KEYS, "activePreset"]);
 const lookKeys = (Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]).filter(
   (key) => !ignoredKeys.has(key),

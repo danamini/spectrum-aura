@@ -31,32 +31,32 @@ construction of the existing views (SA-PERF-02) would save about 10 ms of
 startup and was left alone.
 
 - [x] SA-PERF-03: Asset-Flow loads only the model it displays. Every actor
-  shares one model per build, but all twelve GLBs were fetched and parsed.
-  Measured on activation: 12 requests / 71.3 MB → 1 request / 11.9 MB (at most
-  13.5 MB, the largest file); peak JS heap 203 MB → 97 MB (one run each; the
-  model is chosen at random). Templates and actor clones are now disposed on
-  rebuild and teardown. A missing file falls through to the next path.
+      shares one model per build, but all twelve GLBs were fetched and parsed.
+      Measured on activation: 12 requests / 71.3 MB → 1 request / 11.9 MB (at most
+      13.5 MB, the largest file); peak JS heap 203 MB → 97 MB (one run each; the
+      model is chosen at random). Templates and actor clones are now disposed on
+      rebuild and teardown. A missing file falls through to the next path.
 - [x] SA-PERF-04: Removed per-frame allocations in Obsidian (two `Vector3`
-  clones per shard), Asset-Flow (`Color` clones per actor and sprite) and the
-  fog colour (a CSS colour parse every frame). Not separately measured; these
-  views were already under 0.1 ms per update.
+      clones per shard), Asset-Flow (`Color` clones per actor and sprite) and the
+      fog colour (a CSS colour parse every frame). Not separately measured; these
+      views were already under 0.1 ms per update.
 - [x] SA-LAT-01: Fast-attack display spectrum behind **Low-latency audio**.
-  Figures and method are in
-  [rendering-and-latency.md](../rendering-and-latency.md#display-ballistics-low-latency-audio).
-  The first hypothesis (a 58 ms half-rise from 0.82 smoothing) was wrong: dB
-  scaling compresses a loud step into one frame, so the measured gain is
-  0–48 ms depending on level.
+      Figures and method are in
+      [rendering-and-latency.md](../rendering-and-latency.md#display-ballistics-low-latency-audio).
+      The first hypothesis (a 58 ms half-rise from 0.82 smoothing) was wrong: dB
+      scaling compresses a loud step into one frame, so the measured gain is
+      0–48 ms depending on level.
 - [x] SA-PERF-05: New views (Outrun, Globe, Spectro-Tunnel, Fractal) are built
-  on first activation and disposed after 90 s off-screen.
+      on first activation and disposed after 90 s off-screen.
 - [ ] SA-PERF-06: Fractal cost is per pixel and has only been measured on an
-  M5 Pro (display rate at 1280×720, 64 steps). Measure on integrated graphics
-  and at device pixel ratio 2; consider rendering it at reduced resolution.
+      M5 Pro (display rate at 1280×720, 64 steps). Measure on integrated graphics
+      and at device pixel ratio 2; consider rendering it at reduced resolution.
 - [ ] SA-LAT-02: The microphone constraint change (no echo cancellation or
-  noise suppression in low-latency mode) is covered by a unit test of the
-  request only. Check level and latency with a real microphone.
+      noise suppression in low-latency mode) is covered by a unit test of the
+      request only. Check level and latency with a real microphone.
 - [ ] SA-PERF-07: Asset-Flow and Wiki-Chroma keep their loaded models and
-  textures after the view is left. Moving them onto the lazy-view lifecycle
-  would release them after the idle window.
+      textures after the view is left. Moving them onto the lazy-view lifecycle
+      would release them after the idle window.
 
 ### Existing-view review
 
@@ -68,11 +68,11 @@ not follow the spectrum). Judged from screenshots on the ambient source, not
 on recorded music.
 
 - [ ] SA-VIS-01: Wiki-Chroma, Stage Lights and Asset-Flow read as dim and
-  small in frame at ambient level; Classic shows mostly peak caps when quiet.
-  Review with real music before changing — they may be fine at normal levels.
+      small in frame at ambient level; Classic shows mostly peak caps when quiet.
+      Review with real music before changing — they may be fine at normal levels.
 - [ ] SA-VIS-02: The Torus glass shell (`transmission` material) is created
-  hidden and its per-cell clones do not show; decide whether to give the ring
-  a visible body or remove the shell.
+      hidden and its per-cell clones do not show; decide whether to give the ring
+      a visible body or remove the shell.
 
 ### Tempo and sync, 19 November 2026
 
@@ -92,18 +92,88 @@ reference does not list (several look like returns after short breaks; not
 verified by ear).
 
 - [ ] SA-SYNC-01: Thresholds were fitted on four tracks, one of them heavily.
-  Validate by ear and on more material: swing, live drummers, sparse or
-  beatless intros, jungle (2 of 6 section starts found), and bass-heavy
-  tracks where the kick does not dominate.
+      Validate by ear and on more material: swing, live drummers, sparse or
+      beatless intros, jungle (2 of 6 section starts found), and bass-heavy
+      tracks where the kick does not dominate.
 - [ ] SA-SYNC-04: The microphone path keeps browser auto-gain on, which
-  compresses the level changes detection relies on. The first real-audio run
-  (auto-gain on, old thresholds) found no events; the two were not separated.
-  Test with auto-gain off in low-latency mode.
+      compresses the level changes detection relies on. The first real-audio run
+      (auto-gain on, old thresholds) found no events; the two were not separated.
+      Test with auto-gain off in low-latency mode.
 - [ ] SA-SYNC-02: Tempos under 80 BPM fold to double by design (72 reads as
-  144); decide whether the phrase should then be 32 clock beats.
+      144); decide whether the phrase should then be 32 clock beats.
 - [ ] SA-SYNC-03: A drop is anchored one beat after it lands, so
-  `phraseJustStarted` does not fire on it and view cycling waits a phrase.
-  Consider letting the view cycle react to `phraseChangeDetected`.
+      `phraseJustStarted` does not fire on it and view cycling waits a phrase.
+      Consider letting the view cycle react to `phraseChangeDetected`.
+
+### Original-view review on real music, 19 November 2026
+
+All 16 original views were captured twice each, 0.7 s apart, while a recorded
+track played through the app. The shared fault was saturation: real spectra
+sit high and steady, so level-to-size mappings were pinned. Fixed with
+`spectrum-contrast.ts` (presentation only) plus per-view repairs listed in the
+changelog. Judged from stills, one track, one palette.
+
+- [ ] SA-VIS-03: Ripple's ring radius grows with level and can engulf the
+      default camera on loud passages; give it a level cap or pull the camera back.
+- [ ] SA-VIS-04: Datastream, Wiki-Chroma and Rez Tube were left as they are;
+      they read as static or small in stills and want a look in motion.
+- [ ] SA-VIS-05: Dynamic contrast changes every view's response. Confirm 0.55
+      is the right default across genres, and that quiet passages still feel quiet.
+
+### Instrument scenes and quiet input, 20 November 2026
+
+Hi-Fi and Signal Lab draw with the 2D canvas API into one 1920×1080 texture
+(`views/instrument-panel.ts`); 120 fps on an M-series GPU. Checked on one
+track and on −50 dBFS noise, from stills.
+
+- [x] SA-VIS-06: Hi-Fi's VU meters and Tape Deck's bars and dials are true
+      left/right meters, from a channel splitter and two analyser taps in
+      `audio.ts` (`AudioBands.stereo`).
+- [ ] SA-VIS-15: The instrument views (Hi-Fi, Tape Deck, Signal Lab) allocate
+      a little every frame (cache-key strings, small arrays, canvas gradients,
+      seven-segment stroke lists) and upload a 1920×1080 canvas texture each
+      frame. Measured at 113–118 fps with a 4× CPU slowdown, so not urgent;
+      pool these if a slower device shows frame drops.
+- [ ] SA-VIS-16: Instrument panels are not placed for a headset. In XR
+      `frameCamera` returns early and the 16×9 panel stays at the origin.
+- [ ] SA-VIS-07: The tempo detector locks onto steady room noise (about 92–96
+      BPM on the noise file), so Hi-Fi's LOCK lamp and Signal Lab's tempo
+      light up with nothing playing. Needs a loudness gate in the detector.
+- [ ] SA-VIS-08: Ocean, Datastream, Rez Tube, Mandala and Fractal look much
+      the same on quiet input and on music in stills; judge in motion.
+- [ ] SA-VIS-09: The instrument canvas uploads about 8 MB a frame. Measure on
+      a weak GPU and an integrated-graphics laptop; halve the canvas if needed.
+- [ ] SA-VIS-10: The analyser's dB lettering and the lab's 0–100 scale are
+      relative, since Dynamic contrast reshapes levels before the views.
+
+### Original views and bundled looks, 20 November 2026
+
+- [ ] SA-VIS-11: Ripple is a row of pulsing cylinders, not ripples. A true
+      concentric-ring version would need per-ring radius in `updateRipple`.
+- [ ] SA-VIS-12: Rez Tube, Asset-Flow, Datastream, Wiki-Chroma, Obsidian and
+      Geo Nebula gained only the backdrop this round; their own geometry is
+      unchanged.
+- [ ] SA-VIS-13: The backdrop also draws behind the 2D fullscreen variants and
+      over unusual background colours; check those combinations by eye.
+- [ ] SA-VIS-14: First-visit look rotation stays on across visits until a look
+      is picked by hand. Confirm that is the wanted behaviour.
+
+### Controls and usability, 20 November 2026
+
+- [ ] SA-UX-01: MIDI mapping and the MIDI section were not exercised after the
+      panel merge and toolbar change (the controller is on another machine).
+      Check learn, mapped actions and "Use MIDI controller" from the prompt.
+- [x] SA-UX-02: No "changed from default" marker or per-section reset yet. The
+      slider primitive does not know its setting key, so this needs the key
+      passed in.
+- [x] SA-UX-03: The search palette finds on/off settings but not sliders; a
+      slider registry would let it jump to any control.
+- [x] SA-UX-04: "Headline" controls are the first four in each view's list.
+      Review the order per view so the four that matter most lead.
+- [ ] SA-UX-05: The mobile layout (bottom tab bar, full-screen panel) and the
+      in-headset XR flow were not checked after the merge.
+- [ ] SA-UX-06: `EFFECT_ROWS` in `ControlPanel.tsx` repeats the effect list
+      for the "Add an effect" chips; derive it from one registry.
 
 ## Verification and limits
 

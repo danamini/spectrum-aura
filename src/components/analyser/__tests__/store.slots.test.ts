@@ -16,10 +16,11 @@ describe("settingsStore slots", () => {
     const slots = settingsStore.getSlots();
 
     expect(slots).toHaveLength(SLOT_COUNT);
-    expect(slots[0]?.name).toBe("Slot 1");
-    expect(slots[1]?.name).toBe("Slot 2");
-    expect(slots[2]?.name).toBe("Slot 3");
-    expect(slots[3]?.name).toBe("Save 1");
+    // Every bundled look has a real, unique name; none is an auto-numbered save.
+    expect(slots[0]?.name).toBe("Signal Lab");
+    const names = slots.map((slot) => slot.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names.some((name) => /^(Slot|Save)\s+\d+$/.test(name))).toBe(false);
   });
 
   it("uses localStorage slots when present", async () => {
@@ -27,6 +28,7 @@ describe("settingsStore slots", () => {
       SLOTS_KEY,
       JSON.stringify([{ name: "My Override", settings: { view: "classic", barCount: 72 } }, null]),
     );
+    localStorage.setItem("analyser-default-saves-version", "3");
 
     const { settingsStore } = await import("../store");
 
@@ -86,14 +88,26 @@ describe("settingsStore slots", () => {
     expect(state.slotCycleSeconds).toBe(8);
   });
 
-  it("appends new saves beyond the deployment defaults", async () => {
+  it("names a new preset for what it shows", async () => {
     const { settingsStore, SLOT_COUNT } = await import("../store");
 
-    settingsStore.saveSlot(SLOT_COUNT, "Save 6");
+    settingsStore.set({ view: "classic", gain: 1.3 });
+    settingsStore.saveSlot(SLOT_COUNT);
 
     const slots = settingsStore.getSlots();
     expect(slots).toHaveLength(SLOT_COUNT + 1);
-    expect(slots.at(-1)?.name).toMatch(/^Save\s+\d+$/);
+    expect(slots.at(-1)?.name).toMatch(/^Classic/);
+    expect(new Set(slots.map((slot) => slot.name)).size).toBe(slots.length);
+  });
+
+  it("keeps a preset's name when it is saved over", async () => {
+    const { settingsStore } = await import("../store");
+
+    const before = settingsStore.getSlots()[2].name;
+    settingsStore.set({ gain: 1.3 });
+    settingsStore.saveSlot(2);
+
+    expect(settingsStore.getSlots()[2].name).toBe(before);
   });
 
   it("removes cleared saves instead of leaving empty placeholders", async () => {
@@ -106,30 +120,18 @@ describe("settingsStore slots", () => {
     expect(slots.every((slot) => slot != null)).toBe(true);
   });
 
-  it("reindexes auto-generated slot names after deleting a slot", async () => {
-    const { settingsStore } = await import("../store");
-
-    settingsStore.clearSlot(1);
-
-    const names = settingsStore.getSlots().map((slot) => slot.name);
-    expect(names[0]).toBe("Slot 1");
-    expect(names[1]).toBe("Slot 2");
-    expect(names[2]).toMatch(/^Save\s+\d+$/);
-    expect(names).not.toContain("Slot 3");
-  });
-
-  it("keeps custom save names while reindexing generated save names", async () => {
+  it("leaves the other names alone when a preset is deleted", async () => {
     const { settingsStore, SLOT_COUNT } = await import("../store");
 
-    settingsStore.saveSlot(0, "My Favorite");
-    settingsStore.saveSlot(SLOT_COUNT, "Save 6");
+    settingsStore.saveSlot(SLOT_COUNT, "Save 35");
+    settingsStore.set({ gain: 1.7 });
+    settingsStore.saveSlot(SLOT_COUNT + 1, "Save 36");
+    const before = settingsStore.getSlots().map((slot) => slot.name);
     settingsStore.clearSlot(1);
 
     const names = settingsStore.getSlots().map((slot) => slot.name);
-    expect(names).toHaveLength(SLOT_COUNT);
-    expect(names[0]).toBe("My Favorite");
-    expect(new Set(names).size).toBe(names.length);
-    expect(names.slice(1).every((name) => /^(Slot|Save)\s+\d+$/.test(name))).toBe(true);
+    expect(names).toEqual(before.filter((_, index) => index !== 1));
+    expect(names.slice(-2)).toEqual(["Save 35", "Save 36"]);
   });
 });
 
@@ -138,6 +140,7 @@ describe("current saved look", () => {
     vi.resetModules();
     installStorageMock();
     localStorage.setItem(SLOTS_KEY, "[]");
+    localStorage.setItem("analyser-default-saves-version", "3");
   });
 
   it("tracks save, edit, revert and deletion without treating HUD controls as edits", async () => {
@@ -202,5 +205,94 @@ describe("current saved look", () => {
     store.loadSlot(0);
     expect(store.get().visualResponse).toBe(2);
     expect(store.get().autoBalanceEnabled).toBe(true);
+  });
+});
+
+describe("bundled presets", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    installStorageMock();
+  });
+
+  it("ships a thumbnail file for every bundled preset", async () => {
+    const { existsSync } = await import("node:fs");
+    const { settingsStore } = await import("../store");
+    for (const slot of settingsStore.getSlots()) {
+      expect(slot.thumb, slot.name).toMatch(/^assets\/default-looks\/[a-z0-9-]+\.jpg$/);
+      expect(existsSync(`public/${slot.thumb}`), slot.thumb).toBe(true);
+    }
+  });
+
+  it("opens a first visit on the first bundled preset", async () => {
+    const { settingsStore } = await import("../store");
+    expect(settingsStore.get().view).toBe(settingsStore.getSlots()[0]!.settings.view);
+    expect(settingsStore.getCurrentSaveIndex()).toBe(0);
+    // Session controls keep their defaults rather than the preset's values...
+    const { DEFAULT_SETTINGS } = await import("@spectrum-aura/engine/settings");
+    expect(settingsStore.get().ambientMode).toBe(DEFAULT_SETTINGS.ambientMode);
+    // ...except that a first visit plays through the presets.
+    expect(settingsStore.get().slotCycleMode).toBe(true);
+  });
+
+  it("stops playing the presets when a first-time visitor changes the picture", async () => {
+    const { settingsStore } = await import("../store");
+    expect(settingsStore.get().slotCycleMode).toBe(true);
+
+    // Session controls (choosing ambient mode in the input prompt) do not count.
+    settingsStore.set({ ambientMode: true });
+    expect(settingsStore.get().slotCycleMode).toBe(true);
+
+    settingsStore.set({ view: "classic" });
+    expect(settingsStore.get().slotCycleMode).toBe(false);
+
+    // Turning playback back on by hand is respected from then on.
+    settingsStore.set({ slotCycleMode: true });
+    settingsStore.set({ view: "outrun" });
+    expect(settingsStore.get().slotCycleMode).toBe(true);
+  });
+
+  it("stops playing the presets when a first-time visitor randomizes", async () => {
+    const { settingsStore } = await import("../store");
+    settingsStore.randomize();
+    expect(settingsStore.get().slotCycleMode).toBe(false);
+  });
+
+  it("gives an older stored list the new presets and missing thumbnails, once", async () => {
+    const { settingsStore: fresh } = await import("../store");
+    const bundled = fresh.getSlots();
+    const old = bundled.find((slot) => slot.name === "Ripple Cylinders")!;
+    // A list saved before thumbnails and the showcase presets existed.
+    localStorage.setItem(
+      SLOTS_KEY,
+      JSON.stringify([
+        { name: "Mine", settings: { view: "classic", barCount: 71 } },
+        { name: old.name, settings: old.settings },
+      ]),
+    );
+    localStorage.removeItem("analyser-default-saves-version");
+
+    vi.resetModules();
+    const { settingsStore: upgraded } = await import("../store");
+    const names = upgraded.getSlots().map((slot) => slot.name);
+    expect(names.slice(0, 2)).toEqual(["Mine", old.name]);
+    expect(names).toContain("Hi-Fi Rack");
+    expect(upgraded.getSlots()[0]!.thumb).toBeUndefined();
+    expect(upgraded.getSlots()[1]!.thumb).toBe(old.thumb);
+    // Older bundled presets the user no longer has are not brought back.
+    expect(names.length).toBeLessThan(bundled.length);
+
+    // Deleting a new preset sticks: the next load does not re-add it.
+    upgraded.clearSlot(names.indexOf("Hi-Fi Rack"));
+    vi.resetModules();
+    const { settingsStore: again } = await import("../store");
+    expect(again.getSlots().map((slot) => slot.name)).not.toContain("Hi-Fi Rack");
+  });
+
+  it("resolves bundled and captured thumbnails to image URLs", async () => {
+    const { slotThumbSrc } = await import("../store");
+    expect(slotThumbSrc("data:image/jpeg;base64,AAAA")).toBe("data:image/jpeg;base64,AAAA");
+    expect(slotThumbSrc("assets/default-looks/outrun-sunset.jpg")).toBe(
+      "/assets/default-looks/outrun-sunset.jpg",
+    );
   });
 });

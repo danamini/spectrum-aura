@@ -105,7 +105,7 @@ describe("mapMidiEvent control changes", () => {
 describe("describeMidiAction", () => {
   it("labels actions for the panel readout", () => {
     expect(describeMidiAction({ kind: "beatTap", downbeat: true })).toBe("Downbeat");
-    expect(describeMidiAction({ kind: "loadSlot", index: 2 })).toBe("Load save 3");
+    expect(describeMidiAction({ kind: "loadSlot", index: 2 })).toBe("Load preset 3");
     expect(describeMidiAction({ kind: "setParam", label: "Bloom", patch: {} })).toBe("Bloom");
   });
 });

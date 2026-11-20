@@ -31,6 +31,16 @@ import { GlobeView } from "./views/globe-view";
 import { SpectroTunnelView } from "./views/spectrotunnel-view";
 import { FractalView } from "./views/fractal-view";
 import { BlackHoleView } from "./views/blackhole-view";
+import { NeonCityView } from "./views/neoncity-view";
+import { OceanView } from "./views/ocean-view";
+import { NightWoodView } from "./views/nightwood-view";
+import { DesertView } from "./views/desert-view";
+import { StationView } from "./views/station-view";
+import { AuroraView } from "./views/aurora-view";
+import { Backdrop, NO_BACKDROP, VIEW_BACKDROPS } from "./views/backdrop";
+import { HifiView } from "./views/hifi-view";
+import { TapeDeckView } from "./views/tapedeck-view";
+import { LabView } from "./views/lab-view";
 
 const WEBXR_REQUEST_EVENT = "spectrum-aura:webxr-request";
 
@@ -246,12 +256,22 @@ export type Palette = [string, string, string];
  * one is a registry entry here plus its `<id>Group` holder on Scene — nothing
  * is allocated, compiled or fetched until the view is first shown.
  */
+const BACKDROP_BLACK = new THREE.Color(0, 0, 0);
 const LAZY_VIEW_FACTORIES: Record<string, () => LazyView> = {
   outrun: () => new OutrunView(),
   globe: () => new GlobeView(),
   spectrotunnel: () => new SpectroTunnelView(),
   fractal: () => new FractalView(),
   blackhole: () => new BlackHoleView(),
+  neoncity: () => new NeonCityView(),
+  ocean: () => new OceanView(),
+  nightwood: () => new NightWoodView(),
+  desert: () => new DesertView(),
+  station: () => new StationView(),
+  aurora: () => new AuroraView(),
+  hifi: () => new HifiView(),
+  lab: () => new LabView(),
+  tapedeck: () => new TapeDeckView(),
 };
 /** A lazy view left off-screen this long is disposed; long enough that
  * music-reactive view cycling returning within a few phrases reuses it. */
@@ -282,6 +302,15 @@ export class Scene {
   spectrotunnelGroup = new THREE.Group();
   fractalGroup = new THREE.Group();
   blackholeGroup = new THREE.Group();
+  neoncityGroup = new THREE.Group();
+  oceanGroup = new THREE.Group();
+  nightwoodGroup = new THREE.Group();
+  desertGroup = new THREE.Group();
+  stationGroup = new THREE.Group();
+  auroraGroup = new THREE.Group();
+  hifiGroup = new THREE.Group();
+  labGroup = new THREE.Group();
+  tapedeckGroup = new THREE.Group();
   private lazyViews = new Map<string, { view: LazyView; idleSeconds: number }>();
   private lazyFrame?: ViewFrame;
   private xrControllerInputs: Array<{
@@ -479,7 +508,7 @@ export class Scene {
     points: THREE.Vector3[];
     curve: THREE.CatmullRomCurve3;
   }> = [];
-  private mandalaRibbonCount = 12;
+  private mandalaRibbonCount = 24;
 
   // terrain view
   terrain?: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
@@ -680,8 +709,11 @@ export class Scene {
   private lastKickTime = -999;
   private lastBpmPhase = 0;
 
+  private readonly backdrop = new Backdrop();
+
   constructor(width: number, height: number) {
     this.scene.background = new THREE.Color("#05060a");
+    this.scene.add(this.backdrop.mesh);
     this.scene.fog = new THREE.FogExp2(0x05060a, 0.025);
 
     this.camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 200);
@@ -1617,6 +1649,8 @@ export class Scene {
     if (!this.nebula || !this.nebulaMat) return;
     const amp = Math.max(0.05, opts.nebulaAmplitude);
     const avgFrequency = normalizedBand((audio.bass + audio.mid + audio.high) / 3);
+    // Larger in frame, and it swells with the bass.
+    this.nebula.scale.setScalar(1.45 * (1 + normalizedBand(audio.bass) * 0.14));
     this.nebula.rotation.y += dt * (0.08 + avgFrequency * 0.4) * (0.4 + amp * 0.6);
     this.nebula.rotation.x += dt * 0.04 * (0.4 + amp * 0.6);
     this.nebulaMat.uniforms.uTime.value = time;
@@ -1759,7 +1793,9 @@ export class Scene {
         const i = z * size + x;
         const freqT = this.monolithCount <= 1 ? 0 : i / (this.monolithCount - 1);
         const bin = bins[Math.floor(freqT * activeBinCount)] ?? 0;
-        const target = 0.2 + normalizedBand(bin / 255) * 15 * amp;
+        // Tall enough to read as towers, short enough that the orbiting camera
+        // stays outside them.
+        const target = 0.2 + normalizedBand(bin / 255) * 9 * amp;
         const current = this.monolithHeights[i] ?? 0;
         const next = target > current ? target : Math.max(0.2, current - this.monolithGravity * dt);
         this.monolithHeights[i] = next;
@@ -1775,7 +1811,7 @@ export class Scene {
             const paletteT = Math.min(1, Math.max(0, freqT * 0.8 + signal * 0.35));
             const c = this.colorAtInto(paletteT, this.tmpColor).lerp(
               this.white,
-              Math.min(1, 0.16 + signal * 0.38 + (brightness - 1) * 0.24),
+              Math.min(1, 0.04 + signal * 0.16 + (brightness - 1) * 0.2),
             );
             colors[i * 3] = c.r;
             colors[i * 3 + 1] = c.g;
@@ -1811,7 +1847,10 @@ export class Scene {
     mat.color.setRGB(1, 1, 1);
     mat.wireframe = opts.monolithWireframe;
     if (opts.monolithUsePalette) {
-      mat.emissive.copy(this.paletteThree[1]).lerp(this.paletteThree[2], 0.45 + audio.high * 0.4);
+      // White here: each column's own palette colour tints its glow (see
+      // injectColumnGlow), so the grid shows the palette across the spectrum
+      // instead of one emissive colour.
+      mat.emissive.setRGB(1, 1, 1);
       mat.metalness = 0.22;
       mat.roughness = 0.32;
     } else {
@@ -1820,9 +1859,9 @@ export class Scene {
       mat.roughness = 0.4;
     }
     mat.emissiveIntensity =
-      (opts.monolithUsePalette ? 1.3 + audio.high * 1.1 : 0.5 + audio.high * 1.2) * brightness;
+      (opts.monolithUsePalette ? 0.32 + audio.high * 0.35 : 0.3 + audio.high * 0.5) * brightness;
     this.monolithSpot.intensity =
-      (opts.monolithUsePalette ? 5.4 + audio.bass * 7.2 : 3.2 + audio.bass * 5.6) * brightness;
+      (opts.monolithUsePalette ? 2.4 + audio.bass * 3.2 : 2 + audio.bass * 2.6) * brightness;
     if (opts.monolithUsePalette) {
       this.monolithSpot.color
         .copy(this.colorAtInto(peakFreqT, this.tmpColor))
@@ -1888,19 +1927,34 @@ export class Scene {
     const R = this.mandalaRibbons.length;
     if (!R || bins.length === 0) return;
     const amp = Math.max(0.05, opts.mandalaAmplitude);
+    // The ribbons lie in a disc. Tilted toward the camera it reads as a
+    // mandala; left flat it was seen edge-on, as a line across the frame.
+    this.mandalaGroup.rotation.x = 1.3;
     this.mandalaGroup.rotation.y += dt * (0.15 + audio.mid * 0.7);
+    // Ribbons work in mirrored pairs: each pair leaves the centre together,
+    // bows apart and meets again at the tip, drawing one petal. Every petal
+    // reads the same slice of the spectrum, so the figure keeps the radial
+    // symmetry that makes it a mandala rather than a spray of spokes.
+    const pairs = Math.max(1, Math.floor(R / 2));
+    const bow = (Math.PI / pairs) * (0.72 + audio.bass * 0.45);
     for (let i = 0; i < R; i++) {
       const r = this.mandalaRibbons[i]!;
       const P = r.points.length;
+      const side = i % 2 ? 1 : -1;
+      const pair = Math.floor(i / 2);
+      const base = (pair / pairs) * Math.PI * 2;
+      // Alternate long and short petals so the flower has two tiers.
+      const reach = pair % 2 ? 0.6 : 1;
       for (let p = 0; p < P; p++) {
-        const binStart = Math.floor(((i * P + p) / (R * P)) * activeBinCount);
-        const v = bins[binStart] ? bins[binStart]! / 255 : 0;
         const t = P <= 1 ? 0 : p / (P - 1);
-        const radius = 1.3 + t * 5.3 + normalizedBand(v) * 1.8 * amp;
-        const angle = (i / R) * Math.PI * 2 + Math.sin(time * 0.7 + p * 0.3) * 0.08;
+        const bin = Math.floor(t * activeBinCount * 0.55);
+        const v = bins[bin] ? bins[bin]! / 255 : 0;
+        const radius = (0.4 + t * 6.2 + normalizedBand(v) * 1.5 * amp) * reach;
+        const angle =
+          base + side * (Math.sin(t * Math.PI) * bow + Math.sin(time * 0.7 + p * 0.3) * 0.035);
         r.points[p]!.set(
           Math.cos(angle) * radius,
-          (t - 0.5) * 1.5 + bipolarBand(v) * 1.4 * amp,
+          bipolarBand(v) * 0.9 * amp * Math.sin(t * Math.PI),
           Math.sin(angle) * radius,
         );
       }
@@ -1915,12 +1969,12 @@ export class Scene {
       r.geometry.computeBoundingBox();
       r.geometry.computeBoundingSphere();
       const mat = r.material;
-      mat.opacity = 0.55 + audio.mid * 0.55;
+      mat.opacity = 0.6 + audio.mid * 0.4;
       // LineMaterial width is in screen-space px, so scale slider to a visibly thick range.
-      mat.linewidth = Math.max(2, opts.mandalaLineWidth * 6);
+      mat.linewidth = Math.max(2, opts.mandalaLineWidth * 6 * (1 + audio.bass * 0.6));
       if (opts.mandalaUsePalette) {
         mat.color
-          .copy(this.colorAtInto((i / R + time * 0.03) % 1, this.tmpColor))
+          .copy(this.colorAtInto((Math.floor(i / 2) / pairs + time * 0.03) % 1, this.tmpColor))
           .lerp(this.white, Math.min(0.06, audio.high * 0.06));
       } else {
         mat.color.set("#d8e7ff");
@@ -2287,14 +2341,17 @@ export class Scene {
 
     // Glass torus shell
     const torusGeo = new THREE.TorusGeometry(4.5, 1.2, 48, 128);
+    // A glowing wire cage. The earlier glass used `transmission`, which the
+    // post-FX pipeline does not render, so the ring had no visible body.
     const torusMat = new THREE.MeshPhysicalMaterial({
-      color: 0xaaddff,
+      color: 0x000000,
+      emissive: 0x4466ff,
+      emissiveIntensity: 0.5,
+      wireframe: true,
       transparent: true,
       opacity: 0.18,
-      metalness: 0.0,
-      roughness: 0.0,
-      transmission: 0.92,
-      thickness: 1.2,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
     });
     this.torusMat = torusMat;
@@ -2378,7 +2435,7 @@ export class Scene {
       const mesh = new THREE.Mesh(this.torusMesh.geometry, meshMat);
       const particles = new THREE.Points(this.torusParticleGeo!, particleMat);
       mesh.rotation.x = this.torusMesh.rotation.x;
-      mesh.visible = false;
+      mesh.visible = true;
       root.add(mesh);
       root.add(particles);
       this.torusGroup.add(root);
@@ -2482,12 +2539,11 @@ export class Scene {
 
     // Update glass material
     if (this.torusMat) {
-      this.torusMat.opacity = 0.12 + bass * 0.1;
+      this.torusMat.opacity = 0.05 + bass * 0.13;
       if (opts.torusUsePalette) {
-        (this.torusMat as THREE.MeshPhysicalMaterial).color
-          .copy(this.paletteThree[1])
-          .lerp(this.paletteThree[2], mid);
+        this.torusMat.emissive.copy(this.paletteThree[1]).lerp(this.paletteThree[2], mid);
       }
+      this.torusMat.emissiveIntensity = 0.35 + bass * 0.9;
     }
 
     const count = this.torusParticleCount;
@@ -2541,6 +2597,7 @@ export class Scene {
       for (const cell of this.torusCells) {
         cell.particleMat.size = particleSize;
         if (torusOpacity !== undefined) cell.meshMat.opacity = torusOpacity;
+        if (this.torusMat) cell.meshMat.emissiveIntensity = this.torusMat.emissiveIntensity;
       }
     }
 
@@ -2818,7 +2875,9 @@ export class Scene {
 
     // Core light
     if (this.geoNebulaCoreLight) {
-      const targetIntensity = (2.4 + bass * 14 + mid * 6) * amp * orbitSpeed;
+      // Kept moderate: at real levels the old 2.4 + 14·bass core light and a
+      // 3.3× emissive washed the whole frame out to white.
+      const targetIntensity = (1.4 + bass * 4.5 + mid * 2) * amp * orbitSpeed;
       this.geoNebulaCoreLight.intensity +=
         (targetIntensity - this.geoNebulaCoreLight.intensity) * Math.min(1, dt * 6);
       if (opts.geometrynebulaUsePalette) {
@@ -2833,7 +2892,7 @@ export class Scene {
       const binVal = normalizedBand((bins[binIdx] ?? 0) / 255);
 
       // Scale pulse to assigned frequency
-      const targetScale = s.baseScale * (1 + binVal * 2.1 * amp + bass * 0.35);
+      const targetScale = s.baseScale * (1 + binVal * 1.25 * amp + bass * 0.22);
       const curScale = s.mesh.scale.x;
       s.mesh.scale.setScalar(
         curScale + (targetScale - curScale) * Math.min(1, dt * (9 + orbitSpeed * 4)),
@@ -2858,13 +2917,13 @@ export class Scene {
       if (opts.geometrynebulaUsePalette) {
         const c = this.colorAtInto(freqT, this.tmpColor);
         s.mat.color.copy(c).lerp(this.white, binVal * 0.25);
-        s.mat.emissive.copy(c).lerp(this.white, 0.1 + binVal * 0.3 + bass * 0.15);
-        s.mat.emissiveIntensity = (0.5 + binVal * 2.2 + bass * 0.6) * amp;
+        s.mat.emissive.copy(c).lerp(this.white, binVal * 0.18);
+        s.mat.emissiveIntensity = (0.22 + binVal * 0.95 + bass * 0.2) * amp;
         s.mat.opacity = 0.7 + binVal * 0.3;
       } else {
         s.mat.color.setRGB(0.8, 0.9, 1.0);
         s.mat.emissive.setRGB(0.2, 0.4, 0.8);
-        s.mat.emissiveIntensity = 0.4 + binVal * 1.2;
+        s.mat.emissiveIntensity = 0.25 + binVal * 0.7;
         s.mat.opacity = 0.75 + binVal * 0.25;
       }
     }
@@ -2879,7 +2938,7 @@ export class Scene {
       }
     }
 
-    this.postFxBoost.bloom = 1 + bass * 1.15 + mid * 0.65 + high * 0.25;
+    this.postFxBoost.bloom = 1 + bass * 0.45 + mid * 0.25 + high * 0.1;
     this.postFxBoost.glitch = 0;
   }
 
@@ -3258,6 +3317,19 @@ export class Scene {
 
     if (this.lazyViews.size > 0) this.evictIdleLazyViews(dt, opts.view);
 
+    // The world behind the original views. Off in XR, where the headset's
+    // own environment or passthrough is the backdrop.
+    this.backdrop.update(
+      dt,
+      time,
+      audio,
+      this.paletteThree,
+      this.scene.background instanceof THREE.Color ? this.scene.background : BACKDROP_BLACK,
+      xrMode ? NO_BACKDROP : (VIEW_BACKDROPS[opts.view] ?? NO_BACKDROP),
+      opts.backdropAmount,
+      { kick: this.kick, phase: bpmPhase, confident: bpmConfident },
+    );
+
     // Global overlay — runs unconditionally (before the per-view branches,
     // some of which `return` early for xrMode) so it applies to any visual.
     this.updateTextOverlay(dt, time, audio, opts);
@@ -3377,10 +3449,11 @@ export class Scene {
       // camera: gentle orbit + audio drive; drift layers on top of mouse orbit too
       const bk = this.kick * beat;
       if (opts.cameraMouse) {
-        const r = this.mouseZoom * 0.85;
+        // Close enough that the row of cylinders fills the frame.
+        const r = this.mouseZoom * 0.52;
         let px = Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r;
         let pz = Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r;
-        let py = Math.sin(this.mousePitch) * r * 0.7 + 1.5;
+        let py = Math.sin(this.mousePitch) * r * 0.7 + 2.2;
         if (drift > 0) {
           const a = driftPos * 2.9;
           px += Math.sin(time * 0.29) * a + Math.cos(time * 0.16) * a * 0.5;
@@ -3390,7 +3463,7 @@ export class Scene {
         this.camera.position.set(px, py, pz);
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.6 + 0.05);
-        const rad = 10 + Math.sin(time * 0.3) * 0.85 * driftPos;
+        const rad = 6.5 + Math.sin(time * 0.3) * 0.85 * driftPos;
         this.camera.position.x = Math.sin(this.orbitAngle) * rad;
         this.camera.position.z = Math.cos(this.orbitAngle) * rad;
         this.camera.position.y = 3 + Math.sin(time * 0.4) * 0.85 * (0.35 + driftPos * 0.65);
@@ -3511,18 +3584,19 @@ export class Scene {
         return;
       }
       if (opts.cameraMouse) {
-        const r = this.mouseZoom * 1.15;
+        // The grid is 32 units across: stand well outside and above it.
+        const r = this.mouseZoom * 2.5;
         this.camera.position.set(
           Math.sin(this.mouseYaw) * Math.cos(this.mousePitch) * r,
-          6 + Math.sin(this.mousePitch) * r * 0.5,
+          11 + Math.sin(this.mousePitch) * r * 0.5,
           Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
         );
       } else {
         this.orbitAngle += dt * (opts.orbitSpeed * 0.5 + 0.045);
         this.camera.position.set(
-          Math.sin(this.orbitAngle) * 24,
-          12,
-          Math.cos(this.orbitAngle) * 24,
+          Math.sin(this.orbitAngle) * 30,
+          17,
+          Math.cos(this.orbitAngle) * 30,
         );
       }
       applyCameraDrift(3.2);
@@ -3531,7 +3605,8 @@ export class Scene {
     }
 
     if (opts.view === "mandala") {
-      const lineCount = Math.max(2, Math.round(opts.mandalaLineCount));
+      // Two mirrored ribbons draw each petal, so "lines" counts petals.
+      const lineCount = Math.max(2, Math.round(opts.mandalaLineCount)) * 2;
       if (lineCount !== this.mandalaRibbonCount) this.buildMandala(lineCount);
       this.updateMandala(dt, time, audio, {
         mandalaAmplitude: opts.mandalaAmplitude,
@@ -3558,11 +3633,13 @@ export class Scene {
           Math.cos(this.mouseYaw) * Math.cos(this.mousePitch) * r,
         );
       } else {
+        // Sway across the front of the disc rather than circling behind it.
         this.orbitAngle += dt * (opts.orbitSpeed * 0.85 + 0.12);
+        const mandalaSway = Math.sin(this.orbitAngle) * 0.55;
         this.camera.position.set(
-          Math.sin(this.orbitAngle) * 10.5,
+          Math.sin(mandalaSway) * 11.5,
           Math.sin(time * 0.5) * 1.2,
-          Math.cos(this.orbitAngle) * 10.5,
+          Math.cos(mandalaSway) * 11.5,
         );
       }
       applyCameraDrift(2.4);
@@ -4638,7 +4715,7 @@ export class Scene {
     const baseThickness = 0.08;
     const amplitude =
       ((maxRadius * 0.32 * (baseThickness / 0.08)) / yScale) *
-      (0.8 + normalizedBand(audio.bass) * 1.3) *
+      (0.7 + normalizedBand(audio.bass) * 1.1) *
       Math.max(0.05, opts.rippleAmplitude);
     const waveCycles = opts.rippleWaveCycles + audio.mid * 1.0;
 
@@ -4675,7 +4752,7 @@ export class Scene {
         const yWave =
           Math.sin(wavePhase) *
           amplitude *
-          (0.58 + normalizedBand(sliceV) * 0.85 + normalizedBand(ringSpectrum) * 0.55);
+          (0.45 + normalizedBand(sliceV) * 0.7 + normalizedBand(ringSpectrum) * 0.5);
         if (transparent) col.meshes[i].position.y = yWave;
         else {
           this.rippleInstanceMatrix.makeTranslation(0, yWave, 0);
@@ -4686,9 +4763,10 @@ export class Scene {
         else _c.copy(colB).lerp(colC, (t - 0.5) * 2);
         const phaseAnim = 0.5 + 0.5 * Math.sin(wavePhase);
         const vPeak = Math.max(sliceV, ringSpectrum);
-        const brightness = 0.68 + 0.68 * phaseAnim + vPeak * 0.55;
+        // Crests glow, troughs fall dark, so the wave itself is what you see.
+        const brightness = 0.28 + 0.7 * phaseAnim * phaseAnim + vPeak * 0.35;
         _c.multiplyScalar(brightness);
-        const intensity = 1.15 + sliceV * 1.25 + ringSpectrum * 0.7;
+        const intensity = 0.75 + sliceV * 0.75 + ringSpectrum * 0.5;
         if (transparent) {
           const mat = col.mats[i];
           mat.emissive.copy(_c);
@@ -5301,7 +5379,7 @@ export class Scene {
       layer.sprite.scale.setScalar(Number.isFinite(scale) ? scale : 3.4);
       const mat = layer.sprite.material as THREE.SpriteMaterial;
       mat.opacity = THREE.MathUtils.clamp(
-        0.08 + (0.14 + bin * 0.35 + audio.high * 0.2 + bgDrift * 0.08) * spriteAmount,
+        0.04 + (0.07 + bin * 0.2 + audio.high * 0.1 + bgDrift * 0.05) * spriteAmount,
         0,
         1,
       );
@@ -5316,7 +5394,7 @@ export class Scene {
 
     if (this.assetflowBaseDisk) {
       const mat = this.assetflowBaseDisk.material as THREE.MeshStandardMaterial;
-      mat.emissive.copy(this.paletteThree[2]).multiplyScalar(0.3 + audio.bass * 0.7);
+      mat.emissive.copy(this.paletteThree[2]).multiplyScalar(0.07 + audio.bass * 0.3);
       this.assetflowBaseDisk.rotation.y += dt * (0.05 + audio.high * 0.08);
     }
     if (this.assetflowLight) {
@@ -6133,8 +6211,8 @@ export class Scene {
       // `amp` scales the shaped brightness *after* the curve so high Amplitude
       // settings add headroom instead of just saturating the curve sooner.
       const shaped = Math.pow(Math.max(0, Math.min(1, energy)), 1.4);
-      const intensity = Math.min(1.5, (0.22 + shaped * 0.95) * amp + hit * 0.55);
-      fx.cone.material.opacity = Math.min(1, intensity * 0.85);
+      const intensity = Math.min(1.6, (0.4 + shaped * 1.15) * amp + hit * 0.6);
+      fx.cone.material.opacity = Math.min(1, intensity * 0.95);
       const hotspotMat = fx.hotspot.material as THREE.SpriteMaterial;
       hotspotMat.opacity = Math.min(1, 0.4 + intensity * 0.7);
       fx.hotspot.scale.setScalar(0.6 + intensity * 0.5);
@@ -6642,6 +6720,7 @@ export class Scene {
   }
 
   dispose() {
+    this.backdrop.dispose();
     this.detachWebXrControllers();
     for (const entry of this.lazyViews.values()) {
       entry.view.group.removeFromParent();

@@ -3,29 +3,106 @@ import { ChevronDown, Pin } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { settingsStore, useSettings, type FxLockId } from "../store";
+import {
+  DEFAULT_SETTINGS,
+  settingsStore,
+  useSettings,
+  type FxLockId,
+  type Settings,
+} from "../store";
+import { PanelFilterContext } from "./panel-filter";
+
+/**
+ * A view's own settings, shortest first: the first few controls are shown,
+ * the rest sit behind "More". Views list their controls in order of how much
+ * they change the picture, so the head of the list is the useful part.
+ */
+export function ViewControls({
+  headline = 4,
+  first,
+  children,
+}: {
+  headline?: number;
+  /** Labels of controls to move to the front, for views whose own order
+   * does not lead with what matters most. */
+  first?: readonly string[];
+  children: React.ReactNode;
+}) {
+  const { searching } = React.useContext(PanelFilterContext);
+  const [more, setMore] = React.useState(false);
+  // Each view contributes one fragment; unwrap it to count its controls.
+  const controls = React.Children.toArray(children).flatMap((child) =>
+    React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment
+      ? React.Children.toArray(child.props.children)
+      : [child],
+  );
+  if (first && first.length > 0) {
+    const rank = (node: React.ReactNode) => {
+      const label = React.isValidElement<{ label?: string }>(node) ? node.props.label : undefined;
+      const at = label ? first.indexOf(label) : -1;
+      return at < 0 ? first.length : at;
+    };
+    // Array.prototype.sort is stable, so everything not named keeps its order.
+    controls.sort((a, b) => rank(a) - rank(b));
+  }
+  if (controls.length <= headline + 1) return <>{controls}</>;
+  const open = more || searching;
+  return (
+    <>
+      {controls.slice(0, headline)}
+      {open && controls.slice(headline)}
+      {!searching && (
+        <button
+          type="button"
+          onClick={() => setMore((value) => !value)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.02] py-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-white/50 hover:text-white"
+        >
+          {open ? "Fewer controls" : `More controls (${controls.length - headline})`}
+          <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+      )}
+    </>
+  );
+}
 
 // Cooler, clearer toggle switch with explicit ON/OFF affordance
 export function Sw({
   checked,
   onCheckedChange,
   disabled = false,
+  k,
 }: {
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
   disabled?: boolean;
+  /** The setting this switch edits; marks it when off its default. */
+  k?: keyof Settings;
 }) {
+  const fallback = k ? DEFAULT_SETTINGS[k] : undefined;
+  const changed = typeof fallback === "boolean" && fallback !== checked;
   return (
-    <Switch
-      checked={checked}
-      onCheckedChange={onCheckedChange}
-      disabled={disabled}
-      className={
-        "h-5 w-10 border border-white/15 " +
-        "data-[state=checked]:bg-emerald-400 data-[state=checked]:border-emerald-300/60 data-[state=checked]:shadow-[0_0_10px_rgba(52,211,153,0.55)] " +
-        "data-[state=unchecked]:bg-white/5"
-      }
-    />
+    <span className="flex items-center gap-2" data-k={k} data-changed={changed || undefined}>
+      {changed && (
+        <button
+          type="button"
+          onClick={() => onCheckedChange(fallback)}
+          title={`Changed. Click to return to the default (${fallback ? "on" : "off"}).`}
+          aria-label="Reset this switch to its default"
+          className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.7)] hover:scale-150"
+        />
+      )}
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+        className={
+          "h-5 w-10 border border-white/15 " +
+          "data-[state=checked]:bg-emerald-400 data-[state=checked]:border-emerald-300/60 data-[state=checked]:shadow-[0_0_10px_rgba(52,211,153,0.55)] " +
+          "data-[state=unchecked]:bg-white/5"
+        }
+      />
+    </span>
   );
 }
 
@@ -89,7 +166,7 @@ export function Bn({
 
 export function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-ctl={label}>
       <Label className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
         {label}
       </Label>
@@ -115,6 +192,7 @@ export function ToggleRow({
   children?: React.ReactNode;
 }) {
   const settings = useSettings();
+  const filter = React.useContext(PanelFilterContext);
   const locked = lockId ? settings.fxLocks.includes(lockId) : false;
   const toggleLock = () => {
     if (!lockId) return;
@@ -123,8 +201,10 @@ export function ToggleRow({
       fxLocks: locks.includes(lockId) ? locks.filter((id) => id !== lockId) : [...locks, lockId],
     });
   };
+  if (filter.activeOnly && filter.inEffectSection && !enabled && !filter.searching) return null;
   return (
     <div
+      data-ctl={label}
       className={`rounded-md border p-3 space-y-3 transition-colors ${enabled ? "border-emerald-400/30 bg-emerald-400/[0.04]" : "border-white/5 bg-white/[0.02]"}`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -146,8 +226,8 @@ export function ToggleRow({
               onClick={toggleLock}
               title={
                 locked
-                  ? "Pinned — Randomize, presets, saves, and view cycling all leave this effect untouched. Click to unpin."
-                  : "Pin to lock this effect in place — Randomize, presets, saves, and view cycling won't change it."
+                  ? "Pinned — Randomize, presets and view cycling all leave this effect untouched. Click to unpin."
+                  : "Pin to lock this effect in place — Randomize, presets and view cycling won't change it."
               }
               aria-pressed={locked}
               className={`rounded p-1 transition-colors ${
@@ -199,7 +279,10 @@ export function FxSection({
   pinned?: number;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = React.useState(() => readFxSectionOpen(id));
+  const filter = React.useContext(PanelFilterContext);
+  const [stored, setOpen] = React.useState(() => readFxSectionOpen(id));
+  // In active-only mode a section is just the frame around what is on.
+  const open = stored || filter.searching || (filter.activeOnly && count > 0);
   const toggle = () =>
     setOpen((o) => {
       const next = !o;
@@ -213,8 +296,9 @@ export function FxSection({
       }
       return next;
     });
+  if (filter.activeOnly && count === 0 && !filter.searching) return null;
   return (
-    <div className="rounded-md border border-white/10 bg-white/[0.03]">
+    <div className="rounded-md border border-white/10 bg-white/[0.03]" data-ctl={label}>
       <button
         type="button"
         onClick={toggle}
@@ -232,8 +316,8 @@ export function FxSection({
           <span
             title={
               pinned > 0
-                ? `${pinned} locked against Randomize, presets, saves, and view cycling`
-                : "No effects locked — pin an effect to keep it through Randomize, presets, saves, and view cycling"
+                ? `${pinned} locked against Randomize, presets and view cycling`
+                : "No effects locked — pin an effect to keep it through Randomize, presets and view cycling"
             }
             className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] tracking-wider ${
               pinned > 0 ? "bg-amber-400/15 text-amber-300" : "bg-white/5 text-white/30"
@@ -245,7 +329,11 @@ export function FxSection({
         </span>
         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="space-y-3 border-t border-white/10 p-3">{children}</div>}
+      {open && (
+        <PanelFilterContext.Provider value={{ ...filter, inEffectSection: true }}>
+          <div className="space-y-3 border-t border-white/10 p-3">{children}</div>
+        </PanelFilterContext.Provider>
+      )}
     </div>
   );
 }
@@ -257,6 +345,7 @@ export function S({
   max,
   step,
   onChange,
+  k,
 }: {
   label: string;
   value: number;
@@ -264,11 +353,32 @@ export function S({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  /** The setting this slider edits. With it, the slider marks itself when
+   * moved off its default and offers a one-click way back. */
+  k?: keyof Settings;
 }) {
+  const fallback = k ? DEFAULT_SETTINGS[k] : undefined;
+  const changed = typeof fallback === "number" && Math.abs(value - fallback) > step / 2;
   return (
-    <div className="space-y-1">
+    <div
+      className="space-y-1"
+      data-ctl={label || undefined}
+      data-k={k}
+      data-changed={changed || undefined}
+    >
       <div className="flex justify-between font-mono text-[10px] uppercase tracking-wider text-white/40">
-        <span>{label}</span>
+        <span className="flex items-center gap-1.5">
+          {changed && (
+            <button
+              type="button"
+              onClick={() => onChange(fallback)}
+              title={`Changed. Click to return to the default (${fallback}).`}
+              aria-label={`Reset ${label || "this setting"} to its default`}
+              className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.7)] hover:scale-150"
+            />
+          )}
+          {label}
+        </span>
         <span className="tabular-nums text-white/70">
           {value.toFixed(step < 0.01 ? 4 : step < 0.1 ? 2 : 1)}
         </span>
@@ -298,9 +408,11 @@ export function Disclosure({
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = React.useState(defaultOpen);
+  const { searching } = React.useContext(PanelFilterContext);
+  const [stored, setOpen] = React.useState(defaultOpen);
+  const open = stored || searching;
   return (
-    <div className="rounded-md border border-white/10 bg-white/[0.03]">
+    <div className="rounded-md border border-white/10 bg-white/[0.03]" data-ctl={label}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

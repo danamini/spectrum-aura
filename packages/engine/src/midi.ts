@@ -113,7 +113,7 @@ export function describeMidiAction(action: MidiAction): string {
     case "randomizeFx":
       return "Randomize FX";
     case "loadSlot":
-      return `Load save ${action.index + 1}`;
+      return `Load preset ${action.index + 1}`;
     case "setParam":
       return action.label;
   }

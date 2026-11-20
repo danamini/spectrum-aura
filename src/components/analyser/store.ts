@@ -26,7 +26,8 @@ import {
 } from "@spectrum-aura/engine/settings";
 import { VISUALS, getVisualOverlayBiasDefault, pickNextView } from "@spectrum-aura/engine/visuals";
 import defaultSaves from "./default-saves.json";
-import { preserveSessionSettings, sameSavedLook } from "./saved-look";
+import { isSessionKey, preserveSessionSettings, sameSavedLook } from "./saved-look";
+import { presetName } from "./preset-name";
 
 export type { ViewMode } from "@spectrum-aura/engine/visuals";
 // Re-exported so existing app imports of the schema keep working.
@@ -160,6 +161,15 @@ function normalizeAmplitudeFloor(settings: Settings): Settings {
     spectrotunnelAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.spectrotunnelAmplitude),
     fractalAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.fractalAmplitude),
     blackholeAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.blackholeAmplitude),
+    neoncityAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.neoncityAmplitude),
+    oceanAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.oceanAmplitude),
+    nightwoodAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.nightwoodAmplitude),
+    desertAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.desertAmplitude),
+    stationAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.stationAmplitude),
+    auroraAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.auroraAmplitude),
+    hifiAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.hifiAmplitude),
+    labAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.labAmplitude),
+    tapedeckAmplitude: Math.max(MIN_VIEW_AMPLITUDE, settings.tapedeckAmplitude),
   };
 }
 
@@ -293,6 +303,15 @@ function normalizePostFxRanges(settings: Settings): Settings {
     // The march budget is per-pixel GPU cost, so a saved value is never trusted past the cap.
     fractalDetail: Math.max(24, Math.min(128, Math.round(settings.fractalDetail))),
     fractalPower: Math.max(2, Math.min(12, settings.fractalPower)),
+    neoncitySpeed: Math.max(0.1, Math.min(4, settings.neoncitySpeed)),
+    neoncityDensity: Math.max(0.05, Math.min(1, settings.neoncityDensity)),
+    oceanSpeed: Math.max(0.1, Math.min(4, settings.oceanSpeed)),
+    nightwoodSpeed: Math.max(0.1, Math.min(4, settings.nightwoodSpeed)),
+    nightwoodFireflies: Math.max(0, Math.min(1, settings.nightwoodFireflies)),
+    desertSpeed: Math.max(0.1, Math.min(4, settings.desertSpeed)),
+    stationSpeed: Math.max(0.1, Math.min(4, settings.stationSpeed)),
+    auroraSpeed: Math.max(0.1, Math.min(4, settings.auroraSpeed)),
+    auroraRays: Math.max(0, Math.min(1, settings.auroraRays)),
     blackholeSpin: Math.max(0.05, Math.min(4, settings.blackholeSpin)),
     blackholeTilt: Math.max(1, Math.min(60, settings.blackholeTilt)),
     blackholeDetail: Math.max(40, Math.min(120, Math.round(settings.blackholeDetail))),
@@ -311,6 +330,12 @@ function normalizePostFxRanges(settings: Settings): Settings {
     textOverlayPhraseInterval: Math.max(3, Math.min(20, settings.textOverlayPhraseInterval)),
     glitchIntensity: Math.max(0, Math.min(1, settings.glitchIntensity)),
     evolveAmount: Math.max(0, Math.min(1, settings.evolveAmount)),
+    backdropAmount: Number.isFinite(settings.backdropAmount)
+      ? Math.max(0, Math.min(1.5, settings.backdropAmount))
+      : DEFAULT_SETTINGS.backdropAmount,
+    dynamicContrast: Number.isFinite(settings.dynamicContrast)
+      ? Math.max(0, Math.min(1, settings.dynamicContrast))
+      : DEFAULT_SETTINGS.dynamicContrast,
   };
 }
 
@@ -336,30 +361,27 @@ type SlotSeed = {
   settings: Partial<Settings> & { rippleWaveLayers?: number };
   thumb?: string;
   savedAt?: number;
+  /** Version of the bundled list this look first shipped in (absent = 1). */
+  since?: number;
 } | null;
 
-const AUTO_SLOT_NAME_RE = /^(Save|Slot)\s+\d+$/;
+/** Bumped whenever looks are added to default-saves.json, so people who
+ * already have a saved list are offered the new ones once. */
+const DEFAULT_SAVES_VERSION = 3;
+const DEFAULT_SAVES_VERSION_KEY = "analyser-default-saves-version";
 
-function compactDefaultSlotNames(seedSlots: SlotSeed[]): SlotSeed[] {
-  let slotNumber = 1;
-  let saveNumber = 1;
+/** Thumbnails for the bundled looks ship as files, not inline data. */
+const BUNDLED_THUMB_RE = /^assets\/default-looks\/[a-z0-9-]+\.jpg$/;
+const isSlotThumb = (thumb: unknown): thumb is string =>
+  typeof thumb === "string" && (thumb.startsWith("data:image/") || BUNDLED_THUMB_RE.test(thumb));
 
-  return seedSlots.map((slot) => {
-    if (!slot) return null;
-
-    if (slot.name.startsWith("Slot ")) {
-      return { ...slot, name: `Slot ${slotNumber++}` };
-    }
-
-    if (slot.name.startsWith("Save ")) {
-      return { ...slot, name: `Save ${saveNumber++}` };
-    }
-
-    return slot;
-  });
+/** URL to put in an `<img>` for a slot thumbnail (captured or bundled). */
+export function slotThumbSrc(thumb: string): string {
+  if (thumb.startsWith("data:")) return thumb;
+  return `${(import.meta.env.BASE_URL || "/").replace(/\/*$/, "/")}${thumb}`;
 }
 
-const DEPLOYMENT_DEFAULT_SLOTS: SlotSeed[] = compactDefaultSlotNames(defaultSaves as SlotSeed[]);
+const DEPLOYMENT_DEFAULT_SLOTS: SlotSeed[] = defaultSaves as SlotSeed[];
 export const SLOT_COUNT = DEPLOYMENT_DEFAULT_SLOTS.filter((slot) => slot !== null).length;
 
 function normalizeSlot(seed: SlotSeed): SavedSlot | null {
@@ -372,9 +394,7 @@ function normalizeSlot(seed: SlotSeed): SavedSlot | null {
   return {
     name: seed.name,
     settings: normalizeSettings(merged),
-    ...(typeof seed.thumb === "string" && seed.thumb.startsWith("data:image/")
-      ? { thumb: seed.thumb }
-      : {}),
+    ...(isSlotThumb(seed.thumb) ? { thumb: seed.thumb } : {}),
     ...(typeof seed.savedAt === "number" ? { savedAt: seed.savedAt } : {}),
   };
 }
@@ -383,15 +403,8 @@ function isSavedSlot(slot: SavedSlot | null): slot is SavedSlot {
   return slot !== null;
 }
 
-function reindexAutoSlotNames() {
-  for (let i = 0; i < slots.length; i += 1) {
-    const slot = slots[i];
-    if (!AUTO_SLOT_NAME_RE.test(slot.name)) continue;
-    const prefix = slot.name.startsWith("Slot ") ? "Slot" : "Save";
-    slot.name = `${prefix} ${i + 1}`;
-  }
-}
-
+/** True while a first visit is still auto-playing the bundled presets. */
+let firstVisitAutoplay = false;
 let lastSavedIndex = -1;
 let state: Settings = { ...DEFAULT_SETTINGS };
 const slots: SavedSlot[] = DEPLOYMENT_DEFAULT_SLOTS.map((slot) => normalizeSlot(slot)).filter(
@@ -405,15 +418,57 @@ function refreshSlotsSnapshot() {
 const listeners = new Set<() => void>();
 const slotListeners = new Set<() => void>();
 
+/**
+ * Brings a stored save list up to date with the bundled looks without
+ * touching anything the user made: looks that still match a bundled one gain
+ * its thumbnail, and bundled looks added since the list was stored are
+ * appended once. Returns true when the list changed.
+ */
+function mergeBundledLooks(
+  stored: SavedSlot[],
+  bundled: SavedSlot[],
+  since: number[],
+  storedVersion: number,
+): boolean {
+  let changed = false;
+  bundled.forEach((look, index) => {
+    const match = stored.find((slot) => sameSavedLook(slot.settings, look.settings));
+    if (match) {
+      if (!match.thumb && look.thumb) {
+        match.thumb = look.thumb;
+        changed = true;
+      }
+    } else if (since[index]! > storedVersion) {
+      // Only looks newer than the stored list: one the user deleted stays deleted.
+      stored.push(look);
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 if (typeof window !== "undefined") {
   try {
     const raw = localStorage.getItem(SLOTS_KEY);
+    const storedVersion = Number(localStorage.getItem(DEFAULT_SAVES_VERSION_KEY)) || 1;
     if (raw) {
       const parsed = JSON.parse(raw) as SlotSeed[];
       if (Array.isArray(parsed)) {
         const normalized = parsed.map((slot) => normalizeSlot(slot)).filter(isSavedSlot);
+        const bundled = slots.slice();
+        const since = DEPLOYMENT_DEFAULT_SLOTS.filter((slot) => slot !== null).map(
+          (slot) => slot.since ?? 1,
+        );
+        const changed = mergeBundledLooks(normalized, bundled, since, storedVersion);
         slots.splice(0, slots.length, ...normalized);
+        if (changed) localStorage.setItem(SLOTS_KEY, JSON.stringify(slots));
       }
+    }
+    if (
+      storedVersion !== DEFAULT_SAVES_VERSION ||
+      !localStorage.getItem(DEFAULT_SAVES_VERSION_KEY)
+    ) {
+      localStorage.setItem(DEFAULT_SAVES_VERSION_KEY, String(DEFAULT_SAVES_VERSION));
     }
   } catch {
     // ignore malformed saved slot state
@@ -431,6 +486,16 @@ if (typeof window !== "undefined") {
         merged.rippleColumns = Math.max(1, Math.min(50, Math.round(parsed.rippleWaveLayers)));
       }
       state = normalizeSettings(merged);
+    } else if (slots[0]) {
+      // First visit: open on the first bundled look instead of the bare
+      // defaults, keeping session controls (ambient mode and the like).
+      // Play through the bundled looks until the visitor takes over, so a first
+      // visit shows what the app can do rather than a single scene.
+      state = normalizeSettings({
+        ...preserveSessionSettings(DEFAULT_SETTINGS, slots[0].settings),
+        slotCycleMode: slots.length > 1,
+      });
+      firstVisitAutoplay = state.slotCycleMode;
     }
   } catch {
     // ignore malformed saved settings
@@ -451,6 +516,15 @@ function emit() {
 export const settingsStore = {
   get: () => state,
   set: (patch: Partial<Settings>) => {
+    if (firstVisitAutoplay) {
+      // The first change to the picture is the visitor taking over: stop
+      // playing through the presets so it is not undone a few seconds later.
+      if ("slotCycleMode" in patch) firstVisitAutoplay = false;
+      else if (Object.keys(patch).some((key) => !isSessionKey(key))) {
+        firstVisitAutoplay = false;
+        patch = { ...patch, slotCycleMode: false };
+      }
+    }
     if (patch.slotCycleMode === true) patch = { ...patch, viewCycleMode: false };
     else if (patch.viewCycleMode === true) patch = { ...patch, slotCycleMode: false };
     // any manual edit clears the active preset (unless caller sets it)
@@ -475,6 +549,10 @@ export const settingsStore = {
     emit();
   },
   randomize: () => {
+    if (firstVisitAutoplay) {
+      firstVisitAutoplay = false;
+      state = { ...state, slotCycleMode: false };
+    }
     const r = (min: number, max: number) => min + Math.random() * (max - min);
     /** Midpoint-weighted sample (Bates n=3). Same bounds as `r`, but values
      * cluster around the middle of the range, so perceptual extremes — blown
@@ -785,6 +863,56 @@ export const settingsStore = {
           blackholeAmplitude: rb(0.5, 2),
           blackholeSpin: r(0.4, 2.2),
           blackholeTilt: r(3, 30),
+
+          // neon city
+          neoncityUsePalette: b(0.5),
+          neoncityAmplitude: rb(0.6, 2),
+          neoncitySpeed: r(0.5, 2.2),
+          neoncityDensity: r(0.35, 0.95),
+
+          // ocean
+          oceanUsePalette: b(0.5),
+          oceanAmplitude: rb(0.5, 2),
+          oceanSpeed: r(0.5, 2),
+          oceanSun: b(0.85),
+
+          // night wood
+          nightwoodUsePalette: b(0.5),
+          nightwoodAmplitude: rb(0.6, 2),
+          nightwoodSpeed: r(0.5, 2),
+          nightwoodFireflies: r(0.4, 1),
+
+          // desert
+          desertUsePalette: b(0.5),
+          desertAmplitude: rb(0.5, 2.2),
+          desertSpeed: r(0.5, 2.2),
+          desertSun: b(0.85),
+
+          // station
+          stationUsePalette: b(0.5),
+          stationAmplitude: rb(0.6, 1.8),
+          stationSpeed: r(0.5, 2.4),
+          stationChase: b(0.8),
+
+          // aurora
+          auroraUsePalette: b(0.5),
+          auroraAmplitude: rb(0.6, 2),
+          auroraSpeed: r(0.5, 2),
+          auroraRays: r(0.2, 1),
+
+          // hifi
+          hifiUsePalette: b(0.3),
+          hifiAmplitude: rb(0.7, 1.5),
+          hifiPeakHold: b(0.85),
+
+          // lab
+          labUsePalette: b(0.4),
+          labAmplitude: rb(0.7, 1.6),
+          labPeaks: b(0.85),
+          // tapedeck
+          tapedeckUsePalette: b(0.3),
+          tapedeckAmplitude: rb(0.7, 1.5),
+          tapedeckPeakHold: b(0.85),
         }
       : {};
 
@@ -859,14 +987,20 @@ export const settingsStore = {
   saveSlot: (index: number, name?: string) => {
     if (index < 0 || index > slots.length) return;
     const slot: SavedSlot = {
-      name: name ?? `Save ${index + 1}`,
+      // Saving over a preset keeps its name; a new one is named for what it shows.
+      name:
+        name ??
+        slots[index]?.name ??
+        presetName(
+          state,
+          slots.map((s) => s.name),
+        ),
       settings: { ...state },
       savedAt: Date.now(),
     };
     if (index === slots.length) slots.push(slot);
     else slots[index] = slot;
     lastSavedIndex = index;
-    reindexAutoSlotNames();
     refreshSlotsSnapshot();
     persistSlots();
     slotListeners.forEach((l) => l());
@@ -876,7 +1010,7 @@ export const settingsStore = {
    * itself stays synchronous. */
   attachSlotThumb: (index: number, thumb: string) => {
     const slot = slots[index];
-    if (!slot || !thumb.startsWith("data:image/")) return;
+    if (!slot || !isSlotThumb(thumb)) return;
     slot.thumb = thumb;
     refreshSlotsSnapshot();
     persistSlots();
@@ -910,7 +1044,6 @@ export const settingsStore = {
     }
     if (lastSavedIndex === index) lastSavedIndex = -1;
     else if (lastSavedIndex > index) lastSavedIndex -= 1;
-    reindexAutoSlotNames();
     refreshSlotsSnapshot();
     persistSlots();
     slotListeners.forEach((l) => l());

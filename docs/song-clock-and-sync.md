@@ -176,13 +176,13 @@ In auto mode each confident onset (`audioBeat`, `onsetStrength ≥ 0.06`) is
 compared with the nearest grid beat; \(e\) is the error in beats, positive
 when the onset is late.
 
-| Case | Action |
-| --- | --- |
-| \(\lvert e\rvert \le 0.25\) | Epoch moves by \(0.22\,e\) beats. Once confirmed, tempo is scaled by \(1 - 0.03\,e\). |
-| \(\lvert e\rvert\) within 0.12 of 0.5 | Counts toward an off-beat lock; 6 in a row shift the grid half a beat. |
-| otherwise | Counts toward a lost lock. |
+| Case                                  | Action                                                                                |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
+| \(\lvert e\rvert \le 0.25\)           | Epoch moves by \(0.22\,e\) beats. Once confirmed, tempo is scaled by \(1 - 0.03\,e\). |
+| \(\lvert e\rvert\) within 0.12 of 0.5 | Counts toward an off-beat lock; 6 in a row shift the grid half a beat.                |
+| otherwise                             | Counts toward a lost lock.                                                            |
 
-After **6 aligned onsets** the grid is *confirmed* and the clock owns its
+After **6 aligned onsets** the grid is _confirmed_ and the clock owns its
 tempo as a flywheel: it no longer follows the detector, so it holds tempo
 through a breakdown with no beats, where the detector's estimate wanders. It
 coasts up to 12 s after the detector loses the tempo before returning to idle.

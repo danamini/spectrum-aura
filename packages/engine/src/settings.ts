@@ -158,6 +158,13 @@ export type Settings = {
   gain: number;
   /** Presentation-only sensitivity applied after audio analysis. */
   visualResponse: number;
+  /**
+   * Presentation-only dynamic contrast, 0–1: how far each band is shown
+   * relative to its own recent range rather than its absolute level.
+   */
+  dynamicContrast: number;
+  /** Brightness of the world drawn behind the original views (0 = plain background). */
+  backdropAmount: number;
   autoBalanceEnabled: boolean;
   beatSensitivity: number; // 1..3
   latencyOptimized: boolean;
@@ -195,6 +202,10 @@ export type Settings = {
   monolithFullscreen: boolean;
   mandalaFullscreen: boolean;
   terrainFullscreen: boolean;
+  /** Hi-Fi and Signal Lab held square to the screen, with no camera movement. */
+  hifiFullscreen: boolean;
+  labFullscreen: boolean;
+  tapedeckFullscreen: boolean;
 
   // ripple view
   rippleRingCount: number; // number of rings
@@ -348,6 +359,54 @@ export type Settings = {
   blackholeSpin: number;
   blackholeTilt: number; // camera elevation above the disk plane, degrees
   blackholeDetail: number; // ray integration step budget
+
+  // neon city view (avenue of equaliser towers)
+  neoncityUsePalette: boolean; // off = the fixed night triad
+  neoncityAmplitude: number;
+  neoncitySpeed: number;
+  neoncityDensity: number; // share of windows that can light, 0..1
+
+  // ocean view (dusk sea, spectrum-driven waves)
+  oceanUsePalette: boolean; // off = the fixed dusk triad
+  oceanAmplitude: number;
+  oceanSpeed: number;
+  oceanSun: boolean;
+
+  // night wood view (grown trees, fireflies, mist)
+  nightwoodUsePalette: boolean;
+  nightwoodAmplitude: number;
+  nightwoodSpeed: number;
+  nightwoodFireflies: number;
+
+  // desert view (spectrum dunes, road, low sun)
+  desertUsePalette: boolean;
+  desertAmplitude: number;
+  desertSpeed: number;
+  desertSun: boolean;
+
+  // station view (corridor of level-meter bays)
+  stationUsePalette: boolean;
+  stationAmplitude: number;
+  stationSpeed: number;
+  stationChase: boolean;
+
+  // aurora view (northern lights over a lake)
+  auroraUsePalette: boolean;
+  auroraAmplitude: number;
+  auroraSpeed: number;
+  auroraRays: number;
+  // hifi view (needle VU meters, segment analyser, tuner dial)
+  hifiUsePalette: boolean;
+  hifiAmplitude: number;
+  hifiPeakHold: boolean;
+  // lab view (spectrum graph, oscilloscope, waterfall, readouts)
+  labUsePalette: boolean;
+  labAmplitude: number;
+  labPeaks: boolean;
+  // tapedeck view (cassette deck with bar meters over a power amp with needle meters)
+  tapedeckUsePalette: boolean;
+  tapedeckAmplitude: number;
+  tapedeckPeakHold: boolean;
 
   // 3D combo view
   comboSphereSize: number; // base sphere scale (1 = default)
@@ -561,6 +620,9 @@ export const DEFAULT_SETTINGS: Settings = {
   monolithFullscreen: false,
   mandalaFullscreen: false,
   terrainFullscreen: false,
+  hifiFullscreen: false,
+  labFullscreen: false,
+  tapedeckFullscreen: false,
   rippleRingCount: 40,
   rippleColumns: 20,
   rippleMaxRadius: 6,
@@ -650,8 +712,8 @@ export const DEFAULT_SETTINGS: Settings = {
   stagelightsUsePalette: true,
   stagelightsAmplitude: 1,
   stagelightsSweepSpeed: 1,
-  stagelightsFixtureCount: 3,
-  stagelightsLasers: false,
+  stagelightsFixtureCount: 7,
+  stagelightsLasers: true,
 
   outrunUsePalette: false,
   outrunAmplitude: 1,
@@ -678,6 +740,45 @@ export const DEFAULT_SETTINGS: Settings = {
   blackholeSpin: 1,
   blackholeTilt: 9,
   blackholeDetail: 96,
+
+  neoncityUsePalette: false,
+  neoncityAmplitude: 1,
+  neoncitySpeed: 1,
+  neoncityDensity: 0.6,
+
+  oceanUsePalette: false,
+  oceanAmplitude: 1,
+  oceanSpeed: 1,
+  oceanSun: true,
+
+  nightwoodUsePalette: false,
+  nightwoodAmplitude: 1,
+  nightwoodSpeed: 1,
+  nightwoodFireflies: 1,
+
+  desertUsePalette: false,
+  desertAmplitude: 1,
+  desertSpeed: 1,
+  desertSun: true,
+
+  stationUsePalette: false,
+  stationAmplitude: 1,
+  stationSpeed: 1,
+  stationChase: true,
+
+  auroraUsePalette: false,
+  auroraAmplitude: 1,
+  auroraSpeed: 1,
+  auroraRays: 0.6,
+  hifiUsePalette: false,
+  hifiAmplitude: 1,
+  hifiPeakHold: true,
+  labUsePalette: false,
+  labAmplitude: 1,
+  labPeaks: true,
+  tapedeckUsePalette: false,
+  tapedeckAmplitude: 1,
+  tapedeckPeakHold: true,
   comboSphereSize: 1,
   comboSphereSpinSpeed: 0.2,
   comboSphereBassPunch: 0.25,
@@ -691,6 +792,8 @@ export const DEFAULT_SETTINGS: Settings = {
   fftSize: 2048,
   gain: 1.0,
   visualResponse: VISUAL_RESPONSE.default,
+  dynamicContrast: 0.55,
+  backdropAmount: 0.8,
   autoBalanceEnabled: true,
   beatSensitivity: 1.4,
   latencyOptimized: true,

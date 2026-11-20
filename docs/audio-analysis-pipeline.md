@@ -9,8 +9,20 @@ Technical reference for how Spectrum Aura turns PCM → features → tempo estim
 ## 1. Capture and analyser graph
 
 ```
-MediaStream → MediaStreamSource → GainNode → AnalyserNode → (FFT read each frame)
+MediaStream → MediaStreamSource → GainNode ─┬→ AnalyserNode            (FFT read each frame; feeds the detectors)
+                                            ├→ AnalyserNode, smoothing 0 (fast-attack display spectrum)
+                                            └→ ChannelSplitter(2) ─┬→ AnalyserNode (left)
+                                                                   └→ AnalyserNode (right)
 ```
+
+Only the first analyser feeds BeatMatcher and BPMDetector. The others are
+presentation taps: the display analyser drives the fast-attack spectrum, and
+the two channel analysers (time-domain only, `fftSize` 1024) give the Hi-Fi
+and Tape Deck meters true left and right levels. The microphone is requested
+with `channelCount: { ideal: 2 }`; shared system or tab audio is stereo
+already. A mono source leaves the right channel at exactly zero, so
+`AudioBands.stereo` stays undefined until the right channel has carried a
+non-zero sample and meters fall back to moving both sides together.
 
 | Parameter               | Default                    | Notes                               |
 | ----------------------- | -------------------------- | ----------------------------------- |
@@ -124,7 +136,7 @@ Real music's peak stream mixes beat onsets with hi-hat subdivisions and
 syncopation, so the raw interval list has huge spread even at a rock-steady
 tempo. Before taking the median, every interval is folded into the seed
 median's octave (`< 0.72×median` doubles, `> 1.45×median` halves) so
-subdivisions count as *evidence for* the beat period instead of polluting it:
+subdivisions count as _evidence for_ the beat period instead of polluting it:
 
 \[
 \text{BPM}\_{\text{peak}} = \frac{60000}{\tilde{\Delta t}\_{\text{folded}}}
@@ -228,6 +240,14 @@ Updated every `tick()` call (not only on 250 ms analysis frames).
 | `beatPhase`                         | Detector phase (overridden by SongClock in Analyser when synced) |
 | `onsetStrength`, `signalSwing`      | View cycle / diagnostics                                         |
 | `timing.*`                          | Latency HUD                                                      |
+| `kick`                              | 30–180 Hz level for section and breakdown detection              |
+| `display`                           | Fast-attack spectrum for drawing (presentation only)             |
+| `wave`                              | Time-domain bytes of the mono mix (presentation only)            |
+| `stereo`                            | Left and right time-domain bytes (presentation only, optional)   |
+
+`display`, `wave` and `stereo` must never be read by a detector. They exist so
+views can draw an oscilloscope, a true peak or VU level, or a faster spectrum
+without changing what the tempo and onset code hears.
 
 ---
 

@@ -54,6 +54,21 @@ export function displayLevel(byte: number): number {
   return Math.sqrt(Math.max(0, byte) / 255);
 }
 
+/**
+ * Level for anything that reads as a meter: empty at the noise floor, full at
+ * the top of the scale. Bins are decibel-scaled, so a quiet room already reads
+ * 30–40%; `displayLevel` lifts that to 60% or more, which fills a meter with
+ * nothing playing. Use this where "quiet" must look quiet.
+ */
+const METER_FLOOR = 0.4;
+const METER_SPAN = 0.45;
+/** `span` is how much of the scale fills the meter; widen it for instruments
+ * that must show headroom rather than sit at the top on loud material. */
+export function meterLevel(byte: number, span = METER_SPAN): number {
+  const t = (byte / 255 - METER_FLOOR) / span;
+  return t <= 0 ? 0 : t >= 1 ? 1 : t;
+}
+
 /** Maps display column `i` of `count` onto a log-spaced FFT bin, so octaves
  * get equal width instead of the top octave taking half the columns. */
 export function logBin(i: number, count: number, binCount: number): number {

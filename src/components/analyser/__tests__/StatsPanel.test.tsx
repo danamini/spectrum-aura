@@ -83,8 +83,12 @@ describe("stats panel layout", () => {
       resize.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })),
     );
     expect(JSON.parse(localStorage.getItem(STATS_LAYOUT_KEY)!).width).toBe(410);
-    expect(container.textContent).toContain("Text Overlay");
-    expect(container.textContent).toContain("Source URL");
+    // Credits are context-sensitive: absent until an overlay effect is on.
+    expect(container.textContent).not.toContain("Text Overlay");
+    expect(container.textContent).toContain("credits appear here while an overlay effect is on");
+    expect(container.textContent).toContain("Tempo & sync");
+    expect(container.querySelector('[aria-label="Health"]')?.textContent).toContain("Frame rate");
+    expect(container.querySelector('[aria-label="Copy stats as text"]')).not.toBeNull();
   });
   it("renders the asset overlay family readout", () => {
     flushSync(() => {

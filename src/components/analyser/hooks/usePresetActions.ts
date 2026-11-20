@@ -46,7 +46,7 @@ export type PresetActions = {
   /** Jump to a random other slot; optionally load it. */
   random: (opts?: { load?: boolean }) => PresetActionResult;
   /** Save current settings to `index` under `name`. */
-  saveAt: (index: number, name: string) => PresetActionResult;
+  saveAt: (index: number, name?: string) => PresetActionResult;
   /** Append current settings as a new `Save N` slot. */
   saveNew: () => PresetActionResult;
   /** Overwrite the focused slot (or append when none exist). */
@@ -121,7 +121,7 @@ export function usePresetActions(): PresetActions {
     return slotResult(list, next);
   };
 
-  const saveAt = (index: number, name: string): PresetActionResult => {
+  const saveAt = (index: number, name?: string): PresetActionResult => {
     const target = settingsStore.getSlots()[index];
     if (index < 0 || index > settingsStore.getSlots().length) return { status: "missing", index };
     if (target && sameSavedLook(settingsStore.get(), target.settings)) {
@@ -135,7 +135,7 @@ export function usePresetActions(): PresetActions {
     void requestFrameCapture().then((thumb) => {
       if (thumb) settingsStore.attachSlotThumb(index, thumb);
     });
-    return { status: "ok", index, name };
+    return { status: "ok", index, name: settingsStore.getSlots()[index]?.name ?? "" };
   };
 
   const saveNew = (): PresetActionResult => {
@@ -147,14 +147,13 @@ export function usePresetActions(): PresetActions {
         name: settingsStore.getSlots()[existing].name,
       };
     const index = settingsStore.getSlots().length;
-    return saveAt(index, `Save ${index + 1}`);
+    return saveAt(index);
   };
 
   const saveFocused = (): PresetActionResult => {
     if (!hasPresets) return saveNew();
     const list = settingsStore.getSlots();
-    const name = list[activeIndex]?.name ?? `Save ${activeIndex + 1}`;
-    return saveAt(activeIndex, name);
+    return saveAt(activeIndex, list[activeIndex]?.name);
   };
 
   const deleteFocused = (): PresetActionResult => {

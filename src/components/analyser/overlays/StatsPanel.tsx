@@ -1,7 +1,20 @@
 import { HUD_GLASS } from "../theme";
-import { memo, useRef } from "react";
+import { memo, useRef, useState } from "react";
+import { getLiveTempoFrame } from "@spectrum-aura/engine/live-tempo";
+import { statsHealth, statsReport, type HealthTone } from "./stats-health";
+import { capFor } from "../keymap";
+import { settingsStore } from "../store";
 import { nextSparklineRange, sparklinePoints, type SparklineRange } from "./stats-history";
-import { Maximize2, Minimize2, RotateCcw, MoveDiagonal2, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Maximize2,
+  Minimize2,
+  RotateCcw,
+  MoveDiagonal2,
+  X,
+} from "lucide-react";
 import { isSignalLatencyVisible } from "@spectrum-aura/engine/latency-metrics";
 import { useStatsPanelLayout } from "../hooks/useStatsPanelLayout";
 import type { NerdStats } from "./stats-types";
@@ -20,13 +33,32 @@ export function StatsForNerdsPanel({
   const layout = useStatsPanelLayout(fullscreen);
   const fmt = (value: number, digits = 1) =>
     Number.isFinite(value) ? value.toFixed(digits) : "n/a";
+  const pct = (value: number) => (Number.isFinite(value) ? `${Math.round(value * 100)}%` : "n/a");
+  // Read with each stats refresh; the panel does not need per-frame tempo.
+  const tempo = getLiveTempoFrame();
+  const bar = tempo.barTiming;
+  const health = statsHealth(stats, tempo);
+  const [copied, setCopied] = useState(false);
+  const copyReport = () => {
+    const text = statsReport(stats, tempo, settingsStore.get().view);
+    void navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {
+        // Clipboard access can be refused; the readings stay on screen.
+      });
+  };
+  const creditsInUse = stats.assetOverlayEnabled || stats.textOverlayEnabled;
 
   return (
     <div
       role="region"
       data-ui-control
       aria-label="Stats for nerds"
-      className={`fixed z-[120] pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-white/15 shadow-[0_0_50px_rgba(0,0,0,0.25)] ${HUD_GLASS}`}
+      className={`@container fixed z-[120] pointer-events-auto flex flex-col overflow-hidden rounded-lg border border-white/15 shadow-[0_0_50px_rgba(0,0,0,0.25)] ${HUD_GLASS}`}
       style={
         fullscreen
           ? { inset: 12 }
@@ -51,10 +83,22 @@ export function StatsForNerdsPanel({
             Stats for nerds
           </p>
           <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
-            N toggle • Shift+N full page
+            {capFor("stats")} toggle • Shift+{capFor("stats")} full page
           </p>
         </div>
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={copyReport}
+            aria-label="Copy stats as text"
+            title="Copy the readings as text, for a bug report"
+            className="rounded border border-white/15 p-1.5 text-white/75 hover:bg-white/10"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-emerald-300" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
           {!fullscreen && (
             <button
               onClick={layout.reset}
@@ -89,6 +133,27 @@ export function StatsForNerdsPanel({
       </div>
 
       <div
+        aria-label="Health"
+        className="grid shrink-0 grid-cols-2 gap-1.5 border-b border-white/10 p-2 font-mono @[520px]:grid-cols-4"
+      >
+        {health.map((item) => (
+          <div
+            key={item.id}
+            title={item.note}
+            data-tone={item.tone}
+            className={`rounded border px-2 py-1.5 ${HEALTH_TONE[item.tone]}`}
+          >
+            <div className="text-[8px] uppercase tracking-[0.18em] text-white/45">{item.label}</div>
+            <div className="text-[12px] tabular-nums">{item.value}</div>
+          </div>
+        ))}
+        {health.some((item) => item.tone === "warn" || item.tone === "bad") && (
+          <p className="col-span-full px-0.5 text-[9px] leading-relaxed text-white/55">
+            {health.find((item) => item.tone === "bad" || item.tone === "warn")!.note}
+          </p>
+        )}
+      </div>
+      <div
         data-stats-content
         tabIndex={0}
         aria-label="Diagnostics"
@@ -103,7 +168,12 @@ export function StatsForNerdsPanel({
             color="emerald"
           />
           <Stat label="Frame ms" value={fmt(stats.frameMs, 2)} />
-          <Stat label="Audio → UI" value={`${fmt(stats.audioToRenderMs, 1)} ms`} color="emerald" />
+          <Stat
+            label="Audio → UI"
+            value={`${fmt(stats.audioToRenderMs, 1)} ms`}
+            color="emerald"
+            hint="From the audio being read to the frame being drawn."
+          />
           <Stat
             label="Signal → UI"
             value={
@@ -116,8 +186,16 @@ export function StatsForNerdsPanel({
           <Stat label="Audio → scene" value={`${fmt(stats.audioToSceneMs, 1)} ms`} />
           <Stat label="Scene → render" value={`${fmt(stats.sceneToRenderMs, 1)} ms`} />
           <Stat label="Audio read CPU" value={`${fmt(stats.audioReadCpuMs, 2)} ms`} />
-          <Stat label="FFT window" value={`${fmt(stats.fftWindowMs, 1)} ms`} />
-          <Stat label="Base latency" value={`${fmt(stats.baseLatencyMs, 1)} ms`} />
+          <Stat
+            label="FFT window"
+            value={`${fmt(stats.fftWindowMs, 1)} ms`}
+            hint="How much audio each analysis looks at. Larger is smoother but later."
+          />
+          <Stat
+            label="Base latency"
+            value={`${fmt(stats.baseLatencyMs, 1)} ms`}
+            hint="Delay the browser's audio system adds before the app sees the sound."
+          />
           <Stat label="Updates" value={String(stats.updates)} />
           <Stat label="Uptime" value={`${fmt(stats.uptimeSec, 1)}s`} />
         </StatSection>
@@ -160,40 +238,54 @@ export function StatsForNerdsPanel({
           <Stat label="Gain" value={fmt(stats.gain, 2)} />
           <Stat
             label="Bass"
-            value={fmt(stats.bass, 3)}
+            value={pct(stats.bass)}
             sparkline={stats.bassHistory}
             color="emerald"
           />
-          <Stat label="Mid" value={fmt(stats.mid, 3)} sparkline={stats.midHistory} color="cyan" />
+          <Stat label="Mid" value={pct(stats.mid)} sparkline={stats.midHistory} color="cyan" />
+          <Stat label="High" value={pct(stats.high)} sparkline={stats.highHistory} color="amber" />
           <Stat
-            label="High"
-            value={fmt(stats.high, 3)}
-            sparkline={stats.highHistory}
-            color="amber"
+            label="Brightness"
+            value={
+              stats.sampleRate > 0 && stats.centroid > 0
+                ? `≈ ${Math.round((stats.centroid * stats.sampleRate) / 2 / 10) * 10} Hz`
+                : "n/a"
+            }
+            hint="Spectral centroid: where the weight of the sound sits. Higher is brighter."
           />
-          <Stat label="Centroid" value={fmt(stats.centroid, 3)} />
-          <Stat label="Beat" value={stats.beat ? "yes" : "no"} />
-          <Stat label="BPM" value={stats.bpm > 0 ? `${stats.bpm} bpm` : "detecting"} />
-          <Stat label="BPM confidence" value={fmt(stats.bpmConfidence * 100, 0) + "%"} />
         </StatSection>
 
-        <StatSection title="Overlay FX">
-          <Stat label="Asset overlay" value={stats.assetOverlayEnabled ? "enabled" : "disabled"} />
-          <Stat label="Bias" value={stats.assetOverlayBias} />
+        <StatSection title="Tempo & sync">
           <Stat
-            label="Commons"
-            value={stats.assetOverlayCommonsEnabled ? stats.assetOverlayCommonsTopic : "off"}
+            label="Clock"
+            value={bar.bpmLocked ? `${fmt(bar.clockBpm, 1)} bpm · locked` : "not locked"}
+            hint="The beat clock every view follows."
           />
-          <Stat label="Current trio" value={stats.assetOverlayCurrentFamilies.join(" / ")} />
-          <Stat label="Next trio" value={stats.assetOverlayNextFamilies.join(" / ")} />
-          <Stat label="Transition" value={fmt(stats.assetOverlayTransition, 2)} />
-          {stats.assetOverlayCurrentEntries.map((entry, index) => (
-            <MetaRow
-              key={`${entry.label}-${index}`}
-              label={`Asset ${index + 1}`}
-              value={entry.creditLine}
-            />
-          ))}
+          <Stat
+            label="Detector"
+            value={
+              stats.bpm > 0
+                ? `${stats.bpm} bpm · ${fmt(stats.bpmConfidence * 100, 0)}%`
+                : "detecting"
+            }
+            hint="What tempo detection currently hears, and how sure it is."
+          />
+          <Stat label="Clock source" value={bar.source} hint="auto, tapped, or external MIDI." />
+          <Stat
+            label="Position"
+            value={bar.bpmLocked ? `bar ${bar.barInPhrase} · beat ${bar.beatInBar}` : "n/a"}
+            hint="Where the clock is within the current four-bar phrase."
+          />
+          <Stat
+            label="Last section"
+            value={
+              tempo.sectionEvent
+                ? `${tempo.sectionEvent.kind} · ${Math.max(0, Math.round((performance.now() - tempo.sectionEvent.atMs) / 1000))} s ago`
+                : "none yet"
+            }
+            hint="The most recent drop or breakdown detected."
+          />
+          <Stat label="Beat" value={stats.beat ? "yes" : "no"} />
         </StatSection>
 
         {stats.wikichromaActive && (
@@ -214,22 +306,53 @@ export function StatsForNerdsPanel({
           </StatSection>
         )}
 
-        <StatSection title="Text Overlay">
-          <Stat label="Enabled" value={stats.textOverlayEnabled ? "enabled" : "disabled"} />
-          <Stat label="Source" value={stats.textOverlaySourceLabel || "n/a"} />
-          <MetaRow label="Snippet" value={stats.textOverlayCurrentText || "n/a"} />
-          <MetaRow
-            label="Attribution"
-            value={
-              stats.textOverlayCreditLine ||
-              [stats.textOverlayAuthor, stats.textOverlayWork, stats.textOverlayRights]
-                .filter(Boolean)
-                .join(" — ") ||
-              "n/a"
-            }
-          />
-          <MetaRow label="Source URL" value={stats.textOverlaySourceUrl || "n/a"} />
-        </StatSection>
+        {/* Credits for overlay artwork and text: shown only while those overlays are on. */}
+        {stats.assetOverlayEnabled && (
+          <StatSection title="Overlay FX">
+            <Stat
+              label="Asset overlay"
+              value={stats.assetOverlayEnabled ? "enabled" : "disabled"}
+            />
+            <Stat label="Bias" value={stats.assetOverlayBias} />
+            <Stat
+              label="Commons"
+              value={stats.assetOverlayCommonsEnabled ? stats.assetOverlayCommonsTopic : "off"}
+            />
+            <Stat label="Current trio" value={stats.assetOverlayCurrentFamilies.join(" / ")} />
+            <Stat label="Next trio" value={stats.assetOverlayNextFamilies.join(" / ")} />
+            <Stat label="Transition" value={fmt(stats.assetOverlayTransition, 2)} />
+            {stats.assetOverlayCurrentEntries.map((entry, index) => (
+              <MetaRow
+                key={`${entry.label}-${index}`}
+                label={`Asset ${index + 1}`}
+                value={entry.creditLine}
+              />
+            ))}
+          </StatSection>
+        )}
+        {stats.textOverlayEnabled && (
+          <StatSection title="Text Overlay">
+            <Stat label="Enabled" value={stats.textOverlayEnabled ? "enabled" : "disabled"} />
+            <Stat label="Source" value={stats.textOverlaySourceLabel || "n/a"} />
+            <MetaRow label="Snippet" value={stats.textOverlayCurrentText || "n/a"} />
+            <MetaRow
+              label="Attribution"
+              value={
+                stats.textOverlayCreditLine ||
+                [stats.textOverlayAuthor, stats.textOverlayWork, stats.textOverlayRights]
+                  .filter(Boolean)
+                  .join(" — ") ||
+                "n/a"
+              }
+            />
+            <MetaRow label="Source URL" value={stats.textOverlaySourceUrl || "n/a"} />
+          </StatSection>
+        )}
+        {!creditsInUse && (
+          <p className="col-span-full px-1 text-[9px] text-white/35">
+            Artwork and text credits appear here while an overlay effect is on.
+          </p>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-3 py-1 font-mono text-[9px] text-white/45">
@@ -286,11 +409,61 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatSection({ title, children }: { title: string; children: React.ReactNode }) {
+const HEALTH_TONE: Record<HealthTone, string> = {
+  good: "border-emerald-400/30 bg-emerald-400/[0.07] text-emerald-200",
+  warn: "border-amber-400/40 bg-amber-400/[0.08] text-amber-200",
+  bad: "border-red-400/50 bg-red-500/[0.1] text-red-200",
+  idle: "border-white/10 bg-white/[0.03] text-white/55",
+};
+
+const SECTIONS_KEY = "analyser-stats-sections-v1";
+function readSectionOpen(title: string, fallback: boolean): boolean {
+  try {
+    const map = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? "{}") as Record<string, boolean>;
+    return typeof map[title] === "boolean" ? map[title] : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** A titled group of readings that folds away and remembers whether it was open. */
+function StatSection({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(() => readSectionOpen(title, defaultOpen));
+  const toggle = () =>
+    setOpen((value) => {
+      const next = !value;
+      try {
+        const map = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? "{}") as Record<
+          string,
+          boolean
+        >;
+        map[title] = next;
+        localStorage.setItem(SECTIONS_KEY, JSON.stringify(map));
+      } catch {
+        // Storage can be unavailable; the section still toggles for this session.
+      }
+      return next;
+    });
   return (
     <section className="min-w-0 rounded border border-white/10 bg-black/10 p-2.5">
-      <p className="mb-2 text-[9px] uppercase tracking-[0.2em] text-emerald-300/70">{title}</p>
-      <div className="grid gap-1">{children}</div>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className={`flex w-full items-center justify-between text-[9px] uppercase tracking-[0.2em] text-emerald-300/70 hover:text-emerald-200 ${open ? "mb-2" : ""}`}
+      >
+        {title}
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <div className="grid gap-1">{children}</div>}
     </section>
   );
 }
@@ -301,9 +474,12 @@ function Stat({
   sparkline,
   scaleMinimum = 0.04,
   color = "emerald",
+  hint,
 }: {
   label: string;
   value: string;
+  /** One line on what the reading means, shown on hover. */
+  hint?: string;
   sparkline?: number[];
   scaleMinimum?: number;
   color?: "emerald" | "cyan" | "amber";
@@ -316,8 +492,15 @@ function Stat({
         : "stroke-emerald-300/90";
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
-      <span className="text-white/45">{label}</span>
+    <div
+      title={hint}
+      className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 border-b border-white/5 pb-1 last:border-b-0 last:pb-0"
+    >
+      <span
+        className={`text-white/45 ${hint ? "cursor-help underline decoration-white/15 decoration-dotted underline-offset-2" : ""}`}
+      >
+        {label}
+      </span>
       <div className="flex min-w-0 max-w-full flex-wrap justify-end items-center gap-2">
         {sparkline && sparkline.length > 1 && (
           <Sparkline values={sparkline} colorClass={sparkColor} scaleMinimum={scaleMinimum} />

@@ -4,9 +4,10 @@ import { ResponseControl } from "./ResponseControl";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import {
-  Camera,
+  Gauge,
+  Keyboard,
   LayoutGrid,
-  SlidersHorizontal,
+  Search,
   Maximize2,
   Mic,
   MonitorSpeaker,
@@ -14,14 +15,12 @@ import {
   Pause,
   Check,
   Minimize2,
-  Repeat,
   Save,
   Settings2,
   Shuffle,
   SkipBack,
   SkipForward,
   Sparkles,
-  Trash2,
 } from "lucide-react";
 import { settingsStore, useSettings, type Settings } from "./store";
 import { dispatchBeatHint } from "@spectrum-aura/engine/beat-hint";
@@ -29,8 +28,19 @@ import { WEBXR_STATE_EVENT, requestWebXrToggle, type WebXrState } from "@spectru
 import { getVisualDefinition, VISUALS } from "@spectrum-aura/engine/visuals";
 import { usePresetActions } from "./hooks/usePresetActions";
 import { HUD_GLASS } from "./theme";
+import { LIVE_TEMPO_EVENT, type LiveTempoState } from "@spectrum-aura/engine/live-tempo";
+import {
+  LOOK_DIGITS,
+  OPEN_HELP_EVENT,
+  OPEN_PALETTE_EVENT,
+  RUN_ACTION_EVENT,
+  actionForKey,
+  capFor,
+  type ActionId,
+} from "./keymap";
 import { useDraggablePanel } from "./hooks/useDraggablePanel";
 
+const TIP_KEY = "analyser-first-run-tip-v1";
 const TOGGLE_STATS_PANEL_EVENT = "spectrum-aura:toggle-stats-panel";
 const TOGGLE_SETTINGS_PANEL_EVENT = "spectrum-aura:toggle-settings-panel";
 const SETTINGS_PANEL_STATE_EVENT = "spectrum-aura:settings-panel-state";
@@ -192,52 +202,6 @@ const Group = ({
   </div>
 );
 
-const MiniToggle = ({
-  label,
-  active,
-  onClick,
-  title,
-  disabledReason,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  disabledReason?: string;
-}) => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!disabledReason) onClick();
-        }}
-        aria-label={title}
-        aria-disabled={Boolean(disabledReason)}
-        aria-pressed={active}
-        className={`pointer-events-auto rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] transition-colors ${
-          disabledReason
-            ? "cursor-not-allowed border-white/5 text-white/30"
-            : active
-              ? "border-emerald-300/40 bg-emerald-300/12 text-emerald-100"
-              : "border-white/10 bg-white/[0.04] text-white/35 hover:text-white/65"
-        }`}
-      >
-        {label}
-      </button>
-    </TooltipTrigger>
-    <ShortcutTooltipContent>
-      <TooltipBlock
-        title={label.toUpperCase()}
-        detail={disabledReason ?? title}
-        hint={active ? "ON" : "OFF"}
-      />
-    </ShortcutTooltipContent>
-  </Tooltip>
-);
-
 export function Shortcuts() {
   const preset = usePresetActions();
   const barDrag = useDraggablePanel("shortcut-bar");
@@ -245,8 +209,8 @@ export function Shortcuts() {
   const currentSave = slots[preset.currentSaveIndex];
   const noOtherSave =
     slots.length === 0
-      ? "Save a look first."
-      : "This is the only save and it is already displayed.";
+      ? "Save a preset first."
+      : "This is the only preset and it is already showing.";
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
   const [statsOpen, setStatsOpen] = useState(false);
   useEffect(() => {
@@ -319,6 +283,67 @@ export function Shortcuts() {
     return () => window.removeEventListener(FRAME_STATS_EVENT, onFrameStats);
   }, []);
   const [flash, setFlash] = useState<string | null>(null);
+  const [hudOpen, setHudOpen] = useState(false);
+  // One line of orientation for a new visitor, gone for good once dismissed
+  // or once either shortcut it names has been used.
+  const [tip, setTip] = useState(() => {
+    try {
+      return localStorage.getItem(TIP_KEY) !== "seen";
+    } catch {
+      return false;
+    }
+  });
+  const dismissTip = () => {
+    setTip(false);
+    try {
+      localStorage.setItem(TIP_KEY, "seen");
+    } catch {
+      // Storage unavailable: the tip simply returns next visit.
+    }
+  };
+  useEffect(() => {
+    if (!tip) return;
+    window.addEventListener(OPEN_HELP_EVENT, dismissTip);
+    window.addEventListener(OPEN_PALETTE_EVENT, dismissTip);
+    return () => {
+      window.removeEventListener(OPEN_HELP_EVENT, dismissTip);
+      window.removeEventListener(OPEN_PALETTE_EVENT, dismissTip);
+    };
+  }, [tip]);
+  // On a touch screen there is no keyboard to teach, so key caps and the
+  // cheat sheet are left out and the buttons carry the labels alone.
+  const [touch] = useState(() => {
+    if (typeof window.matchMedia !== "function") return false;
+    // A coarse pointer, or a touch device with nothing that can hover. A
+    // laptop with a touchscreen still has a mouse and keeps the full toolbar.
+    return (
+      window.matchMedia("(pointer: coarse)").matches ||
+      (navigator.maxTouchPoints > 0 && window.matchMedia("(hover: none)").matches)
+    );
+  });
+  const noKeys = xrActive || touch;
+  // A phone held upright has room for one row: the six things done most,
+  // with everything else a tap away in Settings.
+  // Narrow (upright) or short (on its side): either way one row is all there is room for.
+  const isSmall = () => window.innerWidth < 640 || window.innerHeight < 500;
+  const [narrow, setNarrow] = useState(isSmall);
+  useEffect(() => {
+    const onResize = () => setNarrow(isSmall());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const compact = touch && narrow && !xrActive;
+  // The tap button is offered only while tempo is not locked: once the clock
+  // has the beat there is nothing to tap in.
+  const [tempoLocked, setTempoLocked] = useState(false);
+  useEffect(() => {
+    const onTempo = (event: Event) => {
+      const detail = (event as CustomEvent<LiveTempoState>).detail;
+      setTempoLocked(Boolean(detail?.barTiming?.bpmLocked));
+    };
+    window.addEventListener(LIVE_TEMPO_EVENT, onTempo);
+    return () => window.removeEventListener(LIVE_TEMPO_EVENT, onTempo);
+  }, []);
   const flashTimerRef = useRef<number | null>(null);
 
   const currentVisual = getVisualDefinition(settings.view);
@@ -383,11 +408,6 @@ export function Shortcuts() {
     settingsStore.randomize();
     showFlash("Randomized");
   };
-  const doToggleRandomizeInclude = () => {
-    const next = !settingsStore.get().randomizeViewSettings;
-    settingsStore.set({ randomizeViewSettings: next });
-    showFlash(next ? "Randomize includes view" : "Randomize post FX only");
-  };
   const doTogglePostFx = () => {
     if (settingsStore.get().performance || xrActive) return;
     const next = !settingsStore.get().postFxEnabled;
@@ -429,12 +449,12 @@ export function Shortcuts() {
     if (on) {
       const hasAny = settingsStore.getSlots().filter(Boolean).length > 1;
       if (!hasAny) {
-        showFlash("Save at least two looks to play saves");
+        showFlash("Save at least two presets to play them");
         return;
       }
     }
     settingsStore.set({ slotCycleMode: on, ...(on ? { viewCycleMode: false } : {}) });
-    showFlash(on ? "Save cycle ON" : "Save cycle OFF");
+    showFlash(on ? "Playing presets" : "Presets paused");
   };
   const doToggleViewCycle = () => {
     const on = !settingsStore.get().viewCycleMode;
@@ -455,13 +475,19 @@ export function Shortcuts() {
     settingsStore.set({ showBPM: next });
     showFlash(next ? "BPM grid ON" : "BPM grid OFF");
   };
-  const doToggleSettings = (tab?: "audio" | "scene" | "post" | "saves") => {
+  const doToggleDynamic = () => {
+    const next = !settingsStore.get().evolveEnabled;
+    settingsStore.set({ evolveEnabled: next });
+    showFlash(next ? "Dynamic mode ON" : "Dynamic mode OFF");
+  };
+  const doHelp = () => window.dispatchEvent(new Event(OPEN_HELP_EVENT));
+  const doPalette = () => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT));
+  const doToggleSettings = (tab?: "view" | "audio" | "scene" | "post" | "saves" | "midi") => {
     window.dispatchEvent(
       tab
         ? new CustomEvent(TOGGLE_SETTINGS_PANEL_EVENT, { detail: { tab } })
         : new Event(TOGGLE_SETTINGS_PANEL_EVENT),
     );
-    showFlash("Settings");
   };
   const doStopAudio = () => {
     window.dispatchEvent(new Event(STOP_AUDIO_EVENT));
@@ -502,16 +528,18 @@ export function Shortcuts() {
   const doSlot = (i: number) => {
     const result = preset.loadAt(i);
     if (result.status === "ok") flashLoaded(`Loaded ${result.name}`);
-    else showFlash(`Save ${i + 1} not found`);
+    else showFlash(`No preset ${i + 1}`);
   };
   const doSaveSlot = (i: number) => {
-    const result = preset.saveAt(i, `Slot ${i + 1}`);
+    const result = preset.saveAt(i);
     showFlash(
       result.status === "missing"
-        ? "Create saves in order first"
+        ? "Fill the earlier presets first"
         : result.status === "unchanged"
           ? "Already saved"
-          : `Saved to slot ${i + 1}`,
+          : result.status === "ok"
+            ? `Saved ${result.name}`
+            : "Saved",
     );
   };
   const doSaveCurrent = () => {
@@ -521,11 +549,6 @@ export function Shortcuts() {
         ? "Already saved"
         : `Saved as ${result.status === "ok" ? result.name : "save"}`,
     );
-  };
-  const doDeleteCurrentSave = () => {
-    const result = preset.deleteCurrent();
-    if (result.status === "empty") showFlash("No saved presets");
-    else showFlash(`Deleted ${result.status === "ok" ? result.name : "save"}`);
   };
   const doCycleSave = (direction: 1 | -1) => {
     if (!preset.canLoadAnother) return;
@@ -540,12 +563,14 @@ export function Shortcuts() {
     else showFlash("No saved presets");
   };
 
-  const actionsRef = useRef({
+  const actions = {
     doAdjustResponse,
     doRandomize,
     doToggleView,
     doToggleSlotCycle,
     doToggleViewCycle,
+    doToggleDynamic,
+    doTogglePostFx,
     doBeatHint,
     doCycleSave,
     doRandomSave,
@@ -556,147 +581,149 @@ export function Shortcuts() {
     doToggleLatency,
     doToggleBpmGrid,
     doToggleStats,
-    doSaveSlot,
-    doSlot,
-  });
-  actionsRef.current = {
-    doAdjustResponse,
-    doRandomize,
-    doToggleView,
-    doToggleSlotCycle,
-    doToggleViewCycle,
-    doBeatHint,
-    doCycleSave,
-    doRandomSave,
-    doFullscreen,
-    doToggleSettings,
-    doStopAudio,
-    doToggleHints,
-    doToggleLatency,
-    doToggleBpmGrid,
-    doToggleStats,
+    doHelp,
+    doPalette,
     doSaveSlot,
     doSlot,
   };
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
 
   useEffect(() => {
-    const slotIndexFromCode = (code: string): number | null => {
-      const d = /^Digit([1-5])$/.exec(code)?.[1] ?? /^Numpad([1-5])$/.exec(code)?.[1];
-      return d != null ? parseInt(d, 10) - 1 : null;
+    const digit = new RegExp(`^[1-${LOOK_DIGITS}]$`);
+    const digitCode = new RegExp(`^(?:Digit|Numpad)([1-${LOOK_DIGITS}])$`);
+    /**
+     * Which preset a key press means, and whether it loads or saves. Keyboard
+     * layouts differ in what the digit row types: on AZERTY a digit needs
+     * Shift, and on many layouts Shift+7 is "/". So a typed digit always
+     * loads, and Shift plus a digit key saves only when the character it
+     * types is not a shortcut of its own.
+     */
+    const slotKey = (e: KeyboardEvent): { index: number; save: boolean } | null => {
+      if (digit.test(e.key)) {
+        const numpad = e.code.startsWith("Numpad");
+        return { index: parseInt(e.key, 10) - 1, save: e.shiftKey && numpad };
+      }
+      const byCode = digitCode.exec(e.code)?.[1];
+      if (byCode && e.shiftKey && !actionForKey(e)) {
+        return { index: parseInt(byCode, 10) - 1, save: true };
+      }
+      return null;
     };
-    const slotIndexFromEvent = (e: KeyboardEvent): number | null => {
-      const byCode = slotIndexFromCode(e.code);
-      if (byCode !== null) return byCode;
-      const byKey = /^([1-5])$/.exec(e.key)?.[1];
-      return byKey != null ? parseInt(byKey, 10) - 1 : null;
+    /** Every shortcut, the palette and the cheat sheet run actions through here. */
+    const run = (action: ActionId) => {
+      const a = actionsRef.current;
+      switch (action) {
+        case "prevView":
+          return a.doToggleView(-1);
+        case "nextView":
+          return a.doToggleView(1);
+        case "randomize":
+          return a.doRandomize();
+        case "viewCycle":
+          return a.doToggleViewCycle();
+        case "dynamicMode":
+          return a.doToggleDynamic();
+        case "prevLook":
+          return a.doCycleSave(-1);
+        case "nextLook":
+          return a.doCycleSave(1);
+        case "randomLook":
+          return a.doRandomSave();
+        case "playLooks":
+          return a.doToggleSlotCycle();
+        case "responseDown":
+          return a.doAdjustResponse(-1);
+        case "responseUp":
+          return a.doAdjustResponse(1);
+        case "tapBeat":
+          return a.doBeatHint(false);
+        case "tapDownbeat":
+          return a.doBeatHint(true);
+        case "fullscreen":
+          return a.doFullscreen();
+        case "hideControls":
+          return a.doToggleHints();
+        case "postFx":
+          return a.doTogglePostFx();
+        case "bpmGrid":
+          return a.doToggleBpmGrid();
+        case "latency":
+          return a.doToggleLatency();
+        case "stats":
+          return a.doToggleStats();
+        case "settings":
+          return a.doToggleSettings();
+        case "palette":
+          return a.doPalette();
+        case "help":
+          return a.doHelp();
+        case "inputSource":
+          return a.doStopAudio();
+      }
     };
     const onKey = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // While the search palette or the key sheet is open, keys belong to it:
+      // nothing may change the scene behind it. `?` still closes the sheet.
+      const modal = document.querySelector("[data-blocks-shortcuts]");
+      if (modal) {
+        if (modal.getAttribute("data-blocks-shortcuts") === "sheet" && actionForKey(e) === "help") {
+          run("help");
+          e.preventDefault();
+        }
+        return;
+      }
       const target = e.target instanceof HTMLElement ? e.target : null;
+      // Typing never triggers a shortcut.
       if (
         target?.closest(
-          "input, textarea, select, [contenteditable='true'], [role='textbox'], [role='slider'], [role='switch']",
-        ) &&
-        k !== "s"
+          "input:not([type='range']), textarea, select, [contenteditable='true'], [role='textbox']",
+        )
       )
         return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Sliders and switches keep their own keys; only S (settings) reaches through.
+      const onControl = target?.closest("input, [role='slider'], [role='switch']");
+      if (onControl && e.key.toLowerCase() !== "s") return;
       if (target?.closest("[data-own-arrow-keys]") && e.key.startsWith("Arrow")) return;
+      // A focused button is pressed by Space and Enter, and an open panel scrolls with ↑ ↓.
+      if ((e.key === " " || e.key === "Enter") && target?.closest("button, a, [role='button']"))
+        return;
+      if (
+        (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+        target?.closest("[data-analyser-flyout]")
+      )
+        return;
 
-      const slotIdx = slotIndexFromEvent(e);
-      if (slotIdx !== null) {
-        if (e.shiftKey) actionsRef.current.doSaveSlot(slotIdx);
-        else actionsRef.current.doSlot(slotIdx);
+      const slot = slotKey(e);
+      if (slot) {
+        if (slot.save) actionsRef.current.doSaveSlot(slot.index);
+        else actionsRef.current.doSlot(slot.index);
         e.preventDefault();
         e.stopPropagation();
         return;
       }
-
-      if (k === "-" || k === "+" || k === "=") {
-        actionsRef.current.doAdjustResponse(k === "-" ? -1 : 1);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "r") {
-        actionsRef.current.doRandomize();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "b" || (e.key === "ArrowLeft" && !e.shiftKey)) {
-        actionsRef.current.doToggleView(-1);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "v" || (e.key === "ArrowRight" && !e.shiftKey)) {
-        actionsRef.current.doToggleView(1);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (e.key === "ArrowLeft" && e.shiftKey) {
-        actionsRef.current.doCycleSave(-1);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (e.key === "ArrowRight" && e.shiftKey) {
-        actionsRef.current.doCycleSave(1);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "a") {
-        actionsRef.current.doToggleSlotCycle();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "c") {
-        actionsRef.current.doToggleViewCycle();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "t") {
-        actionsRef.current.doBeatHint(e.shiftKey);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (e.key === "[") {
-        actionsRef.current.doCycleSave(-1);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (e.key === "]") {
-        actionsRef.current.doCycleSave(1);
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (e.key === "\\") {
-        actionsRef.current.doRandomSave();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "f") {
-        actionsRef.current.doFullscreen();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "s") {
-        actionsRef.current.doToggleSettings();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "x") {
-        actionsRef.current.doStopAudio();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "g") {
-        actionsRef.current.doToggleHints();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "n" && !e.shiftKey) {
-        actionsRef.current.doToggleStats();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "l") {
-        actionsRef.current.doToggleLatency();
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (k === "m") {
-        actionsRef.current.doToggleBpmGrid();
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      const action = actionForKey(e);
+      if (!action) return;
+      run(action);
+      e.preventDefault();
+      e.stopPropagation();
     };
+    const onRunAction = (event: Event) => {
+      const action = (event as CustomEvent<ActionId>).detail;
+      if (action) run(action);
+    };
+    window.addEventListener(RUN_ACTION_EVENT, onRunAction);
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener(RUN_ACTION_EVENT, onRunAction);
+      window.removeEventListener("keydown", onKey, true);
+    };
   }, []);
 
   const prevVisualHint: Hint = {
-    key: "←",
-    label: "Prev Visual",
+    key: capFor("prevView"),
+    label: compact ? "Prev" : "Prev Visual",
     icon: <SkipBack />,
     tooltip: (
       <TooltipBlock
@@ -710,8 +737,8 @@ export function Shortcuts() {
     },
   };
   const nextVisualHint: Hint = {
-    key: "→",
-    label: "Next Visual",
+    key: capFor("nextView"),
+    label: compact ? "Next" : "Next Visual",
     icon: <SkipForward />,
     tooltip: (
       <TooltipBlock
@@ -727,7 +754,7 @@ export function Shortcuts() {
   const hints: Hint[] = [
     {
       key: "R",
-      label: "Randomize",
+      label: compact ? "Random" : "Randomize",
       disabledReason: randomizeBlocked,
       icon: <Shuffle />,
       tooltip: (
@@ -742,8 +769,8 @@ export function Shortcuts() {
       },
     },
     {
-      key: "X",
-      label: "Input Source",
+      key: capFor("inputSource"),
+      label: compact ? "Input" : "Input Source",
       icon: audioSource === "system" ? <MonitorSpeaker /> : ambientOn ? <Sparkles /> : <Mic />,
       active: audioSource !== "none" || ambientOn || settings.midiEnabled,
       sub: sourceSub,
@@ -843,8 +870,8 @@ export function Shortcuts() {
       title: "Toggle BPM & bar grid",
     },
     {
-      key: "G",
-      label: "Hide Controls",
+      key: capFor("hideControls"),
+      label: "Hide",
       tooltip: (
         <TooltipBlock
           title="Hide Shortcuts"
@@ -893,60 +920,77 @@ export function Shortcuts() {
       <TooltipBlock
         title="Settings"
         hint="S"
-        detail="Opens the controls drawer: visual picker, per-view settings, and the panel rail."
+        detail="Opens the settings panel: view, effects, scene, audio, presets and MIDI."
       />
     ),
     onClick: () => {
       doToggleSettings();
     },
   };
-  const postFxHint: Hint = {
-    key: "",
-    label: "Post FX",
-    icon: <SlidersHorizontal />,
-    showKey: false,
+  const searchHint: Hint = {
+    key: capFor("palette"),
+    label: "Search",
+    icon: <Search />,
     tooltip: (
       <TooltipBlock
-        title="Post FX panel"
-        detail="Pops out the effects panel on its own: presets, randomize, effect groups, pins, and pipeline order."
+        title="Search everything"
+        hint={`${capFor("palette")} or ⌘K`}
+        detail="Find any view, saved preset, effect, setting or action by typing its name."
       />
     ),
-    onClick: () => {
-      doToggleSettings("post");
-    },
+    onClick: () => doPalette(),
   };
-  const sceneHint: Hint = {
-    key: "",
-    label: "Scene",
-    icon: <Camera />,
-    showKey: false,
+  const helpHint: Hint = {
+    key: capFor("help"),
+    label: "Keys",
+    icon: <Keyboard />,
     tooltip: (
       <TooltipBlock
-        title="Scene panel"
-        detail="Pops out palette, camera, motion, and auto-pilot settings (view cycle, Dynamic Mode)."
+        title="Keyboard shortcuts"
+        hint={capFor("help")}
+        detail="Shows every shortcut on one sheet."
       />
     ),
-    onClick: () => {
-      doToggleSettings("scene");
-    },
+    onClick: () => doHelp(),
+  };
+  const hudOn = settings.showBPM || settings.showLatency || statsOpen;
+  const hudHint: Hint = {
+    key: "",
+    label: "Displays",
+    icon: <Gauge />,
+    showKey: false,
+    active: hudOpen || hudOn,
+    tooltip: (
+      <TooltipBlock
+        title="On-screen displays"
+        detail="Tempo and bar grid, latency, frame rate and stats for nerds."
+      />
+    ),
+    onClick: () => setHudOpen((open) => !open),
   };
   const cycleSavesHint: Hint = {
-    key: "A",
-    label: settings.slotCycleMode ? "Pause Saves" : "Play Saves",
+    key: capFor("playLooks"),
+    label: compact
+      ? settings.slotCycleMode
+        ? "Pause"
+        : "Play"
+      : settings.slotCycleMode
+        ? "Pause Presets"
+        : "Play Presets",
     icon: settings.slotCycleMode ? <Pause /> : <Play />,
     disabledReason:
       !settings.slotCycleMode && slots.length < 2
-        ? "Save at least two looks to cycle between them."
+        ? "Save at least two presets to cycle between them."
         : undefined,
     active: settings.slotCycleMode,
     tooltip: (
       <TooltipBlock
-        title="Play Saves"
+        title="Play Presets"
         hint="A"
         detail={
           settings.slotCycleMode
-            ? "Pause automatic save playback on the current look."
-            : "Play your saves in order. Starting playback stops View Cycle."
+            ? "Pause on the current preset."
+            : "Play your presets in order. Starting playback stops View Cycle."
         }
       />
     ),
@@ -954,36 +998,16 @@ export function Shortcuts() {
       doToggleSlotCycle();
     },
   };
-  const viewCycleHint: Hint = {
-    key: "C",
-    label: "View Cycle",
-    icon: <Repeat />,
-    active: settings.viewCycleMode,
-    tooltip: (
-      <TooltipBlock
-        title="View Cycle"
-        hint="C"
-        detail={
-          settings.viewCycleMode
-            ? "Stop automatic visual changes."
-            : "Switch visuals every four bars. Starting View Cycle stops Play Saves."
-        }
-      />
-    ),
-    onClick: () => {
-      doToggleViewCycle();
-    },
-  };
   const prevSaveHint: Hint = {
-    key: "[",
-    label: "Prev Save",
+    key: capFor("prevLook"),
+    label: "Prev Preset",
     disabledReason: !preset.canLoadAnother ? noOtherSave : undefined,
     icon: <SkipBack />,
     tooltip: (
       <TooltipBlock
-        title="Prev Save"
+        title="Previous Preset"
         hint="[ or ⇧←"
-        detail="Loads the previous save in your current list."
+        detail="Loads the previous preset in your list."
       />
     ),
     onClick: () => {
@@ -991,40 +1015,24 @@ export function Shortcuts() {
     },
   };
   const nextSaveHint: Hint = {
-    key: "]",
-    label: "Next Save",
+    key: capFor("nextLook"),
+    label: "Next Preset",
     disabledReason: !preset.canLoadAnother ? noOtherSave : undefined,
     icon: <SkipForward />,
     tooltip: (
       <TooltipBlock
-        title="Next Save"
+        title="Next Preset"
         hint="] or ⇧→"
-        detail="Loads the next save in your current list."
+        detail="Loads the next preset in your list."
       />
     ),
     onClick: () => {
       doCycleSave(1);
     },
   };
-  const randomSaveHint: Hint = {
-    key: "\\",
-    label: "Random Save",
-    disabledReason: !preset.canLoadAnother ? noOtherSave : undefined,
-    icon: <Shuffle />,
-    tooltip: (
-      <TooltipBlock
-        title="Random Save"
-        hint="\\"
-        detail="Jumps to a random saved look without changing the save list itself."
-      />
-    ),
-    onClick: () => {
-      doRandomSave();
-    },
-  };
   const saveCurrentHint: Hint = {
     key: "",
-    label: preset.canSaveNew ? "Save" : "Saved",
+    label: preset.canSaveNew ? "Save Preset" : "Saved",
     ariaLabel: "Save",
     disabledReason: currentSave
       ? `Already saved as ${currentSave.name}. Change the look to save a new version.`
@@ -1032,37 +1040,18 @@ export function Shortcuts() {
     icon: preset.canSaveNew ? <Save /> : <Check />,
     tooltip: (
       <TooltipBlock
-        title="Save"
+        title="Save Preset"
         detail="Captures the current setup as a new saved state at the end of the list."
       />
     ),
     onClick: () => {
       doSaveCurrent();
     },
-    title: "Save current settings",
-    showKey: false,
-  };
-  const deleteSaveHint: Hint = {
-    key: "",
-    label: "Delete",
-    disabledReason: !currentSave
-      ? "The current look is not a save. Open Saves to manage other saved looks."
-      : undefined,
-    icon: <Trash2 />,
-    tooltip: (
-      <TooltipBlock
-        title="Delete Save"
-        detail={`Delete ${currentSave?.name ?? "the current save"} from your saved looks. The visual stays on screen.`}
-      />
-    ),
-    onClick: () => {
-      doDeleteCurrentSave();
-    },
-    title: "Delete current save",
+    title: "Save what is on screen as a preset",
     showKey: false,
   };
 
-  const saveCountLabel = `${slots.length} save${slots.length === 1 ? "" : "s"}`;
+  const saveCountLabel = `${slots.length} preset${slots.length === 1 ? "" : "s"}`;
 
   return (
     <>
@@ -1089,87 +1078,95 @@ export function Shortcuts() {
                 </span>
               </div>
               <div className="font-mono text-[10px] text-white/55">
-                {currentSave ? `Saved · ${currentSave.name}` : "Unsaved look"}
+                {currentSave ? `Saved · ${currentSave.name}` : "Not saved as a preset"}
               </div>
               {xrActive && (
                 <div className="rounded-full border border-emerald-300/25 bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-200/75 backdrop-blur">
                   XR: right A settings · right B stats · hold both grips exit
                 </div>
               )}
+              {tip && !noKeys && (
+                <button
+                  type="button"
+                  onClick={dismissTip}
+                  title="Dismiss"
+                  className="pointer-events-auto rounded-full border border-emerald-300/25 bg-black/60 px-3 py-1 font-mono text-[10px] tracking-wide text-emerald-100/85 backdrop-blur hover:border-emerald-300/50"
+                >
+                  New here? Press{" "}
+                  <kbd className="mx-0.5 rounded border border-white/20 px-1">?</kbd> for the keys,
+                  or <kbd className="mx-0.5 rounded border border-white/20 px-1">/</kbd> to search
+                  for anything. <span className="text-white/40">×</span>
+                </button>
+              )}
               {is3DMode && !xrActive && (
                 <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
-                  3D: drag mouse to move camera
+                  {touch ? "3D: drag to move camera" : "3D: drag mouse to move camera"}
                 </div>
               )}
               <div className="flex w-full max-w-[calc(100vw-1rem)] flex-wrap items-stretch justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/75">
-                {xrActive && <Btn xrActive={xrActive} h={xrHint} />}
-                <Group
-                  title={visualCountLabel}
-                  onTitleClick={() => doToggleSettings()}
-                  titleHint="Open the visual controls drawer"
-                >
-                  <Btn xrActive={xrActive} h={prevVisualHint} />
-                  <Btn xrActive={xrActive} h={hints[0]!} />
-                  <Btn xrActive={xrActive} h={viewCycleHint} />
-                  <div className="flex flex-col items-center justify-center gap-1">
-                    <MiniToggle
-                      label="inc"
-                      active={settings.randomizeViewSettings}
-                      onClick={doToggleRandomizeInclude}
-                      title={
-                        settings.randomizeViewSettings
-                          ? "Randomize includes view settings"
-                          : "Randomize post FX only"
-                      }
-                    />
-                    <MiniToggle
-                      label="fx"
-                      active={settings.postFxEnabled && !settings.performance && !xrActive}
-                      disabledReason={
-                        settings.performance
-                          ? "Post FX are bypassed by Performance Mode. Turn it off in Settings to enable FX."
-                          : xrActive
-                            ? "Post FX are bypassed in VR."
-                            : undefined
-                      }
-                      onClick={doTogglePostFx}
-                      title={settings.postFxEnabled ? "Post FX enabled" : "Post FX disabled"}
-                    />
+                {compact ? (
+                  <div className="pointer-events-auto flex w-[calc(100vw-1.5rem)] max-w-md items-stretch justify-between gap-1 rounded-xl border border-white/15 bg-black/55 px-1.5 py-1.5 backdrop-blur-xl [&>button]:min-w-0 [&>button]:flex-1 [&>button]:px-0.5 [&_span]:tracking-normal">
+                    {audioSource === "none" && <Btn xrActive={noKeys} h={hints[1]!} />}
+                    <Btn xrActive={noKeys} h={prevVisualHint} />
+                    <Btn xrActive={noKeys} h={hints[0]!} />
+                    <Btn xrActive={noKeys} h={nextVisualHint} />
+                    <Btn xrActive={noKeys} h={cycleSavesHint} />
+                    <Btn xrActive={noKeys} h={settingsHint} />
+                    <Btn xrActive={noKeys} h={hints[6]!} />
                   </div>
-                  <Btn xrActive={xrActive} h={nextVisualHint} />
-                </Group>
-                <Group
-                  title={saveCountLabel}
-                  onTitleClick={() => doToggleSettings("saves")}
-                  titleHint="Open the saves panel"
-                >
-                  <Btn xrActive={xrActive} h={prevSaveHint} />
-                  <Btn xrActive={xrActive} h={cycleSavesHint} />
-                  <Btn xrActive={xrActive} h={nextSaveHint} />
-                  <Btn xrActive={xrActive} h={randomSaveHint} />
-                  <Btn xrActive={xrActive} h={saveCurrentHint} />
-                  <Btn xrActive={xrActive} h={deleteSaveHint} />
-                </Group>
-                <Group title="panels" titleHint="Pop-out panels and overlays">
-                  <Btn xrActive={xrActive} h={postFxHint} />
-                  <Btn xrActive={xrActive} h={sceneHint} />
-                  <Btn xrActive={xrActive} h={settingsHint} />
-                  <Btn xrActive={xrActive} h={hints[5]!} />
-                  <Btn xrActive={xrActive} h={hints[4]!} />
-                </Group>
-                <ResponseControl showKeys={!xrActive} />
-                <Group
-                  title="tools"
-                  onTitleClick={() => doToggleSettings("audio")}
-                  titleHint="Open the audio settings panel"
-                >
-                  <Btn xrActive={xrActive} h={hints[1]!} />
-                  <Btn xrActive={xrActive} h={hints[2]!} />
-                  <Btn xrActive={xrActive} h={hints[3]!} />
-                  <FpsChip fps={liveFps} />
-                  <Btn xrActive={xrActive} h={beatTapHint} />
-                  <Btn xrActive={xrActive} h={hints[6]!} />
-                </Group>
+                ) : (
+                  <>
+                    {xrActive && <Btn xrActive={noKeys} h={xrHint} />}
+                    {/* Shown only when there is something to do: no input yet, or
+                    a tempo that has not locked and can be tapped in. */}
+                    {audioSource === "none" && <Btn xrActive={noKeys} h={hints[1]!} />}
+                    <Group
+                      title={visualCountLabel}
+                      onTitleClick={() => doToggleSettings("view")}
+                      titleHint="Open the view picker and this view's settings"
+                    >
+                      <Btn xrActive={noKeys} h={prevVisualHint} />
+                      <Btn xrActive={noKeys} h={hints[0]!} />
+                      <Btn xrActive={noKeys} h={nextVisualHint} />
+                    </Group>
+                    <Group
+                      title={saveCountLabel}
+                      onTitleClick={() => doToggleSettings("saves")}
+                      titleHint="Open the presets"
+                    >
+                      <Btn xrActive={noKeys} h={prevSaveHint} />
+                      <Btn xrActive={noKeys} h={cycleSavesHint} />
+                      <Btn xrActive={noKeys} h={nextSaveHint} />
+                      <Btn xrActive={noKeys} h={saveCurrentHint} />
+                    </Group>
+                    <ResponseControl showKeys={!noKeys} />
+                    {audioSource !== "none" && !tempoLocked && (
+                      <Btn xrActive={noKeys} h={beatTapHint} />
+                    )}
+                    <Group title="more" titleHint="Settings, search and displays">
+                      <Btn xrActive={noKeys} h={settingsHint} />
+                      <Btn xrActive={noKeys} h={searchHint} />
+                      <Btn xrActive={noKeys} h={hints[2]!} />
+                      <div className="relative flex">
+                        <Btn xrActive={noKeys} h={hudHint} />
+                        {hudOpen && (
+                          <div
+                            role="group"
+                            aria-label="On-screen displays"
+                            className="absolute bottom-full right-0 z-10 mb-2 flex gap-1 rounded-md border border-white/10 bg-black/85 p-1.5 backdrop-blur-xl"
+                          >
+                            <Btn xrActive={noKeys} h={hints[5]!} />
+                            <Btn xrActive={noKeys} h={hints[4]!} />
+                            <Btn xrActive={noKeys} h={hints[3]!} />
+                            <FpsChip fps={liveFps} />
+                          </div>
+                        )}
+                      </div>
+                      {!touch && <Btn xrActive={noKeys} h={helpHint} />}
+                      <Btn xrActive={noKeys} h={hints[6]!} />
+                    </Group>
+                  </>
+                )}
               </div>
             </div>
           </TooltipProvider>
@@ -1178,7 +1175,7 @@ export function Shortcuts() {
         <button
           type="button"
           onClick={doToggleHints}
-          title={xrActive ? "Show shortcuts" : "Show shortcuts (G)"}
+          title={xrActive ? "Show controls" : "Show controls (H)"}
           data-window-hovering={windowHovering ? "true" : "false"}
           className={`pointer-events-auto fixed inset-x-0 bottom-1 z-[100] mx-auto block w-fit rounded-full border bg-black/50 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.22em] backdrop-blur transition-opacity duration-300 hover:border-white/20 hover:text-white/80 ${
             windowHovering
@@ -1186,7 +1183,7 @@ export function Shortcuts() {
               : "border-white/5 text-white/15 opacity-10"
           }`}
         >
-          shortcuts · g
+          controls · h
         </button>
       )}
     </>

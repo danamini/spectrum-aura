@@ -53,6 +53,25 @@ export type AudioBands = {
    * need this narrower band. Absent on synthetic sources.
    */
   kick?: number;
+  /**
+   * Time-domain samples for this frame (128 = zero). Presentation only: the
+   * oscilloscope and needle meters read it; no detector does. Absent on
+   * synthetic sources.
+   */
+  wave?: Uint8Array;
+  /**
+   * Time-domain samples for the left and right channels (128 = zero), for
+   * stereo level meters. Presentation only. Present once the capture has
+   * shown signal on its right channel, so a mono microphone never reports
+   * a silent right side.
+   */
+  stereo?: { left: Uint8Array; right: Uint8Array };
+  /**
+   * The spectrum as measured, before Dynamic contrast reshapes `bins` for
+   * drawing. Set by the render loop for views that are instruments (an
+   * analyser, a peak finder) and must show what is there. Presentation only.
+   */
+  rawBins?: Uint8Array;
   /** Present only while low-latency audio is on and a capture is running. */
   display?: AudioDisplayBands | null;
 };
@@ -117,6 +136,11 @@ export class AudioEngine {
   private outBands: AudioBands = { ...EMPTY_BANDS, timing: this.outTiming };
 
   private displayRaw: Uint8Array = new Uint8Array(0);
+  private wave: Uint8Array = new Uint8Array(0);
+  /** Per-channel taps for stereo meters; they feed nothing else. */
+  private channelAnalysers: [AnalyserNode, AnalyserNode] | null = null;
+  private outStereo = { left: new Uint8Array(0), right: new Uint8Array(0) };
+  private stereoSeen = false;
   private displayBallistics = new DisplayBallistics();
   private outDisplay: AudioDisplayBands = {
     bass: 0,
@@ -140,7 +164,8 @@ export class AudioEngine {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio:
           (options?.latencyOptimized ?? true)
-            ? { echoCancellation: false, noiseSuppression: false }
+            ? // Two channels where the device has them, for the stereo meters.
+              { echoCancellation: false, noiseSuppression: false, channelCount: { ideal: 2 } }
             : true,
       });
       if (request !== this.captureRequest) {
@@ -226,6 +251,7 @@ export class AudioEngine {
       displayAnalyser.fftSize = 2048;
       displayAnalyser.smoothingTimeConstant = 0;
       gain.connect(displayAnalyser);
+      this.attachChannelTaps(ctx, gain);
       this.source = source;
       this.gain = gain;
       this.analyser = analyser;
@@ -234,6 +260,7 @@ export class AudioEngine {
       this.displayRaw = new Uint8Array(displayAnalyser.frequencyBinCount);
       this.displayBallistics.reset();
       this.bins = new Uint8Array(analyser.frequencyBinCount);
+      this.wave = new Uint8Array(analyser.fftSize);
       this.updateBandBounds(analyser.frequencyBinCount);
       void ctx.resume().catch(() => {
         // A pending resume may reject after stop() closes this context.
@@ -242,6 +269,40 @@ export class AudioEngine {
       this.releaseResources();
       throw error;
     }
+  }
+
+  /** Splits the input into left and right for the stereo meters. */
+  private attachChannelTaps(ctx: AudioContext, gain: GainNode) {
+    this.channelAnalysers = null;
+    this.stereoSeen = false;
+    if (typeof ctx.createChannelSplitter !== "function") return;
+    const splitter = ctx.createChannelSplitter(2);
+    gain.connect(splitter);
+    const taps = [ctx.createAnalyser(), ctx.createAnalyser()] as [AnalyserNode, AnalyserNode];
+    taps.forEach((tap, channel) => {
+      tap.fftSize = 1024;
+      splitter.connect(tap, channel);
+    });
+    this.channelAnalysers = taps;
+    this.outStereo = { left: new Uint8Array(1024), right: new Uint8Array(1024) };
+  }
+
+  private readStereo(): AudioBands["stereo"] {
+    const taps = this.channelAnalysers;
+    if (!taps) return undefined;
+    const { left, right } = this.outStereo;
+    taps[0].getByteTimeDomainData(left as Uint8Array<ArrayBuffer>);
+    taps[1].getByteTimeDomainData(right as Uint8Array<ArrayBuffer>);
+    if (!this.stereoSeen) {
+      // A mono source leaves the right channel at exactly zero.
+      for (let i = 0; i < right.length; i += 8) {
+        if (right[i] !== 128) {
+          this.stereoSeen = true;
+          break;
+        }
+      }
+    }
+    return this.stereoSeen ? this.outStereo : undefined;
   }
 
   private updateBandBounds(n: number) {
@@ -279,6 +340,7 @@ export class AudioEngine {
     if (this.analyser && this.analyser.fftSize !== n) {
       this.analyser.fftSize = n;
       this.bins = new Uint8Array(this.analyser.frequencyBinCount);
+      this.wave = new Uint8Array(this.analyser.fftSize);
       this.updateBandBounds(this.analyser.frequencyBinCount);
       if (this.displayAnalyser) {
         this.displayAnalyser.fftSize = n;
@@ -337,6 +399,8 @@ export class AudioEngine {
       out.bins = this.bins;
       out.fftReadAt = 0;
       out.kick = 0;
+      out.wave = undefined;
+      out.stereo = undefined;
       out.display = null;
       return out;
     }
@@ -420,6 +484,9 @@ export class AudioEngine {
     out.bins = this.bins;
     out.fftReadAt = fftReadAt;
     out.kick = kick;
+    this.analyser.getByteTimeDomainData(this.wave as Uint8Array<ArrayBuffer>);
+    out.wave = this.wave;
+    out.stereo = this.readStereo();
     out.display = display;
     const timing = out.timing;
     timing.readCpuMs = readCpuMs;
@@ -466,6 +533,9 @@ export class AudioEngine {
     this.gain = null;
     this.stream = null;
     this.bins = EMPTY_BANDS.bins;
+    this.wave = new Uint8Array(0);
+    this.channelAnalysers = null;
+    this.stereoSeen = false;
     this.lastTickBpm = 0;
     this.lastTickBpmConfident = false;
     Object.assign(this.outTiming, EMPTY_TIMING);

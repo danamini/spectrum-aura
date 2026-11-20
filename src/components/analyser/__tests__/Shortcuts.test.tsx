@@ -171,15 +171,55 @@ describe("Shortcuts", () => {
     );
   });
 
-  it("renders the updated shortcut labels", () => {
-    expect(container.textContent).toContain("Next Visual");
-    expect(container.textContent).toContain("Play Saves");
-    expect(container.textContent).toContain("Stats");
+  it("keeps the toolbar to what is used while music plays", () => {
+    const text = container.textContent ?? "";
+    for (const label of [
+      "Next Visual",
+      "Randomize",
+      "Play Presets",
+      "Save Preset",
+      "Settings",
+      "Search",
+      "Keys",
+      "Hide",
+    ]) {
+      expect(text).toContain(label);
+    }
+    // Displays and one-off actions live in menus, the panel and the palette.
+    for (const label of ["BPM Grid", "Latency", "Stats", "View Cycle", "Random Save", "Delete"]) {
+      expect(text).not.toContain(label);
+    }
+  });
+
+  it("offers the input picker only while nothing is playing", async () => {
     expect(container.textContent).toContain("Input Source");
-    expect(container.textContent).toContain("BPM Grid");
-    expect(container.textContent).toContain("Latency");
+    flushSync(() =>
+      window.dispatchEvent(
+        new CustomEvent("spectrum-aura:audio-source-state", { detail: { source: "mic" } }),
+      ),
+    );
+    await tick();
+    expect(container.textContent).not.toContain("Input Source");
+  });
+
+  it("offers Beat Tap only while a source is playing and tempo has not locked", async () => {
+    expect(container.textContent).not.toContain("Beat Tap");
+    flushSync(() =>
+      window.dispatchEvent(
+        new CustomEvent("spectrum-aura:audio-source-state", { detail: { source: "mic" } }),
+      ),
+    );
+    await tick();
     expect(container.textContent).toContain("Beat Tap");
-    expect(container.textContent).toContain("Hide Controls");
+    flushSync(() =>
+      window.dispatchEvent(
+        new CustomEvent("spectrum-aura:live-tempo", {
+          detail: { barTiming: { bpmLocked: true } },
+        }),
+      ),
+    );
+    await tick();
+    expect(container.textContent).not.toContain("Beat Tap");
   });
 
   it("keeps a focused tooltip open through live FPS updates", async () => {
@@ -274,34 +314,16 @@ describe("Shortcuts", () => {
     );
   });
 
-  it("renders subtle randomize toggles for include and post fx", () => {
-    expect(container.textContent).toContain("inc");
-    expect(container.textContent).toContain("fx");
-  });
-
-  it("toggles randomize include scope from the shortcut bar", () => {
-    const includeToggle = container.querySelector("button[aria-label='Randomize post FX only']");
-    expect(includeToggle).not.toBeNull();
-
-    includeToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ randomizeViewSettings: true });
-  });
-
-  it("toggles post fx from the shortcut bar", () => {
-    const postFxToggle = container.querySelector("button[aria-label='Post FX enabled']");
-    expect(postFxToggle).not.toBeNull();
-
-    postFxToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
+  it("toggles all effects with P", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "p", bubbles: true }));
     expect(mocks.settingsStore.set).toHaveBeenCalledWith({ postFxEnabled: false });
   });
 
   it("renders icons for the save shortcut controls", () => {
     const saveShortcuts = Array.from(container.querySelectorAll("button")).filter((button) => {
       const text = button.textContent ?? "";
-      return ["Play Saves", "Prev Save", "Next Save", "Random Save", "Save", "Delete"].some(
-        (label) => text.includes(label),
+      return ["Play Presets", "Prev Preset", "Next Preset", "Save Preset"].some((label) =>
+        text.includes(label),
       );
     });
 
@@ -309,7 +331,7 @@ describe("Shortcuts", () => {
     expect(saveShortcuts.every((button) => button.querySelector("svg") !== null)).toBe(true);
   });
 
-  it("opens specific settings tabs from the group titles and Settings button", () => {
+  it("opens the matching section from the group titles and Settings button", () => {
     const tabs: (string | null)[] = [];
     const listener = (e: Event) => {
       tabs.push((e as CustomEvent<{ tab?: string }>).detail?.tab ?? null);
@@ -317,21 +339,15 @@ describe("Shortcuts", () => {
     window.addEventListener("spectrum-aura:toggle-settings-panel", listener);
 
     const click = () => new MouseEvent("click", { bubbles: true });
-    container.querySelector("button[aria-label='Open the saves panel']")?.dispatchEvent(click());
+    container.querySelector("button[aria-label='Open the presets']")?.dispatchEvent(click());
     container
-      .querySelector("button[aria-label='Open the audio settings panel']")
+      .querySelector('button[aria-label="Open the view picker and this view\'s settings"]')
       ?.dispatchEvent(click());
-    container
-      .querySelector("button[aria-label='Open the visual controls drawer']")
-      ?.dispatchEvent(click());
-    container.querySelector("button[aria-label='Post FX']")?.dispatchEvent(click());
-    container.querySelector("button[aria-label='Scene']")?.dispatchEvent(click());
     container.querySelector("button[aria-label='Settings']")?.dispatchEvent(click());
 
     window.removeEventListener("spectrum-aura:toggle-settings-panel", listener);
-    // Saves → saves pop-out, Tools → audio pop-out, Visuals title → drawer
-    // (no tab), Post FX / Scene buttons → their pop-outs, Settings → drawer.
-    expect(tabs).toEqual(["saves", "audio", null, "post", "scene", null]);
+    // Looks title → Looks, Visuals title → View, Settings → wherever it was last.
+    expect(tabs).toEqual(["saves", "view", null]);
   });
 
   it("dispatches settings toggle event when clicking Settings shortcut", () => {
@@ -347,20 +363,108 @@ describe("Shortcuts", () => {
     window.removeEventListener("spectrum-aura:toggle-settings-panel", onToggleSettings);
   });
 
-  it("allows S key to toggle settings even while typing in an input", () => {
+  it("never runs a shortcut while typing in a text field", () => {
     const onToggleSettings = vi.fn();
     window.addEventListener("spectrum-aura:toggle-settings-panel", onToggleSettings);
-
     const input = document.createElement("input");
     document.body.appendChild(input);
     input.focus();
-
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "s", bubbles: true }));
-
-    expect(onToggleSettings).toHaveBeenCalledTimes(1);
-
+    for (const key of ["s", "r", " ", "ArrowLeft", "1", "?"]) {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    }
+    expect(onToggleSettings).not.toHaveBeenCalled();
+    expect(mocks.settingsStore.randomize).not.toHaveBeenCalled();
+    expect(mocks.settingsStore.set).not.toHaveBeenCalled();
     input.remove();
     window.removeEventListener("spectrum-aura:toggle-settings-panel", onToggleSettings);
+  });
+
+  it("lets S open settings from a focused slider, which has no use for the letter", () => {
+    const onToggleSettings = vi.fn();
+    window.addEventListener("spectrum-aura:toggle-settings-panel", onToggleSettings);
+    const slider = container.querySelector<HTMLElement>('[role="slider"]')!;
+    slider.dispatchEvent(new KeyboardEvent("keydown", { key: "s", bubbles: true }));
+    expect(onToggleSettings).toHaveBeenCalledTimes(1);
+    window.removeEventListener("spectrum-aura:toggle-settings-panel", onToggleSettings);
+  });
+
+  it("uses the taught keys: Space, arrows, H, I, D, ? and /", () => {
+    const press = (key: string, init: KeyboardEventInit = {}) =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
+    press(" ");
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({
+      slotCycleMode: true,
+      viewCycleMode: false,
+    });
+    press("d");
+    expect(mocks.settingsStore.set).toHaveBeenCalledWith({ evolveEnabled: true });
+
+    const seen: string[] = [];
+    const note = (name: string) => () => seen.push(name);
+    const listeners: Array<[string, () => void]> = [
+      ["spectrum-aura:open-help", note("help")],
+      ["spectrum-aura:open-palette", note("palette")],
+      ["spectrum-aura:stop-audio", note("input")],
+    ];
+    for (const [event, fn] of listeners) window.addEventListener(event, fn);
+    press("?", { shiftKey: true });
+    press("/");
+    press("i");
+    for (const [event, fn] of listeners) window.removeEventListener(event, fn);
+    expect(seen).toEqual(["help", "palette", "input"]);
+  });
+
+  it("loads looks 1 to 9 on the digits", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2", code: "Digit2", bubbles: true }));
+    expect(mocks.settingsStore.loadSlot).toHaveBeenCalledWith(1);
+  });
+
+  it("saves over a preset with Shift and a digit key", () => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "!", code: "Digit1", shiftKey: true, bubbles: true }),
+    );
+    expect(mocks.settingsStore.saveSlot).toHaveBeenCalledWith(0, undefined);
+  });
+
+  it("opens search, not a save, where Shift+7 types a slash", () => {
+    const opened = vi.fn();
+    window.addEventListener("spectrum-aura:open-palette", opened);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "/", code: "Digit7", shiftKey: true, bubbles: true }),
+    );
+    window.removeEventListener("spectrum-aura:open-palette", opened);
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(mocks.settingsStore.saveSlot).not.toHaveBeenCalled();
+  });
+
+  it("loads, not saves, where a digit needs Shift to type", () => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "1", code: "Digit1", shiftKey: true, bubbles: true }),
+    );
+    expect(mocks.settingsStore.loadSlot).toHaveBeenCalledWith(0);
+    expect(mocks.settingsStore.saveSlot).not.toHaveBeenCalled();
+  });
+
+  it("leaves the scene alone while the palette or key sheet is open", () => {
+    const modal = document.createElement("div");
+    modal.setAttribute("data-blocks-shortcuts", "palette");
+    document.body.appendChild(modal);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "2", code: "Digit2", bubbles: true }));
+    modal.remove();
+    expect(mocks.settingsStore.randomize).not.toHaveBeenCalled();
+    expect(mocks.settingsStore.loadSlot).not.toHaveBeenCalled();
+  });
+
+  it("runs an action sent by the palette or cheat sheet", () => {
+    window.dispatchEvent(new CustomEvent("spectrum-aura:run-action", { detail: "randomize" }));
+    expect(mocks.settingsStore.randomize).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not steal Space from a focused button", () => {
+    const button = container.querySelector<HTMLButtonElement>("button[aria-label='Randomize']")!;
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    expect(mocks.settingsStore.set).not.toHaveBeenCalled();
   });
 
   it("uses A key for Play Saves", () => {
@@ -387,7 +491,12 @@ describe("Shortcuts", () => {
     expect(mocks.settingsStore.set).toHaveBeenCalledWith({ showBPM: false });
   });
 
-  it("toggles BPM grid from the shortcut bar", () => {
+  it("toggles BPM grid from the Displays menu", () => {
+    flushSync(() => {
+      container
+        .querySelector("button[aria-label='Displays']")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
     const bpmButton = container.querySelector("button[aria-label='BPM Grid']");
     expect(bpmButton).not.toBeNull();
 
@@ -396,7 +505,12 @@ describe("Shortcuts", () => {
     expect(mocks.settingsStore.set).toHaveBeenCalledWith({ showBPM: false });
   });
 
-  it("toggles latency HUD from the shortcut bar", () => {
+  it("toggles latency HUD from the Displays menu", () => {
+    flushSync(() => {
+      container
+        .querySelector("button[aria-label='Displays']")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
     const latencyButton = container.querySelector("button[aria-label='Latency']");
     expect(latencyButton).not.toBeNull();
 
@@ -421,18 +535,21 @@ describe("Shortcuts", () => {
     window.removeEventListener("spectrum-aura:toggle-stats-panel", onToggleStats);
   });
 
-  it("hides the shortcut bar with G and shows the restore pill", async () => {
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "g", bubbles: true }));
+  it("hides the toolbar with H (or the older G) and shows the restore pill", async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "h", bubbles: true }));
     await tick();
 
-    expect(container.textContent).not.toContain("BPM Grid");
-    expect(container.textContent).toContain("shortcuts");
+    expect(container.textContent).not.toContain("Randomize");
+    expect(container.textContent).toContain("controls · h");
 
-    const restore = container.querySelector("button[title='Show shortcuts (G)']");
+    const restore = container.querySelector("button[title='Show controls (H)']");
     restore?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await tick();
+    expect(container.textContent).toContain("Randomize");
 
-    expect(container.textContent).toContain("BPM Grid");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "g", bubbles: true }));
+    await tick();
+    expect(container.textContent).not.toContain("Randomize");
   });
 
   it("dims the restore pill when the mouse leaves the window and brightens on return", async () => {
@@ -440,7 +557,7 @@ describe("Shortcuts", () => {
     await tick();
 
     const restore = container.querySelector(
-      "button[title='Show shortcuts (G)']",
+      "button[title='Show controls (H)']",
     ) as HTMLButtonElement | null;
     expect(restore?.dataset.windowHovering).toBe("true");
 
@@ -453,19 +570,7 @@ describe("Shortcuts", () => {
     expect(restore?.dataset.windowHovering).toBe("true");
   });
 
-  it("marks View Cycle as active when view cycling is enabled", async () => {
-    mocks.state.viewCycleMode = true;
-
-    flushSync(() => {
-      root.render(<Shortcuts />);
-    });
-    await tick();
-
-    const viewCycleButton = container.querySelector("button[aria-label='View Cycle']");
-    expect(viewCycleButton?.getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("marks Play Saves as active when save cycling is enabled", async () => {
+  it("marks Pause Presets as active when the looks are playing", async () => {
     mocks.state.slotCycleMode = true;
 
     flushSync(() => {
@@ -473,7 +578,7 @@ describe("Shortcuts", () => {
     });
     await tick();
 
-    const playSavesButton = container.querySelector("button[aria-label='Pause Saves']");
+    const playSavesButton = container.querySelector("button[aria-label='Pause Presets']");
     expect(playSavesButton?.getAttribute("aria-pressed")).toBe("true");
   });
 
@@ -495,24 +600,7 @@ describe("Shortcuts", () => {
     expect(container.textContent).toContain("Exit VR");
   });
 
-  it("deletes only the current saved look from the shortcut bar", () => {
-    mocks.settingsStore.getCurrentSaveIndex.mockReturnValue(1);
-    flushSync(() => root.render(<Shortcuts />));
-    const deleteButton = Array.from(container.querySelectorAll("button")).find((button) =>
-      (button.textContent ?? "").includes("Delete"),
-    );
-
-    expect(deleteButton).not.toBeNull();
-
-    deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    expect(mocks.settingsStore.clearSlot).toHaveBeenCalledWith(1);
-  });
-  it("disables Save for a saved look and Delete for an unsaved look", () => {
-    const deleteButton = container.querySelector<HTMLButtonElement>("button[aria-label='Delete']")!;
-    expect(deleteButton.getAttribute("aria-disabled")).toBe("true");
-    deleteButton.click();
-    expect(mocks.settingsStore.clearSlot).not.toHaveBeenCalled();
+  it("disables Save for a look that is already saved", () => {
     mocks.settingsStore.getCurrentSaveIndex.mockReturnValue(0);
     flushSync(() => root.render(<Shortcuts />));
     const save = container.querySelector<HTMLButtonElement>("button[aria-label='Save']")!;
@@ -520,10 +608,14 @@ describe("Shortcuts", () => {
     expect(save.getAttribute("aria-disabled")).toBe("true");
     save.click();
     expect(mocks.settingsStore.saveSlot).not.toHaveBeenCalled();
-    expect(deleteButton.getAttribute("aria-disabled")).toBe("false");
   });
 
-  it("renders FPS as a readout, not an action", () => {
+  it("renders FPS as a readout in the Displays menu, not an action", () => {
+    flushSync(() => {
+      container
+        .querySelector("button[aria-label='Displays']")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
     flushSync(() =>
       window.dispatchEvent(new CustomEvent("spectrum-aura:frame-stats", { detail: { fps: 60 } })),
     );

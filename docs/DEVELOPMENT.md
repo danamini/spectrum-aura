@@ -14,7 +14,7 @@ src/
 │       ├── BarTimingHud.tsx          # BPM / bar grid overlay (M toggle)
 │       ├── TempoReadout.tsx          # Shared BPM + grid (overlay + panel)
 │       ├── theme.ts                  # Colors, swatches, bpmGlowStyle, LOCAL_DEV_URL
-│       ├── ControlPanel.tsx          # Settings sheet + flyout tabs
+│       ├── ControlPanel.tsx          # Settings panel and its sections
 │       ├── control-panel/
 │       │   ├── primitives.tsx        # Sw, Bn, Row, ToggleRow, S
 │       │   └── ViewSettings.tsx      # Per-view slider/toggle blocks (14 views)
@@ -60,7 +60,7 @@ src/
 │               ├── song-clock.test.ts
 │               ├── sync-invariants.test.ts
 │               └── …
-│   └── ui/                           # label, sheet, slider, switch only
+│   └── ui/                           # label, slider, switch only
 AGENTS.md                             # Agent guide (Cursor / Claude)
 docs/
 ├── README.md                         # Documentation index
@@ -111,8 +111,17 @@ physical-device compatibility; outstanding checks live in the
 
 **Three.js Scene** (`engine/scene.ts`):
 
-- **21 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow, wikichroma, stagelights, outrun, globe, spectrotunnel, fractal, blackhole
-- **Lazy views** (`engine/views/`): outrun, globe, spectrotunnel, fractal and blackhole implement `LazyView` and are registered in `LAZY_VIEW_FACTORIES` in `scene.ts`. They are constructed on first activation and disposed after `LAZY_VIEW_IDLE_DISPOSE_SECONDS` off-screen. Prefer this for new views: `scene.ts` gains a registry entry and an empty `<id>Group` holder instead of build/update/dispose code
+- **30 visualization modes**: combo, classic, ripple, datastream, nebula, monolith, mandala, terrain, obsidian, torus, soundwall, geometrynebula, reztube (On-rails Tube), assetflow, wikichroma, stagelights, outrun, globe, spectrotunnel, fractal, blackhole, neoncity, ocean, nightwood, desert, station, aurora, hifi, tapedeck, lab
+- **Lazy views** (`engine/views/`): outrun, globe, spectrotunnel, fractal, blackhole, neoncity, ocean, nightwood, desert, station, aurora, hifi, tapedeck and lab implement `LazyView` and are registered in `LAZY_VIEW_FACTORIES` in `scene.ts`. They are constructed on first activation and disposed after `LAZY_VIEW_IDLE_DISPOSE_SECONDS` off-screen. Prefer this for new views: `scene.ts` gains a registry entry and an empty `<id>Group` holder instead of build/update/dispose code
+
+  | Hi-Fi                                                                                     | Signal Lab                                                                                   | Outrun                                                                  |
+  | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+  | ![Hi-Fi rack: VU meters, segment analyser, tempo tuner](screenshots/scene-hi-fi-rack.jpg) | ![Signal Lab: spectrum, oscilloscope, waterfall, readouts](screenshots/scene-signal-lab.jpg) | ![Outrun: sun, mountains and grid](screenshots/scene-outrun-sunset.jpg) |
+
+  Hi-Fi, Tape Deck and Signal Lab draw with the 2D canvas API into one texture (`views/instrument-panel.ts`), which is the pattern to copy for any view that is mostly lettering and dials. Controls that should stand proud of the panel in 3D are added with `InstrumentPanel.raiseDisc` / `raiseBox`: the face of each is cut from the panel texture, so the drawing stays the single source of what a knob or key looks like.
+
+- **Bundled presets** (`src/components/analyser/default-saves.json`): the presets a new visitor starts with. Each entry names a thumbnail under `public/assets/default-looks/`; a test fails if the file is missing. Add `"since": <DEFAULT_SAVES_VERSION>` to a new entry and bump `DEFAULT_SAVES_VERSION` in `store.ts`, so people with an existing saved list receive it once. Regenerate thumbnails and `docs/screenshots/scene-*.jpg` with `npm run capture:presets -- track.wav` while the dev server runs (see `scripts/capture-presets.mjs`).
+- **Scene backdrop** (`views/backdrop.ts`): one full-screen shader drawn before everything else, giving the original views a starfield, grid floor or data rain. It rebuilds each pixel's view ray from the camera, so it stays fixed in the world as the camera moves. `VIEW_BACKDROPS` maps each view to its world; lazy views draw their own and get none.
 - **InstancedMesh**: Used for efficient bar/block rendering (bars, classic, monolith)
 - **ShaderMaterial**: Custom shaders for effects (datastream, nebula, terrain)
 - **Post-processing**: Bloom, chromatic aberration, glitch, god rays, lens flare, etc. via Composer
@@ -149,7 +158,7 @@ Recent controls:
 - `projectorFilmFx` / `projectorFilmAmount` / `projectorFilmJitter` / `projectorFilmFlicker`: random film projector artifact pass.
 - `glitchIntensity`: duty-cycle fraction (0-1) of each ~1 s window the Glitch pass actually renders — three.js's GlitchPass has no continuous intensity knob.
 - `evolveEnabled` / `evolveAmount`: "Dynamic Mode" — a curated 1-3 settings per view drift slowly over musical phrases (wall-clock fallback when unsynced), bounded around the user's own values (`engine/evolution.ts`).
-- ControlPanel additions: dedicated **Saves** tab (list with focus/load/overwrite/delete via `usePresetActions`), Dynamic Mode toggle, an amber warning banner in the Post FX tab when Performance Mode is bypassing the pipeline, retro/novelty FX grouped under a collapsed `Disclosure`, and a phone-first layout via `useIsMobile()` (full-width sheet, bottom tab bar, full-screen flyout).
+- ControlPanel: a **Presets** section (thumbnail grid; load, replace and delete via `usePresetActions`), the Dynamic Mode toggle, an amber warning banner in Effects when Performance Mode is bypassing the pipeline, and retro/novelty effects grouped under a collapsed `Disclosure`. See "Settings panel" below for the layout.
 
 **Key Settings Limits**:
 
@@ -161,51 +170,39 @@ Recent controls:
 
 ## Shortcut Map
 
-Current keyboard shortcuts are defined in `Shortcuts.tsx` and mirrored by the bottom shortcut bar:
+Shortcuts are defined once, in `src/components/analyser/keymap.ts` (`KEY_BINDINGS`). The key handler in `Shortcuts.tsx`, the cheat sheet (`CheatSheet.tsx`, `?`), the command palette (`CommandPalette.tsx`, `/` or `⌘K`) and the toolbar's key caps all read that table. To add or change a key, edit the table: a key bound twice throws at load, and `keymap.test.ts` covers naming and the legacy aliases.
 
-- `−` / `+` or `=`: Decrease / increase visual response
-- `R`: Randomize
-- `←` / `→`: Prev / Next Visual (`B` / `V` kept as aliases)
-- `[` / `]` or `Shift+←` / `Shift+→`: Prev / Next Save
-- `X`: Input Source (stops current audio capture and opens audio, MIDI and ambient choices)
-- `F`: Toggle fullscreen
-- `N`: Toggle Stats panel; `Shift+N`: Toggle full-page stats
-- `G`: Show/Hide shortcut hints
-- `A`: Play Saves (save-list auto-cycle mode)
-- `S`: Toggle settings panel
-- `T`: Beat tap (manual SongClock sync)
-- `Shift+T`: Downbeat tap (reset phrase to 1/16)
-- `M`: Toggle BPM & bar grid HUD
-- `L`: Toggle latency HUD
-- `C`: Toggle music-reactive view cycle (every 4-bar phrase)
-- `1` to `5`: Load save slot
-- `Shift+1` to `Shift+5`: Save to slot
+- `←` / `→` previous / next view
+- `↑` / `↓` previous / next preset
+- `Space` play or pause the presets
+- `1`–`9` load a preset; `⇧1`–`⇧9` save over it
+- `R` randomize the look; `⇧R` jump to a random preset
+- `C` cycle views with the music; `D` Dynamic mode
+- `−` / `+` calmer / punchier
+- `T` tap the beat; `⇧T` tap bar 1
+- `F` fullscreen; `H` hide or show the controls; `P` effects on or off
+- `M` tempo and bar display; `L` latency display; `N` stats (`⇧N` full page)
+- `/` or `⌘K` search everything; `S` settings; `I` input source; `?` show all shortcuts
 
-Shortcut reliability note:
+Older keys still work: `B` / `V`, `[` / `]`, `⇧←` / `⇧→`, `\`, `A`, `G`, `X`, `=`.
 
-- Keyboard shortcut handlers in `Shortcuts.tsx` dispatch through a live `actionsRef` so keys like `R`/`B` always execute the latest callbacks and don't drift when React state changes.
+Rules the handler follows:
 
-Shortcut rail clusters:
+- Typing in a text field never runs a shortcut. Sliders and switches keep their own keys; only `S` reaches through them.
+- `Space` and `Enter` are left to a focused button, and `↑` / `↓` are left to the open settings panel so it can scroll.
+- Actions run through one `run(action)` switch, also reachable by dispatching `RUN_ACTION_EVENT` (`runAction()`), which is how the palette and panel buttons trigger them.
 
-- Visual cluster: view count, Prev Visual (B), Randomize, View Cycle (C), `inc`, `fx`, Next Visual (V)
-- Save cluster: save count, Prev, Play Saves, Next, Random, Save, Delete
-- Panel cluster: Post FX, Scene, Settings (S), BPM Grid (M), Latency (L)
-- Response panel: sensitivity slider, neutral reset and Auto balance
-- Utility cluster: Input Source (X), Fullscreen (F), Stats (N), FPS output, Beat Tap (T), Hide Controls (G)
+Toolbar groups: Visuals (previous, randomize, next), Presets (previous, play, next, save), Response, and More (Settings, Search, Fullscreen, Displays, Keys, Hide). Input Source shows only with no source; Beat Tap only with a source and an unlocked tempo. When hidden (`H`), a **controls · h** pill restores it.
 
-When hidden (`G`), a **shortcuts · g** pill at the bottom restores the bar (or press `G` again).
+Settings panel:
 
-Tooltip behavior:
-
-- Shortcut buttons use a shared styled tooltip treatment rather than native browser `title` hovers.
-- `inc` explains randomize scope: post FX only vs post FX + view settings.
-- `fx` explains the post-processing master pipeline state.
-
-Settings panel and flyout behavior:
-
-- The `S` shortcut toggles the panel even when focus is inside a text input/slider control.
-- Clicking the `S` shortcut button toggles open/close (no immediate re-open).
-- Flyout tabs (`Audio`, `Scene`, `Post FX`) delay slightly on open and slide from the sheet edge.
+- One panel (`ControlPanel.tsx`) docked right, 460 px wide, with sections from `PANEL_TABS` in `command-items.ts`: View, Effects, Scene, Audio, Presets, MIDI. `S` reopens the last section; `TOGGLE_SETTINGS_PANEL_EVENT` with `{ tab }` opens a given one.
+- The filter box hides controls whose label does not match. It works on the rendered panel through `data-ctl` attributes set by the primitives (`S`, `Row`, `ToggleRow`, `Disclosure`, `FxSection`), so new controls built from those primitives are filterable with no extra work.
+- `PanelFilterContext` (`control-panel/panel-filter.ts`) carries two modes: `searching` opens collapsed sections, and `activeOnly` makes effect sections list only effects that are on. `EFFECT_ROWS` in `ControlPanel.tsx` feeds the "Add an effect" list and must gain an entry when an effect row is added.
+- A slider given its setting key (`<S k="outrunSpeed" …>`) marks itself with an amber dot when off its default and resets on a click of the dot. Pass `k` on every new slider. "Reset this view" resets settings whose key starts with the view id.
+- While a filter is typed every section except MIDI renders, so the filter spans the panel. Section roots carry `data-section`; anything in them that is not a labelled control is hidden unless it holds a match.
+- New presets are named by `presetName` (`preset-name.ts`): the view label, plus the first effect switched on beyond the defaults, numbered only on a clash. Saving over a preset keeps its name and nothing is renumbered on delete.
+- `ViewControls` wraps `ViewSettings` and shows each view's first four controls, with the rest under "More controls". Order a view's controls by how much they change the picture.
 
 ## Common Tasks
 
@@ -224,6 +221,31 @@ Runtime registry notes:
 - Runtime manifests can override labels, settings labels, fullscreen keys, wireframe keys, scene group keys, and order without re-editing the UI lists.
 - Rendering logic still lives in `scene.ts`, so new runtime-picked visuals need a matching scene group and update branch before they can draw.
 - Review rule: if a visual manifest changes label/order/fullscreen metadata, check `Shortcuts.tsx`, XR cycle behavior, and the View section in `ControlPanel.tsx` together.
+
+### Adding a lazy view (preferred for new scenes)
+
+A lazy view is one class in `packages/engine/src/views/` implementing
+`LazyView` (`group`, `update(frame)`, `dispose()`). Registering it touches a
+fixed list of places; the tests named below fail if one is missed.
+
+1. `visuals.ts`: a manifest with `id`, `label`, `sceneGroupKey`, `order` and, if the view has a 2D mode, `fullscreenKey` (`visuals.test.ts` pins the order).
+2. `settings.ts`: the view's keys in `Settings` and `DEFAULT_SETTINGS`.
+3. `scene-update-opts.ts`: the same keys in the type, the initial object and `syncSceneUpdateOpts`.
+4. `scene.ts`: an entry in `LAZY_VIEW_FACTORIES` and a `<id>Group` holder (`lazy-views.test.ts` lists the ids).
+5. `evolution.ts`: which keys Dynamic mode may drift.
+6. `store.ts`: the amplitude clamp and the randomize ranges.
+7. `control-panel/ViewSettings.tsx`: controls built from `<S k=…>` / `<Sw k=…>`, most useful first (`ControlPanel.regression.test.ts` lists the keys).
+8. `default-saves.json`: a bundled preset with a thumbnail and `since` (see Bundled presets above).
+
+Views that meter the spectrum should read levels through `meterLevel`
+(`views/types.ts`), which starts from the analyser's noise floor, so a quiet
+room looks quiet. `bandPeak`, `waveLevels`, `NeedleBallistics` and the other
+instrument helpers in `views/instrument-math.ts` are pure and unit-tested.
+
+Stereo meters read `audio.stereo` when it is present and fall back to
+`audio.wave` (mono), then to the spectrum for synthetic sources that have no
+waveform. See `hifi-view.ts` (`channelVu`) and `tapedeck-view.ts`
+(`readLevels`).
 
 ### Modifying Audio Features
 

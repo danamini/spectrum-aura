@@ -71,6 +71,9 @@ export type SceneUpdateOpts = {
   monolithFullscreen: boolean;
   mandalaFullscreen: boolean;
   terrainFullscreen: boolean;
+  hifiFullscreen: boolean;
+  labFullscreen: boolean;
+  tapedeckFullscreen: boolean;
   obsidianFullscreen: boolean;
   obsidianUsePalette: boolean;
   obsidianAmplitude: number;
@@ -153,6 +156,39 @@ export type SceneUpdateOpts = {
   blackholeSpin: number;
   blackholeTilt: number;
   blackholeDetail: number;
+  neoncityUsePalette: boolean;
+  neoncityAmplitude: number;
+  neoncitySpeed: number;
+  neoncityDensity: number;
+  oceanUsePalette: boolean;
+  oceanAmplitude: number;
+  oceanSpeed: number;
+  oceanSun: boolean;
+  nightwoodUsePalette: boolean;
+  nightwoodAmplitude: number;
+  nightwoodSpeed: number;
+  nightwoodFireflies: number;
+  desertUsePalette: boolean;
+  desertAmplitude: number;
+  desertSpeed: number;
+  desertSun: boolean;
+  stationUsePalette: boolean;
+  stationAmplitude: number;
+  stationSpeed: number;
+  stationChase: boolean;
+  auroraUsePalette: boolean;
+  auroraAmplitude: number;
+  auroraSpeed: number;
+  auroraRays: number;
+  hifiUsePalette: boolean;
+  hifiAmplitude: number;
+  hifiPeakHold: boolean;
+  labUsePalette: boolean;
+  labAmplitude: number;
+  labPeaks: boolean;
+  tapedeckUsePalette: boolean;
+  tapedeckAmplitude: number;
+  tapedeckPeakHold: boolean;
   textOverlayEnabled: boolean;
   textOverlaySource: Settings["textOverlaySource"];
   textOverlayStyle: Settings["textOverlayStyle"];
@@ -167,6 +203,7 @@ export type SceneUpdateOpts = {
   textOverlayAllCaps: boolean;
   textOverlayScramble: boolean;
   bgColor: string;
+  backdropAmount: number;
   performance: boolean;
 };
 
@@ -240,6 +277,9 @@ export function createSceneUpdateOpts(initialView: ViewMode): SceneUpdateOpts {
     monolithFullscreen: false,
     mandalaFullscreen: false,
     terrainFullscreen: false,
+    hifiFullscreen: false,
+    labFullscreen: false,
+    tapedeckFullscreen: false,
     obsidianFullscreen: false,
     obsidianUsePalette: false,
     obsidianAmplitude: 0,
@@ -322,6 +362,39 @@ export function createSceneUpdateOpts(initialView: ViewMode): SceneUpdateOpts {
     blackholeSpin: 0,
     blackholeTilt: 0,
     blackholeDetail: 0,
+    neoncityUsePalette: false,
+    neoncityAmplitude: 0,
+    neoncitySpeed: 0,
+    neoncityDensity: 0,
+    oceanUsePalette: false,
+    oceanAmplitude: 0,
+    oceanSpeed: 0,
+    oceanSun: false,
+    nightwoodUsePalette: false,
+    nightwoodAmplitude: 0,
+    nightwoodSpeed: 0,
+    nightwoodFireflies: 0,
+    desertUsePalette: false,
+    desertAmplitude: 0,
+    desertSpeed: 0,
+    desertSun: false,
+    stationUsePalette: false,
+    stationAmplitude: 0,
+    stationSpeed: 0,
+    stationChase: false,
+    auroraUsePalette: false,
+    auroraAmplitude: 0,
+    auroraSpeed: 0,
+    auroraRays: 0,
+    hifiUsePalette: false,
+    hifiAmplitude: 0,
+    hifiPeakHold: false,
+    labUsePalette: false,
+    labAmplitude: 0,
+    labPeaks: false,
+    tapedeckUsePalette: false,
+    tapedeckAmplitude: 0,
+    tapedeckPeakHold: false,
     textOverlayEnabled: false,
     textOverlaySource: "public-domain",
     textOverlayStyle: "bounce",
@@ -334,6 +407,7 @@ export function createSceneUpdateOpts(initialView: ViewMode): SceneUpdateOpts {
     textOverlayAllCaps: false,
     textOverlayScramble: false,
     bgColor: "#000000",
+    backdropAmount: 0,
     performance: false,
   };
 }
@@ -405,6 +479,9 @@ export function syncSceneUpdateOpts(
   o.monolithFullscreen = s.monolithFullscreen;
   o.mandalaFullscreen = s.mandalaFullscreen;
   o.terrainFullscreen = s.terrainFullscreen;
+  o.hifiFullscreen = s.hifiFullscreen;
+  o.labFullscreen = s.labFullscreen;
+  o.tapedeckFullscreen = s.tapedeckFullscreen;
   o.obsidianFullscreen = s.obsidianFullscreen;
   o.obsidianUsePalette = s.obsidianUsePalette;
   o.obsidianAmplitude = s.obsidianAmplitude;
@@ -487,6 +564,39 @@ export function syncSceneUpdateOpts(
   o.blackholeSpin = s.blackholeSpin;
   o.blackholeTilt = s.blackholeTilt;
   o.blackholeDetail = s.blackholeDetail;
+  o.neoncityUsePalette = s.neoncityUsePalette;
+  o.neoncityAmplitude = s.neoncityAmplitude;
+  o.neoncitySpeed = s.neoncitySpeed;
+  o.neoncityDensity = s.neoncityDensity;
+  o.oceanUsePalette = s.oceanUsePalette;
+  o.oceanAmplitude = s.oceanAmplitude;
+  o.oceanSpeed = s.oceanSpeed;
+  o.oceanSun = s.oceanSun;
+  o.nightwoodUsePalette = s.nightwoodUsePalette;
+  o.nightwoodAmplitude = s.nightwoodAmplitude;
+  o.nightwoodSpeed = s.nightwoodSpeed;
+  o.nightwoodFireflies = s.nightwoodFireflies;
+  o.desertUsePalette = s.desertUsePalette;
+  o.desertAmplitude = s.desertAmplitude;
+  o.desertSpeed = s.desertSpeed;
+  o.desertSun = s.desertSun;
+  o.stationUsePalette = s.stationUsePalette;
+  o.stationAmplitude = s.stationAmplitude;
+  o.stationSpeed = s.stationSpeed;
+  o.stationChase = s.stationChase;
+  o.auroraUsePalette = s.auroraUsePalette;
+  o.auroraAmplitude = s.auroraAmplitude;
+  o.auroraSpeed = s.auroraSpeed;
+  o.auroraRays = s.auroraRays;
+  o.hifiUsePalette = s.hifiUsePalette;
+  o.hifiAmplitude = s.hifiAmplitude;
+  o.hifiPeakHold = s.hifiPeakHold;
+  o.labUsePalette = s.labUsePalette;
+  o.labAmplitude = s.labAmplitude;
+  o.labPeaks = s.labPeaks;
+  o.tapedeckUsePalette = s.tapedeckUsePalette;
+  o.tapedeckAmplitude = s.tapedeckAmplitude;
+  o.tapedeckPeakHold = s.tapedeckPeakHold;
   o.textOverlayEnabled = s.textOverlayEnabled;
   o.textOverlaySource = s.textOverlaySource;
   o.textOverlayStyle = s.textOverlayStyle;
@@ -508,5 +618,6 @@ export function syncSceneUpdateOpts(
   o.comboWireframe = s.comboWireframe;
   o.comboFullscreen = s.comboFullscreen;
   o.bgColor = s.bgColor;
+  o.backdropAmount = s.backdropAmount;
   o.performance = s.performance;
 }

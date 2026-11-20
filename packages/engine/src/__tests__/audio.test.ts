@@ -7,6 +7,7 @@ function setup() {
     frequencyBinCount: 1024,
     smoothingTimeConstant: 0,
     getByteFrequencyData: (bins: Uint8Array) => bins.fill(128),
+    getByteTimeDomainData: (wave: Uint8Array) => wave.fill(140),
   };
   const gain = { gain: { value: 0 }, connect: vi.fn(() => analyser) };
   const source = { connect: vi.fn(() => gain) };
@@ -177,6 +178,9 @@ describe("AudioEngine display spectrum", () => {
     const bands = engine.read(1.5, 0);
     expect(bands.display).toBeTruthy();
     expect(bands.display!.bins).toHaveLength(1024);
+    // The waveform is one FFT window of samples, for the scope and meters.
+    expect(bands.wave).toHaveLength(2048);
+    expect(bands.wave![0]).toBe(140);
     // Detector fields still come from the symmetric analyser read.
     expect(bands.bass).toBeCloseTo(128 / 255, 5);
 
@@ -195,10 +199,56 @@ describe("AudioEngine display spectrum", () => {
     const engine = new AudioEngine();
     await engine.startMic({ latencyOptimized: true });
     expect(getUserMedia).toHaveBeenLastCalledWith({
-      audio: { echoCancellation: false, noiseSuppression: false },
+      audio: { echoCancellation: false, noiseSuppression: false, channelCount: { ideal: 2 } },
     });
     await engine.startMic({ latencyOptimized: false });
     expect(getUserMedia).toHaveBeenLastCalledWith({ audio: true });
+    engine.stop();
+  });
+});
+
+describe("AudioEngine stereo taps", () => {
+  function stereoSetup(rightSample: number) {
+    const parts = setup();
+    const tap = (sample: number) => ({
+      fftSize: 0,
+      getByteTimeDomainData: (wave: Uint8Array) => wave.fill(sample),
+    });
+    const taps = [tap(150), tap(rightSample)];
+    let made = 0;
+    const createAnalyser = parts.ctx.createAnalyser;
+    // The first two analysers are the detector and display taps.
+    Object.assign(parts.ctx, {
+      createAnalyser: () => (made++ < 2 ? createAnalyser() : taps[made - 3]),
+      createChannelSplitter: () => ({ connect: vi.fn() }),
+    });
+    return parts;
+  }
+
+  it("reports left and right once the right channel carries signal", () => {
+    const { stream } = stereoSetup(110);
+    const engine = new AudioEngine();
+    engine.startStream(stream);
+    const stereo = engine.read(1.5, 0).stereo;
+    expect(stereo?.left[0]).toBe(150);
+    expect(stereo?.right[0]).toBe(110);
+    engine.stop();
+    expect(engine.read(1.5, 16).stereo).toBeUndefined();
+  });
+
+  it("stays mono while the right channel is silent", () => {
+    const { stream } = stereoSetup(128);
+    const engine = new AudioEngine();
+    engine.startStream(stream);
+    expect(engine.read(1.5, 0).stereo).toBeUndefined();
+    engine.stop();
+  });
+
+  it("works without a channel splitter", () => {
+    const { stream } = setup();
+    const engine = new AudioEngine();
+    engine.startStream(stream);
+    expect(engine.read(1.5, 0).stereo).toBeUndefined();
     engine.stop();
   });
 });

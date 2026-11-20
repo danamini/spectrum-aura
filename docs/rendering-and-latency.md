@@ -93,7 +93,7 @@ Symmetric smoothing delays a rising level as much as a falling one. With
 `AnalyserNode` and runs `DisplayBallistics` (`engine/display-ballistics.ts`)
 over it: a rising bin takes 80% of the step on the frame it arrives, and a
 falling bin drops at the constant dB-per-frame slope that analyser smoothing
-gives the same slider value, \(-20\log_{10}\tau\) dB/frame. The result is
+gives the same slider value, \(-20\log\_{10}\tau\) dB/frame. The result is
 exposed as `AudioBands.display` and substituted by `VisualResponse.apply`.
 
 This is presentation only. `BeatMatcher`, `BPMDetector` and `SongClock` keep

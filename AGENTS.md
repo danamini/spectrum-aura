@@ -17,12 +17,12 @@ App code imports the engine as `@spectrum-aura/engine/<module>`; the app-side `s
 
 ## Read first
 
-| Priority | Document                                                                                      |
-| -------- | --------------------------------------------------------------------------------------------- |
-| 1        | [docs/song-clock-and-sync.md](docs/song-clock-and-sync.md) — timing invariants                |
-| 2        | [docs/audio-analysis-pipeline.md](docs/audio-analysis-pipeline.md) — BeatMatcher, BPMDetector |
-| 3        | [docs/rendering-and-latency.md](docs/rendering-and-latency.md) — rAF loop, latency HUD        |
-| 4        | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — structure, tests, conventions                    |
+| Priority | Document                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| 1        | [docs/song-clock-and-sync.md](docs/song-clock-and-sync.md) — timing invariants                 |
+| 2        | [docs/audio-analysis-pipeline.md](docs/audio-analysis-pipeline.md) — BeatMatcher, BPMDetector  |
+| 3        | [docs/rendering-and-latency.md](docs/rendering-and-latency.md) — rAF loop, latency HUD         |
+| 4        | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — structure, tests, conventions                     |
 | 5        | [docs/retro-systems-and-postfx.md](docs/retro-systems-and-postfx.md) — retro pass, FX pipeline |
 
 ## Architecture (do not break)
@@ -51,62 +51,72 @@ Analyser.tsx (orchestrator)
 
 ### Common pitfalls
 
-| Mistake                                       | Symptom                        | Fix                                                    |
-| --------------------------------------------- | ------------------------------ | ------------------------------------------------------ |
-| Calling removed `setBarTiming` in render loop | Runtime crash                  | Use `setLiveTempoFrame()` only                         |
-| Driving grid from `bands.beat`                | Double/skipped beats after tap | Route through `SongClock.tick()`                       |
-| BPM phase only in 250ms analysis              | Choppy HUD dots                | Phase in `BPMDetector.tick()` every frame              |
-| `epochMs === 0` as “unset”                    | Manual sync fails at t=0       | Use `epochSet` flag in SongClock                       |
-| Measuring signal latency every frame          | HUD shows tens of seconds      | Only on `signalSwing` frames; see `latency-metrics.ts` |
-| Tests beside modules                          | Vitest won't find them         | Put under `__tests__/`                                 |
-| Duplicating preset cursor logic               | Shortcuts/panel drift          | Use `hooks/usePresetActions`                           |
-| Duplicating BPM HUD markup                    | Overlay/panel mismatch         | Use `TempoReadout` + `theme.bpmGlowStyle`              |
-| Reordering `RETRO_SYSTEMS`                    | Wrong machine emulated         | Order = shader mode index; append only                 |
-| Setting `clockBpm` directly while running      | Whole grid slides              | Use `setClockBpm` (re-anchors the epoch)               |
-| Feeding `bands.display` to a detector         | Tempo/onset behaviour shifts   | `display` is presentation only; detectors read `bands` |
-| Raw writes to `fxPipelineOrder`               | Broken pass chain from saves   | Route through `normalizeFxPipelineOrder`               |
-| New FX row without lock/pipeline entries      | Randomize pin / order gaps     | Extend `FX_RANDOMIZE_GROUPS` + `FX_PIPELINE`           |
+| Mistake                                       | Symptom                        | Fix                                                      |
+| --------------------------------------------- | ------------------------------ | -------------------------------------------------------- |
+| Calling removed `setBarTiming` in render loop | Runtime crash                  | Use `setLiveTempoFrame()` only                           |
+| Driving grid from `bands.beat`                | Double/skipped beats after tap | Route through `SongClock.tick()`                         |
+| BPM phase only in 250ms analysis              | Choppy HUD dots                | Phase in `BPMDetector.tick()` every frame                |
+| `epochMs === 0` as “unset”                    | Manual sync fails at t=0       | Use `epochSet` flag in SongClock                         |
+| Measuring signal latency every frame          | HUD shows tens of seconds      | Only on `signalSwing` frames; see `latency-metrics.ts`   |
+| Tests beside modules                          | Vitest won't find them         | Put under `__tests__/`                                   |
+| Duplicating preset cursor logic               | Shortcuts/panel drift          | Use `hooks/usePresetActions`                             |
+| Duplicating BPM HUD markup                    | Overlay/panel mismatch         | Use `TempoReadout` + `theme.bpmGlowStyle`                |
+| Reordering `RETRO_SYSTEMS`                    | Wrong machine emulated         | Order = shader mode index; append only                   |
+| Setting `clockBpm` directly while running     | Whole grid slides              | Use `setClockBpm` (re-anchors the epoch)                 |
+| Feeding `bands.display` to a detector         | Tempo/onset behaviour shifts   | `display` is presentation only; detectors read `bands`   |
+| Feeding `wave` / `stereo` to a detector       | Tempo/onset behaviour shifts   | Presentation taps for scopes and meters only             |
+| Metering a view from raw analyser bytes       | Room noise fills the meter     | Use `meterLevel` (`views/types.ts`), not `byte / 255`    |
+| A shortcut handled outside `keymap.ts`        | Sheet, palette and keys drift  | Add the action to `KEY_BINDINGS`; run it via `runAction` |
+| Appending a bundled preset without `since`    | Existing users never get it    | Tag `since` and bump `DEFAULT_SAVES_VERSION`             |
+| Raw writes to `fxPipelineOrder`               | Broken pass chain from saves   | Route through `normalizeFxPipelineOrder`                 |
+| New FX row without lock/pipeline entries      | Randomize pin / order gaps     | Extend `FX_RANDOMIZE_GROUPS` + `FX_PIPELINE`             |
 
 ## Key files
 
-| Area                   | Path                                                             |
-| ---------------------- | ---------------------------------------------------------------- |
-| Orchestrator           | `src/components/analyser/Analyser.tsx`                           |
-| Render loop            | `src/components/analyser/hooks/useAnalyserEngine.ts`             |
-| Beat taps              | `src/components/analyser/hooks/useBeatHintBridge.ts`             |
-| Overlay commands       | `src/components/analyser/hooks/useAnalyserCommandEvents.ts`      |
-| Preset workflow        | `src/components/analyser/hooks/usePresetActions.ts`              |
-| Settings UI shell      | `src/components/analyser/ControlPanel.tsx`                       |
-| Per-view settings      | `src/components/analyser/control-panel/ViewSettings.tsx`         |
-| Panel primitives       | `src/components/analyser/control-panel/primitives.tsx`           |
-| BPM readout            | `src/components/analyser/TempoReadout.tsx`                       |
-| Design tokens          | `src/components/analyser/theme.ts`                               |
-| Song clock             | `packages/engine/src/song-clock.ts`                   |
-| Bar types alias        | `packages/engine/src/bar-clock.ts`                    |
-| BPM estimate           | `packages/engine/src/bpm-detector.ts`                 |
-| Tempo periodicity      | `packages/engine/src/tempo-estimator.ts`              |
-| Onsets                 | `packages/engine/src/beat-matcher.ts`                 |
-| Audio read             | `packages/engine/src/audio.ts`                        |
-| Scene / views          | `packages/engine/src/scene.ts`                        |
-| Lazy views             | `packages/engine/src/views/*-view.ts` (+ `types.ts`)  |
-| Display ballistics     | `packages/engine/src/display-ballistics.ts`           |
-| Post-FX / quality tiers| `packages/engine/src/composer.ts`                     |
-| Post-FX shaders        | `packages/engine/src/shaders.ts`                      |
-| Retro font atlas       | `packages/engine/src/retro-font.ts`                   |
-| Draggable overlays     | `src/components/analyser/hooks/useDraggablePanel.ts`             |
-| Loudness curve         | `packages/engine/src/loudness.ts`                     |
-| Dynamic Mode drift     | `packages/engine/src/evolution.ts`                    |
-| Dynamic Mode director  | `packages/engine/src/music-director.ts`               |
-| View cycle             | `packages/engine/src/view-cycle-controller.ts`        |
-| Visual registry        | `packages/engine/src/visuals.ts`                             |
-| HUD                    | `src/components/analyser/BarTimingHud.tsx`                       |
-| Live tempo bus         | `packages/engine/src/live-tempo.ts`                   |
-| Latency metrics        | `packages/engine/src/latency-metrics.ts`              |
-| Shortcuts              | `src/components/analyser/Shortcuts.tsx`                          |
-| MIDI control           | `packages/engine/src/midi.ts` + `src/components/analyser/hooks/useMidiControl.ts` |
-| Settings schema        | `packages/engine/src/settings.ts`                                |
-| Settings store         | `src/components/analyser/store.ts`                               |
-| UI primitives (shadcn) | `src/components/ui/` — `label`, `sheet`, `slider`, `switch` only |
+| Area                    | Path                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| Orchestrator            | `src/components/analyser/Analyser.tsx`                                            |
+| Render loop             | `src/components/analyser/hooks/useAnalyserEngine.ts`                              |
+| Beat taps               | `src/components/analyser/hooks/useBeatHintBridge.ts`                              |
+| Overlay commands        | `src/components/analyser/hooks/useAnalyserCommandEvents.ts`                       |
+| Preset workflow         | `src/components/analyser/hooks/usePresetActions.ts`                               |
+| Settings UI shell       | `src/components/analyser/ControlPanel.tsx`                                        |
+| Per-view settings       | `src/components/analyser/control-panel/ViewSettings.tsx`                          |
+| Panel primitives        | `src/components/analyser/control-panel/primitives.tsx`                            |
+| BPM readout             | `src/components/analyser/TempoReadout.tsx`                                        |
+| Design tokens           | `src/components/analyser/theme.ts`                                                |
+| Song clock              | `packages/engine/src/song-clock.ts`                                               |
+| Bar types alias         | `packages/engine/src/bar-clock.ts`                                                |
+| BPM estimate            | `packages/engine/src/bpm-detector.ts`                                             |
+| Tempo periodicity       | `packages/engine/src/tempo-estimator.ts`                                          |
+| Onsets                  | `packages/engine/src/beat-matcher.ts`                                             |
+| Audio read              | `packages/engine/src/audio.ts`                                                    |
+| Scene / views           | `packages/engine/src/scene.ts`                                                    |
+| Lazy views              | `packages/engine/src/views/*-view.ts` (+ `types.ts`)                              |
+| Display ballistics      | `packages/engine/src/display-ballistics.ts`                                       |
+| Dynamic contrast        | `packages/engine/src/spectrum-contrast.ts`                                        |
+| Post-FX / quality tiers | `packages/engine/src/composer.ts`                                                 |
+| Post-FX shaders         | `packages/engine/src/shaders.ts`                                                  |
+| Retro font atlas        | `packages/engine/src/retro-font.ts`                                               |
+| Draggable overlays      | `src/components/analyser/hooks/useDraggablePanel.ts`                              |
+| Loudness curve          | `packages/engine/src/loudness.ts`                                                 |
+| Dynamic Mode drift      | `packages/engine/src/evolution.ts`                                                |
+| Dynamic Mode director   | `packages/engine/src/music-director.ts`                                           |
+| View cycle              | `packages/engine/src/view-cycle-controller.ts`                                    |
+| Visual registry         | `packages/engine/src/visuals.ts`                                                  |
+| HUD                     | `src/components/analyser/BarTimingHud.tsx`                                        |
+| Live tempo bus          | `packages/engine/src/live-tempo.ts`                                               |
+| Latency metrics         | `packages/engine/src/latency-metrics.ts`                                          |
+| Shortcuts               | `src/components/analyser/Shortcuts.tsx`                                           |
+| Key table               | `src/components/analyser/keymap.ts`                                               |
+| Search palette items    | `src/components/analyser/command-items.ts`                                        |
+| Preset auto-names       | `src/components/analyser/preset-name.ts`                                          |
+| Instrument panels       | `packages/engine/src/views/instrument-panel.ts`                                   |
+| Scene backdrop          | `packages/engine/src/views/backdrop.ts`                                           |
+| MIDI control            | `packages/engine/src/midi.ts` + `src/components/analyser/hooks/useMidiControl.ts` |
+| Settings schema         | `packages/engine/src/settings.ts`                                                 |
+| Settings store          | `src/components/analyser/store.ts`                                                |
+| UI primitives (shadcn)  | `src/components/ui/` — `label`, `slider`, `switch` only                           |
 
 ## Tests
 
@@ -139,6 +149,7 @@ npm run check       # typecheck + lint + test
 - `retro-font.test.ts` — glyph ramp monotonicity + atlas orientation (ZX ROM bitmaps)
 - `BarTimingHud.test.tsx` — BPM lock indicator states
 - `music-director.test.ts` — drop/breakdown/section detection, rate limits, bounded camera and post-FX output
+- `views/__tests__/tree-grower.test.ts` — Night Wood's tree recursion: deterministic, bounded, follows species numbers
 - `lazy-views.test.ts` — lazy views build on activation, survive a short absence, free after the idle window
 - `display-ballistics.test.ts` — fast attack; release matches analyser smoothing
 - `views/__tests__/globe-data.test.ts` — TopoJSON country decoding and the bounce spring
@@ -149,18 +160,18 @@ Vitest config includes both `src/**/__tests__/**` and `packages/*/src/**/__tests
 
 ## Shortcuts (user-facing)
 
-| Key                | Action                                        |
-| ------------------ | --------------------------------------------- |
-| `T`                | Beat tap (manual sync)                        |
-| `⇧T`               | Downbeat / phrase reset                       |
-| `M`                | Toggle BPM & bar grid HUD                     |
-| `L`                | Latency HUD                                   |
-| `G`                | Hide/show shortcut bar                        |
-| `C`                | Toggle music-reactive view cycle               |
-| `N`                | Stats panel                                   |
-| `R` `←/B` `→/V`    | Randomize / prev / next visual (arrows primary, letters kept as aliases) |
-| `[` `⇧←` / `]` `⇧→` | Prev / next save (bracket primary, shift-arrow alias) |
-| `S`                | Settings panel                                |
+| Key                 | Action                                                                   |
+| ------------------- | ------------------------------------------------------------------------ |
+| `T`                 | Beat tap (manual sync)                                                   |
+| `⇧T`                | Downbeat / phrase reset                                                  |
+| `M`                 | Toggle BPM & bar grid HUD                                                |
+| `L`                 | Latency HUD                                                              |
+| `G`                 | Hide/show shortcut bar                                                   |
+| `C`                 | Toggle music-reactive view cycle                                         |
+| `N`                 | Stats panel                                                              |
+| `R` `←/B` `→/V`     | Randomize / prev / next visual (arrows primary, letters kept as aliases) |
+| `[` `⇧←` / `]` `⇧→` | Prev / next save (bracket primary, shift-arrow alias)                    |
+| `S`                 | Settings panel                                                           |
 
 Keyboard handlers and the bottom shortcut bar must stay in sync — see `Shortcuts.tsx` utility cluster.
 

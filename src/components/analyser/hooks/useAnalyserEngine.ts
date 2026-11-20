@@ -1,12 +1,13 @@
 import { midiClockInput } from "@spectrum-aura/engine/midi-clock";
 import { VisualBalanceMonitor, BALANCE_STATE_EVENT } from "../visual-balance-monitor";
 import { VisualResponse } from "@spectrum-aura/engine/visual-response";
+import { SpectrumContrast } from "@spectrum-aura/engine/spectrum-contrast";
 import { pushStatsHistory, STATS_SAMPLE_MS } from "../overlays/stats-history";
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import * as THREE from "three";
 import { Scene } from "@spectrum-aura/engine/scene";
 import { Composer, computeQualityTier } from "@spectrum-aura/engine/composer";
-import { AudioEngine } from "@spectrum-aura/engine/audio";
+import { AudioEngine, type AudioBands } from "@spectrum-aura/engine/audio";
 import { ViewCycleController } from "@spectrum-aura/engine/view-cycle-controller";
 import { SongClock } from "@spectrum-aura/engine/song-clock";
 import {
@@ -141,7 +142,7 @@ export function useAnalyserEngine(params: {
     // fresh object every rAF tick; `audio.read()` returns its own pooled `bands`
     // object too, but we still need a distinct one here since bpm/beatPhase are
     // overridden by the SongClock-authoritative values.
-    const bandsForScene = {
+    const bandsForScene: AudioBands = {
       bass: 0,
       mid: 0,
       high: 0,
@@ -180,6 +181,7 @@ export function useAnalyserEngine(params: {
     const mandalaPostFx = { ...settingsStore.get() };
     const ambientSource = new AmbientSource();
     const visualResponse = new VisualResponse();
+    const spectrumContrast = new SpectrumContrast();
     const balanceMonitor = new VisualBalanceMonitor();
     let lastBalanceSettings: Settings | null = null;
     let lastBalanceView: ViewMode | null = null;
@@ -492,6 +494,8 @@ export function useAnalyserEngine(params: {
         bandsForScene,
         s.visualResponse * (balanceAllowed ? balanceMonitor.balance.response : 1),
       );
+      bandsForScene.rawBins = bandsForScene.bins;
+      spectrumContrast.apply(bandsForScene, dt, s.dynamicContrast);
       bandsForScene.bpm = clockBpm;
       bandsForScene.beatPhase = clockBeatPhase;
       if (externalSync) {

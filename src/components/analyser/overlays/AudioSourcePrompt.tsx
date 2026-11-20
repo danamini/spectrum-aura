@@ -47,18 +47,18 @@ export function AudioSourcePrompt({
             <div className="flex flex-col gap-2">
               <button
                 onClick={onSystem}
-                className="group rounded-md border border-emerald-300/50 bg-emerald-400/10 px-4 py-3 text-left transition-colors hover:bg-emerald-400 hover:text-black"
+                className="group rounded-md border border-white/15 bg-white/5 px-4 py-3 text-left transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/10"
               >
-                <span className="flex items-center justify-between gap-3 font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-100 group-hover:text-inherit">
+                <span className="flex items-center justify-between gap-3 font-mono text-[11px] uppercase tracking-[0.2em] text-white/80 group-hover:text-white">
                   <span className="flex items-center gap-3">
-                    <MonitorSpeaker className="h-4 w-4" />
+                    <MonitorSpeaker className="h-4 w-4 text-white/60 group-hover:text-emerald-300" />
                     Share system audio
                   </span>
-                  <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-[9px] tracking-wider group-hover:bg-black/15">
-                    Best results
+                  <span className="rounded border border-white/20 px-1.5 py-0.5 text-[9px] tracking-wider text-white/60">
+                    Recommended
                   </span>
                 </span>
-                <span className="mt-1.5 block font-mono text-[10px] normal-case leading-relaxed tracking-wide text-emerald-100/70 group-hover:text-inherit">
+                <span className="mt-1.5 block font-mono text-[10px] normal-case leading-relaxed tracking-wide text-white/45 group-hover:text-white/70">
                   In the picker choose <b>Entire Screen</b> and tick{" "}
                   <b>"Also share system audio"</b> — cleanest signal, every app's sound, best beat
                   tracking. (Sharing a tab with "Share tab audio" works too.)
@@ -90,11 +90,12 @@ export function AudioSourcePrompt({
                     />
                     Ambient mode — no music
                   </span>
-                  <span
-                    className={`font-mono text-[9px] tracking-wider ${ambientActive ? "text-emerald-300" : "text-white/30"}`}
-                  >
-                    {ambientActive ? "ON" : ""}
-                  </span>
+                  {ambientActive && (
+                    <span className="flex items-center gap-1.5 rounded bg-emerald-400/20 px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-emerald-200">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      Active now
+                    </span>
+                  )}
                 </span>
                 <span className="mt-1.5 block font-mono text-[10px] normal-case leading-relaxed tracking-wide text-white/45 group-hover:text-white/70">
                   A synthetic groove drives the visuals — great as a screen background. Real audio

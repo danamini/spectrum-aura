@@ -7,7 +7,22 @@ import { DEFAULT_SETTINGS } from "../settings";
 import { LAZY_VIEW_IDLE_DISPOSE_SECONDS, Scene } from "../scene";
 import { VISUALS } from "../visuals";
 
-const LAZY_IDS = ["outrun", "globe", "spectrotunnel", "fractal", "blackhole"] as const;
+const LAZY_IDS = [
+  "outrun",
+  "globe",
+  "spectrotunnel",
+  "fractal",
+  "blackhole",
+  "neoncity",
+  "ocean",
+  "nightwood",
+  "desert",
+  "station",
+  "aurora",
+  "hifi",
+  "lab",
+  "tapedeck",
+] as const;
 
 beforeEach(() => {
   const context = new Proxy(
